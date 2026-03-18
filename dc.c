@@ -1,8 +1,8 @@
 #include "dc.h"
 
-#include "../std/include/types.h"
 #include "fn.h"
 #include "rwhelp.h"
+#include "stdafx.h"
 
 #include <stdio.h>
 

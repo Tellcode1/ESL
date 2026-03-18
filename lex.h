@@ -1,11 +1,9 @@
 #ifndef E_LEX_H
 #define E_LEX_H
 
-#include "../std/include/error.h"
 #include "cerr.h"
 
-typedef enum e_tokentype
-{
+typedef enum e_tokentype {
   E_TOKENTYPE_EOF,
 
   E_TOKENTYPE_SEMICOLON,
@@ -62,23 +60,20 @@ typedef enum e_tokentype
   E_TOKENTYPE_IDENT, // identifier/name
 } e_tokentype;
 
-typedef union e_tokenval
-{
+typedef union e_tokenval {
   int    i;
   char   c;
   bool   b;
   double f;
   char*  s;
   char*  ident;
-  struct
-  {
+  struct {
     char c;
     bool is_compound;
   } op;
 } e_tokenval;
 
-typedef struct e_token
-{
+typedef struct e_token {
   e_tokentype type;
   e_tokenval  val;
   e_filespan  span; // The token owns this span
@@ -89,15 +84,14 @@ typedef struct e_token
  * outtoks will be set to a an array of tokens, allocated on the heap. Free using e_freetoks.
  * advertised_file is a string that should contain the file name that is shown to the user on errors/warnings by the compiler.
  */
-nv_error e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, int* ntoks);
+int e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, int* ntoks);
 
 void e_freetoks(e_token* toks, int ntoks);
 
 static inline const char*
 e_tokentype_to_string(e_tokentype e)
 {
-  switch (e)
-  {
+  switch (e) {
     case E_TOKENTYPE_EOF: return "EOF";
     case E_TOKENTYPE_SEMICOLON: return "SEMICOLON";
     case E_TOKENTYPE_COLON: return "COLON";

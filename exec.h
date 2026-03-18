@@ -1,8 +1,8 @@
 #ifndef E_VM_H
 #define E_VM_H
 
-#include "../std/include/types.h"
 #include "fn.h"
+#include "stdafx.h"
 #include "var.h"
 
 #include <stddef.h>

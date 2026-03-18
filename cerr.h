@@ -1,8 +1,7 @@
 #ifndef E_CERR_H
 #define E_CERR_H
 
-#include "../std/include/error.h"
-#include "../std/include/types.h"
+#include "stdafx.h"
 
 typedef struct e_filespan {
   char* file;

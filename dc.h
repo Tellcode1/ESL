@@ -1,9 +1,9 @@
 #ifndef E_DECOMPILER_H
 #define E_DECOMPILER_H
 
-#include "../std/include/types.h"
 #include "bc.h"
 #include "rwhelp.h"
+#include "stdafx.h"
 
 #include <stdio.h>
 #include <string.h>

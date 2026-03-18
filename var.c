@@ -1,34 +1,33 @@
 #include "var.h"
 
-#include "../std/include/stdafx.h"
-#include "../std/include/types.h"
 #include "refcount.h"
+#include "stdafx.h"
 
 #include <stdlib.h>
 
 static const u32 klist_init_capacity = 16;
 
-nv_error
+int
 e_list_init(e_var* vars_to_reference, u64 nvars, struct e_list* list)
 {
   list->size     = nvars;
-  list->capacity = NV_MAX(klist_init_capacity, nvars);
+  list->capacity = MAX(klist_init_capacity, nvars);
 
   /**
    * Pointers to the variables.
    */
   list->vars = (e_var**)malloc(sizeof(void*) * nvars);
-  if (list->vars == nullptr) return NV_ERROR_MALLOC_FAILED;
+  if (list->vars == nullptr) return -1;
 
   for (u64 i = 0; i < nvars; i++) { e_var_shallow_cpy(&vars_to_reference[i], list->vars[i]); }
 
-  return NV_SUCCESS;
+  return 0;
 }
 
-nv_error
+int
 e_var_shallow_cpy(const e_var* var, e_var* dst)
 {
-  if (!dst || !var) return NV_ERROR_INVALID_ARG;
+  if (!dst || !var) return -1;
 
   dst->type = var->type;
 
@@ -42,13 +41,13 @@ e_var_shallow_cpy(const e_var* var, e_var* dst)
   // Share the refc pointer
   dst->refc = var->refc;
 
-  return NV_SUCCESS;
+  return 0;
 }
 
-nv_error
+int
 e_var_deep_cpy(const e_var* var, e_var* dst)
 {
-  if (!dst || !var) return NV_ERROR_INVALID_ARG;
+  if (!dst || !var) return -1;
 
   dst->type = var->type;
   dst->refc = e_refc_init();
@@ -68,7 +67,7 @@ e_var_deep_cpy(const e_var* var, e_var* dst)
     case E_VARTYPE_ERROR: break;
   }
 
-  return NV_SUCCESS;
+  return 0;
 }
 
 void

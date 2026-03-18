@@ -1,9 +1,8 @@
 #ifndef ESL_H
 #define ESL_H
 
-#include "../std/include/error.h"
-#include "../std/include/types.h"
 #include "refcount.h"
+#include "stdafx.h"
 
 #include <string.h>
 
@@ -70,12 +69,12 @@ typedef struct e_var {
   e_varval  val;
 } e_var;
 
-nv_error e_var_shallow_cpy(const e_var* var, e_var* dst);
-nv_error e_var_deep_cpy(const e_var* var, e_var* dst);
+int e_var_shallow_cpy(const e_var* var, e_var* dst);
+int e_var_deep_cpy(const e_var* var, e_var* dst);
 
 void e_var_print(const struct e_var* v, FILE* f);
 
-nv_error e_list_init(e_var* vars_to_reference, u64 nvars, struct e_list* list);
+int e_list_init(e_var* vars_to_reference, u64 nvars, struct e_list* list);
 
 void e_var_free(e_var* var);
 

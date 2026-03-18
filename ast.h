@@ -1,9 +1,11 @@
 #ifndef E_AST_H
 #define E_AST_H
 
-#include "../std/include/containers/list.h"
 #include "cerr.h"
 #include "lex.h"
+
+#include <stdio.h>
+#include <stdlib.h>
 
 typedef enum e_asnodetype {
   E_ASNODE_ROOT,
@@ -188,19 +190,19 @@ typedef struct e_ast {
   int      head;
 } e_ast;
 
-nv_error e_ast_init(e_token* toks, int ntoks, e_ast* prsr);
-void     e_ast_free(e_ast* prsr);
+int  e_ast_init(e_token* toks, int ntoks, e_ast* prsr);
+void e_ast_free(e_ast* prsr);
 
 static inline e_token*
 e_ast_next(struct e_ast* prsr)
 {
-  if (NV_UNLIKELY(prsr->head >= prsr->ntoks)) return NULL;
+  if (prsr->head >= prsr->ntoks) return NULL;
   return &prsr->toks[prsr->head++];
 }
 static inline e_token*
 e_ast_peek(const struct e_ast* prsr)
 {
-  if (NV_UNLIKELY(prsr->head >= prsr->ntoks)) return NULL;
+  if (prsr->head >= prsr->ntoks) return NULL;
   return &prsr->toks[prsr->head];
 }
 
@@ -299,7 +301,7 @@ static inline int
 e_ast_make_node(e_ast* p)
 {
   if (p->nnodes + 1 >= p->capacity) {
-    int       newcap   = NV_MAX(p->capacity * 2, 1);
+    int       newcap   = MAX(p->capacity * 2, 1);
     e_asnode* newnodes = (e_asnode*)realloc(p->nodes, newcap * sizeof(e_asnode));
     if (newnodes == NULL) {
       perror("Allocation failed");
@@ -330,11 +332,11 @@ e_ast_is_limiter_exempt(e_asnode_type t)
   return t == E_ASNODE_IF || t == E_ASNODE_WHILE || t == E_ASNODE_FOR || t == E_ASNODE_FUNCTION_DEFINITION || t == E_ASNODE_EXPRESSION_LIST;
 }
 
-nv_error e_ast_parse(e_ast* p, int* root_nodeID);
-int      e_ast_nud(e_ast* p, e_token* token);
-int      e_ast_expr(e_ast* p, int rbp);
-int      e_ast_led(e_ast* p, e_token* token, int leftidx, int rbp);
+int e_ast_parse(e_ast* p, int* root_nodeID);
+int e_ast_nud(e_ast* p, e_token* token);
+int e_ast_expr(e_ast* p, int rbp);
+int e_ast_led(e_ast* p, e_token* token, int leftidx, int rbp);
 
-nv_error e_ast_expect(e_ast* p, e_tokentype type);
+int e_ast_expect(e_ast* p, e_tokentype type);
 
 #endif // E_AST_H

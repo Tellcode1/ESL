@@ -1,8 +1,7 @@
 #ifndef E_FUNCTION_H
 #define E_FUNCTION_H
 
-#include "../std/include/error.h"
-#include "../std/include/types.h"
+#include "stdafx.h"
 #include "var.h"
 
 struct e_compiler;
@@ -29,7 +28,8 @@ typedef struct e_extern_function {
 /**
  * Modify the compiler struct to write to a newly allocated stream!
  * Otherwise this will just overwrite your root stream or append to it.
+ * Returns 0 on success.
  */
-nv_error e_compile_function(struct e_compiler* cc, int node);
+int e_compile_function(struct e_compiler* cc, int node);
 
 #endif // E_FUNCTION_H

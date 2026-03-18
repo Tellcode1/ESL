@@ -1,10 +1,9 @@
 #ifndef E_CC_H
 #define E_CC_H
 
-#include "../std/include/error.h"
-#include "../std/include/types.h"
 #include "bc.h"
 #include "fn.h"
+#include "stdafx.h"
 #include "var.h"
 
 struct e_ast;
@@ -54,7 +53,7 @@ typedef struct e_compiler {
   u32         functions_capacity;
 } e_compiler;
 
-nv_error e_compile(struct e_ast* ast, int root_node, u8** bytecode, u32* bytecode_size, e_var** literals, u32* nliterals, e_function** functions, u32* nfunctions);
+int e_compile(struct e_ast* ast, int root_node, u8** bytecode, u32* bytecode_size, e_var** literals, u32* nliterals, e_function** functions, u32* nfunctions);
 
 static inline void
 ecc_stream_resize(e_compiler* cc, int new_cap)

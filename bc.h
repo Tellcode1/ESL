@@ -1,7 +1,7 @@
 #ifndef E_BYTECODE_H
 #define E_BYTECODE_H
 
-#include "../std/include/types.h"
+#include "stdafx.h"
 
 typedef u16 e_operand;
 typedef u32 e_varID;

@@ -2,11 +2,11 @@
 
 #include "bc.h"
 #include "fn.h"
-#include "run.h"
 #include "rwhelp.h"
 #include "var.h"
 
 #include <assert.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -96,7 +96,7 @@ struct stack {
   e_var* stack;
 };
 
-static inline nv_error
+static inline int
 stack_init(struct stack* st)
 {
   const size_t stack_capacity = 256;
@@ -104,9 +104,9 @@ stack_init(struct stack* st)
   st->size     = 0;
   st->capacity = stack_capacity;
   st->stack    = malloc(sizeof(e_var) * stack_capacity);
-  if (st->stack == nullptr) return NV_ERROR_MALLOC_FAILED;
+  if (st->stack == nullptr) return -1;
 
-  return NV_SUCCESS;
+  return 0;
 }
 
 static inline void
@@ -125,7 +125,7 @@ static inline void
 stack_push(struct stack* st, e_var v)
 {
   if (st->size >= st->capacity) {
-    size_t new_cap   = NV_MAX(st->capacity * 2, 1);
+    size_t new_cap   = MAX(st->capacity * 2, 1);
     e_var* new_stack = (e_var*)realloc(st->stack, sizeof(e_var) * new_cap);
 
     if (!new_stack) return;
@@ -163,6 +163,8 @@ stack_top(struct stack* st)
 static e_var
 call(const e_exec_info* info, struct stack* stack, u32 hash, u32 nargs)
 {
+  // printf("DEBUG: entering call\n");
+
   const u32 println = (u32)e_hash_fnv("println", strlen("println"));
   const u32 print   = (u32)e_hash_fnv("print", strlen("print"));
 
@@ -229,7 +231,7 @@ e_exec(const e_exec_info* info)
 {
   struct stack stack;
 
-  nv_error e = stack_init(&stack);
+  int e = stack_init(&stack);
   if (e) return (e_var){ .type = E_VARTYPE_INT, .refc = e_refc_init(), .val.i = -1 };
 
   struct pair {
@@ -254,7 +256,7 @@ e_exec(const e_exec_info* info)
       cvariables = new_c;
     }
 
-    if (nvariables) variables[nvariables].id = info->slots[i];
+    variables[nvariables].id           = info->slots[i];
     variables[nvariables].offset_index = i;
     nvariables++;
 
@@ -517,58 +519,4 @@ e_exec(const e_exec_info* info)
   free(variables);
   stack_free(&stack);
   return (e_var){ .type = E_VARTYPE_VOID, .refc = e_refc_init() };
-}
-
-int
-main(int argc, char* argv[])
-{
-  assert(argc == 2);
-
-  FILE* f = fopen(argv[1], "rb");
-
-  if (!f) {
-    perror("eexec: Failed to open file");
-    return -1;
-  }
-
-  e_var*      lits;
-  u8*         ins;
-  e_function* funcs;
-  u32         nlits;
-  u32         nins;
-  u32         nfuncs;
-  e_file_load(f, &nins, &ins, &nlits, &lits, &nfuncs, &funcs);
-  // printf("nlits=%u nins=%u\n", nlits, nins);
-
-  // Don't let exec free a literal!
-  // for (u32 i = 0; i < nlits; i++) { e_var_acquire(&lits[i]); }
-  e_exec_info info = {
-    .code      = ins,
-    .args      = nullptr,
-    .slots     = nullptr,
-    .literals  = lits,
-    .funcs     = funcs,
-    .code_size = nins,
-    .nargs     = 0,
-    .nliterals = nlits,
-    .nfuncs    = nfuncs,
-  };
-
-  e_var v = e_exec(&info);
-
-  fclose(f);
-
-  for (u32 i = 0; i < nlits; i++) { e_var_release(&lits[i]); }
-  free(lits);
-  free(ins);
-  for (u32 i = 0; i < nfuncs; i++) {
-    free(funcs[i].arg_slots);
-    free(funcs[i].code);
-  }
-  free(funcs);
-
-  int e = 0;
-  if (v.type == E_VARTYPE_INT) { e = v.val.i; }
-  e_var_release(&v);
-  return e;
 }

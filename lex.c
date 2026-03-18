@@ -1,8 +1,7 @@
 #include "lex.h"
 
-#include "../std/include/alloc.h"
-#include "../std/include/strconv.h"
 #include "cerr.h"
+#include "stdafx.h"
 
 #include <ctype.h>
 #include <stdarg.h>
@@ -72,40 +71,40 @@ struct tklist {
   int      capacity;
 };
 
-static inline nv_error
+static inline int
 tklist_init(int capacity, struct tklist* list)
 {
   if (capacity <= 0) { capacity = 1; }
 
   list->ntoks = 0;
-  list->toks  = nv_zmalloc(capacity * sizeof(e_token));
-  if (!list->toks) { return NV_ERROR_MALLOC_FAILED; }
+  list->toks  = calloc(capacity, sizeof(e_token));
+  if (!list->toks) { return -1; }
   list->capacity = capacity;
 
-  return NV_SUCCESS;
+  return 0;
 }
 
-static inline nv_error
+static inline int
 tklist_resize(struct tklist* toks, int newcap)
 {
   if (newcap == 0) { newcap = 1; }
 
   e_token* newtoks = malloc(sizeof(e_token) * newcap);
-  if (!newtoks) { return NV_ERROR_MALLOC_FAILED; }
+  if (!newtoks) { return -1; }
   memcpy(newtoks, toks->toks, sizeof(e_token) * toks->ntoks);
   free(toks->toks);
 
   toks->toks     = newtoks;
   toks->capacity = newcap;
 
-  return NV_SUCCESS;
+  return 0;
 }
 
 static inline void
 tklist_append(struct tklist* toks, const e_token* tk)
 {
   if (toks->ntoks + 1 >= toks->capacity) {
-    if (tklist_resize(toks, NV_MAX(toks->capacity * 2, 1))) { return; }
+    if (tklist_resize(toks, MAX(toks->capacity * 2, 1))) { return; }
   }
 
   memcpy(&toks->toks[toks->ntoks++], tk, sizeof(e_token));
@@ -128,10 +127,22 @@ _lexerror(const char* scriptfile, int script_line, int script_col, const char* t
 }
 #define lexerror(...) _lexerror(advertised_file, line, col, __FILE__, __LINE__, __VA_ARGS__)
 
-nv_error
+static inline char*
+_strndup(const char* s, size_t n)
+{
+  size_t l  = strlen(s);
+  size_t cp = MIN(l, n);
+
+  char* new = malloc(cp + 1);
+  strlcpy(new, s, cp + 1);
+
+  return new;
+}
+
+int
 e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, int* ntoks)
 {
-  nv_error    e = NV_SUCCESS;
+  int         e = 0;
   const char* s = input;
 
   int line = 1;
@@ -159,15 +170,15 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, in
     if (isdigit(*s)) {
       char*  end1 = NULL;
       char*  end2 = NULL;
-      int    i    = (int)nv_atoi2(s, SIZE_MAX, &end1);
-      double f    = nv_atof2(s, SIZE_MAX, &end2);
+      int    i    = (int)strtol(s, &end1, 10);
+      double f    = strtof(s, &end2);
 
       bool is_float = end2 > end1 || end1 == NULL;
 
       // both of them errored out
       if (end1 == NULL && end2 == NULL) {
         lexerror("Invalid integer or floating point literal\n");
-        return NV_ERROR_INVALID_ARG;
+        return -1;
       }
 
       if (is_float) {
@@ -178,7 +189,7 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, in
         tklist_append(&toks, &tk);
       }
 
-      while (s < NV_MAX(end1, end2)) { advance(s, line, col); }
+      while (s < MAX(end1, end2)) { advance(s, line, col); }
     } else if (isalpha(*s) || *s == '_') {
       const char* snap = s;
       while (isalpha(*s) || isdigit(*s) || *s == '_') { advance(s, line, col); }
@@ -208,7 +219,7 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, in
       } else if (len == strlen("return") && strncmp(snap, "return", len) == 0) {
         tk = (e_token){ .type = E_TOKENTYPE_RETURN, .span = SPAN };
       } else {
-        tk = (e_token){ .type = E_TOKENTYPE_IDENT, .val.ident = nv_strndup(snap, len), .span = SPAN };
+        tk = (e_token){ .type = E_TOKENTYPE_IDENT, .val.ident = _strndup(snap, len), .span = SPAN };
       }
       tklist_append(&toks, &tk);
     } else if (*s == '"') {
@@ -220,7 +231,7 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, in
       // reached end of file
       if (!*s) {
         lexerror("Unterminated string literal\n");
-        return NV_ERROR_INVALID_ARG;
+        return -1;
       }
 
       int len = (int)(s - snap);
@@ -254,7 +265,7 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, in
 
       if (*s != '\'') {
         fprintf(stderr, "Expected closing quote after character literal\n");
-        return NV_ERROR_INVALID_ARG;
+        return -1;
       }
 
       advance(s, line, col);
@@ -285,7 +296,7 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, in
           case '!': type = E_TOKENTYPE_NOTEQUAL; break;
           case '<': type = E_TOKENTYPE_LTE; break;
           case '>': type = E_TOKENTYPE_GTE; break;
-          default: lexerror("Unrecognized sequence or character\n"); return NV_ERROR_INVALID_ARG;
+          default: lexerror("Unrecognized sequence or character\n"); return -1;
         }
         advance(s, line, col);
         advance(s, line, col);
@@ -328,7 +339,7 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, in
           case '(': type = E_TOKENTYPE_OPENPAREN; break;
           case ')': type = E_TOKENTYPE_CLOSEPAREN; break;
 
-          default: lexerror("Unrecognized sequence or character\n"); return NV_ERROR_INVALID_ARG;
+          default: lexerror("Unrecognized sequence or character\n"); return -1;
         }
         advance(s, line, col);
       }
@@ -346,7 +357,7 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, in
   if (outtoks) { *outtoks = toks.toks; }
   if (ntoks) { *ntoks = toks.ntoks; }
 
-  return NV_SUCCESS;
+  return 0;
 }
 
 void

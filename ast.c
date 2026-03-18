@@ -5,6 +5,7 @@
 
 #include <error.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -72,7 +73,7 @@ conv_token_type_to_operator(e_tokentype t)
  * are handled by this because the expression parses consumes the semi colon itself,
  * Keeping the parser from getting polluted
  */
-static inline nv_error
+static inline int
 parse_braces(e_ast* p, int** outexprs, int* outnexprs)
 {
   int  capacity = 16;
@@ -81,14 +82,14 @@ parse_braces(e_ast* p, int** outexprs, int* outnexprs)
 
   while (peek(p) != NULL && peek(p)->type != E_TOKENTYPE_CLOSEBRACE) {
     if (nexprs + 1 >= capacity) {
-      int  newcap   = NV_MAX(capacity * 2, 1);
+      int  newcap   = MAX(capacity * 2, 1);
       int* newexprs = realloc(exprs, sizeof(int) * newcap);
       if (!newexprs) {
         // Avoid returning partially parsed bodies on error!
         if (exprs) free(exprs);
         if (outexprs) *outexprs = NULL;
         if (outnexprs) *outnexprs = 0;
-        return NV_ERROR_MALLOC_FAILED;
+        return -1;
       }
 
       exprs    = newexprs;
@@ -101,7 +102,7 @@ parse_braces(e_ast* p, int** outexprs, int* outnexprs)
 
     e_asnode* node = e_ast_get_node(p, stmt);
     if (!e_ast_is_limiter_exempt(node->type)) {
-      nv_error e = e_ast_expect(p, E_TOKENTYPE_SEMICOLON);
+      int e = e_ast_expect(p, E_TOKENTYPE_SEMICOLON);
       if (e) {
         if (exprs) { free(exprs); }
         if (outexprs) { *outexprs = NULL; }
@@ -117,7 +118,7 @@ parse_braces(e_ast* p, int** outexprs, int* outnexprs)
   if (outexprs) *outexprs = exprs;
   if (outnexprs) *outnexprs = nexprs;
 
-  return NV_SUCCESS;
+  return 0;
 }
 
 /**
@@ -127,7 +128,7 @@ parse_braces(e_ast* p, int** outexprs, int* outnexprs)
  *
  * while(true) i++; or for(;;i++); if you're cool.
  */
-static inline nv_error
+static inline int
 parse_body(e_ast* p, int** outexprs, int* outnexprs)
 {
   if (peek(p) && peek(p)->type == E_TOKENTYPE_OPENBRACE) {
@@ -151,17 +152,17 @@ parse_body(e_ast* p, int** outexprs, int* outnexprs)
 
     if (e_ast_expect(p, E_TOKENTYPE_SEMICOLON)) {
       asterror(peek(p)->span, "Expected semi colon after expression\n");
-      return NV_ERROR_INVALID_ARG;
+      return -1;
     }
   }
 
-  return NV_SUCCESS;
+  return 0;
 }
 
-nv_error
+int
 e_ast_expect(e_ast* p, e_tokentype type)
 {
-  return next(p)->type == type ? NV_SUCCESS : NV_ERROR_INVALID_INPUT;
+  return next(p)->type == type ? 0 : 1;
 }
 
 int
@@ -245,7 +246,7 @@ parse_if(e_ast* p, int nodeid)
     return -1;
   }
 
-  nv_error e = NV_SUCCESS;
+  int e = 0;
 
   // Take the span before so it starts where the body would start.
   e_filespan body_span = peek(p)->span;
@@ -275,7 +276,7 @@ parse_if(e_ast* p, int nodeid)
         next(p);
 
         if (num_elseifs >= capacity) {
-          int newcap = NV_MAX(capacity * 2, 1);
+          int newcap = MAX(capacity * 2, 1);
           else_ifs   = realloc(else_ifs, sizeof(e_if_stmt) * newcap);
           capacity   = newcap;
           if (!else_ifs) return -1;
@@ -355,7 +356,7 @@ parse_while(e_ast* p, int nodeid)
 
   int* exprs;
   int  nexprs;
-  if (parse_body(p, &exprs, &nexprs) != NV_SUCCESS) {
+  if (parse_body(p, &exprs, &nexprs)) {
     asterror(e_ast_peek(p)->span, "Expected while statement body\n");
     return -1;
   }
@@ -401,7 +402,7 @@ parse_for(e_ast* p, int nodeid)
 
   int* exprs;
   int  nexprs;
-  if (parse_body(p, &exprs, &nexprs) != NV_SUCCESS) {
+  if (parse_body(p, &exprs, &nexprs)) {
     asterror(e_ast_peek(p)->span, "Expected for statement body\n");
     return -1;
   }
@@ -558,7 +559,7 @@ e_ast_nud(e_ast* p, e_token* tk)
 
         while (peek(p) && peek(p)->type != E_TOKENTYPE_CLOSEPAREN) {
           if (nargs >= capacity) {
-            int newcap = NV_MAX(capacity * 2, 1);
+            int newcap = MAX(capacity * 2, 1);
             args       = realloc(args, newcap * sizeof(int));
             capacity   = newcap;
             if (!args) return -1;
@@ -751,13 +752,13 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
   }
 }
 
-nv_error
+int
 e_ast_parse(e_ast* p, int* out_root_node)
 {
-  if (!p) return NV_ERROR_INVALID_ARG;
+  if (!p) return -1;
 
   int rootnode = e_ast_make_node(p);
-  if (rootnode < 0) return NV_ERROR_MALLOC_FAILED;
+  if (rootnode < 0) return -1;
 
   if (out_root_node) *out_root_node = rootnode;
 
@@ -767,7 +768,7 @@ e_ast_parse(e_ast* p, int* out_root_node)
   int  nexprs = 0;
   int* exprs  = malloc(cap * sizeof(int));
 
-  if (!exprs) { return NV_ERROR_MALLOC_FAILED; }
+  if (!exprs) { return -1; }
 
   // for (int i = 0; i < p->ntoks; i++) // Only run from 0 to ntoks-1 because the last token is EOF.
   while (peek(p) && peek(p)->type != E_TOKENTYPE_EOF) {
@@ -776,21 +777,21 @@ e_ast_parse(e_ast* p, int* out_root_node)
     int node = e_ast_expr(p, 0);
     if (node < 0) {
       asterror(take_span, "Error parsing AST\n");
-      return NV_ERROR_INVALID_ARG;
+      return -1;
     }
 
     if (!e_ast_is_limiter_exempt(e_ast_get_node(p, node)->type) && e_ast_expect(p, E_TOKENTYPE_SEMICOLON)) {
       asterror(take_span, "Expected semicolon after expression\n");
-      return NV_ERROR_INVALID_ARG;
+      return -1;
     }
 
     if (nexprs >= cap) {
-      int  newcap   = NV_MAX(cap * 2, 1);
+      int  newcap   = MAX(cap * 2, 1);
       int* newexprs = realloc(exprs, newcap * sizeof(int));
       if (!newexprs) {
         // TODO: Free
         asterror(take_span, "realloc failed! Can not continue\n");
-        return NV_ERROR_MALLOC_FAILED;
+        return -1;
       }
       exprs = newexprs;
       cap   = newcap;
@@ -803,10 +804,10 @@ e_ast_parse(e_ast* p, int* out_root_node)
   e_ast_get_node(p, rootnode)->val.root.exprs  = exprs;
   e_ast_get_node(p, rootnode)->val.root.nexprs = nexprs;
 
-  return NV_SUCCESS;
+  return 0;
 }
 
-nv_error
+int
 e_ast_init(e_token* toks, int ntoks, e_ast* prsr)
 {
   if (prsr) {
@@ -820,9 +821,9 @@ e_ast_init(e_token* toks, int ntoks, e_ast* prsr)
       .ntoks    = ntoks,
       .head     = 0,
     };
-    if (!prsr->nodes) return NV_ERROR_MALLOC_FAILED;
+    if (!prsr->nodes) return -1;
   }
-  return NV_SUCCESS;
+  return 0;
 }
 
 void

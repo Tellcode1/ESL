@@ -1,6 +1,5 @@
 // Compiler front end
 
-#include "../std/include/file.h"
 #include "ast.h"
 #include "astfree.h"
 #include "cc.h"
@@ -9,7 +8,10 @@
 #include "var.h"
 
 #include <assert.h>
+#include <errno.h>
+#include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 int
@@ -47,20 +49,17 @@ main(int argc, char* argv[])
 
   char* in = argv[1];
 
-  assert(nvfs_entry_type(in) == NVFS_FILE);
-
-  char*    contents = NULL;
-  nv_error e        = nvfs_read_file(in, &contents, NULL);
-  if (e) {
-    fprintf(stderr, "ec: Failed to load input file: %s\n", nv_error_str(e));
+  char* contents = read_file(in, nullptr);
+  if (contents == nullptr) {
+    fprintf(stderr, "ec: Failed to load input file: %s\n", strerror(errno));
     return -1;
   }
 
   e_token* tokens = 0;
   int      ntoks  = 0;
-  e               = e_tokenize(contents, in, &tokens, &ntoks);
+  int      e      = e_tokenize(contents, in, &tokens, &ntoks);
   if (e) {
-    fprintf(stderr, "ec: Failed to tokenize input string: %s\n", nv_error_str(e));
+    fprintf(stderr, "ec: Failed to tokenize input string\n");
     return -1;
   }
 
@@ -75,7 +74,7 @@ main(int argc, char* argv[])
   e_ast ast;
   e = e_ast_init(tokens, ntoks, &ast);
   if (e) {
-    fprintf(stderr, "ec: AST initialization failed: %s\n", nv_error_str(e));
+    fprintf(stderr, "ec: AST initialization failed\n");
     return -1;
   }
 
@@ -83,7 +82,7 @@ main(int argc, char* argv[])
 
   e = e_ast_parse(&ast, &root);
   if (root < 0 || e) {
-    fprintf(stderr, "ec: AST parsing failed: %s\n", nv_error_str(e));
+    fprintf(stderr, "ec: AST parsing failed\n");
     return -1;
   }
 
@@ -101,7 +100,7 @@ main(int argc, char* argv[])
 
   e = e_compile(&ast, root, &bytecode, &bytecode_size, &literals, &nliterals, &functions, &nfunctions);
   if (e) {
-    fprintf(stderr, "ec: Compilation failed: %s\n", nv_error_str(e));
+    fprintf(stderr, "ec: Compilation failed\n");
     return -1;
   }
 

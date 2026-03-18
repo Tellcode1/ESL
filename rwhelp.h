@@ -1,11 +1,11 @@
 #ifndef E_BYTECODE_STREAM_READ_WRITE_HELP_H
 #define E_BYTECODE_STREAM_READ_WRITE_HELP_H
 
-#include "../std/include/types.h"
 #include "bc.h"
 #include "cc.h"
 #include "fn.h"
 #include "refcount.h"
+#include "stdafx.h"
 
 // clang-format off
 #define E_GEN_READ_FUNCTION(type) static inline type e_read_##type(const u8** _ip) { type v = *(type*)(*(_ip)); *(_ip) += sizeof(type); return v; }
@@ -13,7 +13,7 @@
         E_GEN_READ_FUNCTION(u16)
         E_GEN_READ_FUNCTION(u8)
 
-#define E_GEN_EMIT_FN(type) static inline void e_emit_##type(e_compiler* cc, type value) { if (cc->emitted + sizeof(type) > cc->code_capacity) ecc_stream_resize(cc, NV_MAX(cc->emitted + sizeof(type), cc->code_capacity * 2)); *(type*)((uchar*)cc->emit + cc->emitted) = value; cc->emitted += sizeof(type); }
+#define E_GEN_EMIT_FN(type) static inline void e_emit_##type(e_compiler* cc, type value) { if (cc->emitted + sizeof(type) > cc->code_capacity) ecc_stream_resize(cc, MAX(cc->emitted + sizeof(type), cc->code_capacity * 2)); *(type*)((uchar*)cc->emit + cc->emitted) = value; cc->emitted += sizeof(type); }
         E_GEN_EMIT_FN(u32)
         E_GEN_EMIT_FN(u64)
         E_GEN_EMIT_FN(u16)

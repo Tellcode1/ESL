@@ -1,11 +1,11 @@
 #ifndef E_CC_LVALUE_H
 #define E_CC_LVALUE_H
 
-#include "../std/include/types.h"
 #include "ast.h"
 #include "bc.h"
 #include "cc.h"
 #include "rwhelp.h"
+#include "stdafx.h"
 #include "var.h"
 
 typedef enum e_lval_type {

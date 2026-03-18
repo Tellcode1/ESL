@@ -10,6 +10,7 @@
 #include "var.h"
 
 #include <error.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -51,14 +52,14 @@ lower_node_to_literal(const e_asnode* node, e_var* o)
   return 1;
 }
 
-static inline nv_error
+static inline int
 compile_literal(e_compiler* cc, int node)
 {
   if (cc->nliterals >= cc->cliterals) {
     size_t new_c              = cc->cliterals * 2;
     e_var* new_literals       = realloc(cc->literals, sizeof(e_var) * new_c);
     u16*   new_literal_hashes = realloc(cc->literal_hashes, sizeof(u16) * new_c);
-    if (!new_literals || !new_literal_hashes) return NV_ERROR_MALLOC_FAILED;
+    if (!new_literals || !new_literal_hashes) return -1;
 
     cc->literals       = new_literals;
     cc->literal_hashes = new_literal_hashes;
@@ -69,7 +70,7 @@ compile_literal(e_compiler* cc, int node)
   u16  id    = cc->nliterals;
 
   e_var v = { 0 };
-  if (lower_node_to_literal(E_GET_NODE(cc->ast, node), &v)) return NV_ERROR_INVALID_OPERATION;
+  if (lower_node_to_literal(E_GET_NODE(cc->ast, node), &v)) return -1;
 
   u16 hash = (u16)e_var_hash(&v);
   for (u32 i = 0; i < cc->nliterals; i++) {
@@ -104,38 +105,38 @@ compile_literal(e_compiler* cc, int node)
   e_emit_instruction(cc, E_OPCODE_LITERAL, E_ATTR_NONE);
   e_emit_u16(cc, id);
 
-  return NV_SUCCESS;
+  return 0;
 }
 
-static nv_error
+static int
 compile(struct e_compiler* cc, int node)
 {
-  if (node < 0) return NV_ERROR_INVALID_ARG;
+  if (node < 0) return -1;
 
   switch (E_GET_NODE(cc->ast, node)->type) {
     case E_ASNODE_ROOT: {
       e_asnode* root = E_GET_NODE(cc->ast, node);
-      nv_error  e    = NV_SUCCESS;
+      int       e    = 0;
       for (int i = 0; i < root->val.root.nexprs; i++) {
         e = compile(cc, root->val.root.exprs[i]);
         if (e) { return e; }
       }
       e_emit_instruction(cc, E_OPCODE_HALT, E_ATTR_NONE);
       e_emit_u32(cc, 0); // Return 0 by default.
-      return NV_SUCCESS;
+      return 0;
     }
 
     case E_ASNODE_EXPRESSION_LIST: {
-      nv_error e = NV_SUCCESS;
+      int e = 0;
       for (int i = 0; i < E_GET_NODE(cc->ast, node)->val.exprs.nexprs; i++) {
         e = compile(cc, E_GET_NODE(cc->ast, node)->val.exprs.exprs[i]);
         if (e) return e;
       }
-      return NV_SUCCESS;
+      return 0;
     }
 
     case E_ASNODE_BINARYOP: {
-      nv_error e = NV_SUCCESS;
+      int e = 0;
 
       e = compile(cc, E_GET_NODE(cc->ast, node)->val.binaryop.left);
       if (e) return e;
@@ -165,7 +166,7 @@ compile(struct e_compiler* cc, int node)
           case E_OPERATOR_GTE: opcode = E_OPCODE_GTE; break;
           // clang-format on
 
-        default: printf("Operator %u can not be used as a binary operator\n", E_GET_NODE(cc->ast, node)->val.binaryop.op); return NV_ERROR_INVALID_ARG;
+        default: printf("Operator %u can not be used as a binary operator\n", E_GET_NODE(cc->ast, node)->val.binaryop.op); return -1;
       }
 
       e_attr attrs = E_ATTR_NONE;
@@ -183,7 +184,7 @@ compile(struct e_compiler* cc, int node)
       e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES, E_ATTR_NONE);
 
       // condition
-      nv_error e = compile(cc, E_GET_NODE(cc->ast, node)->val.if_stmt.condition);
+      int e = compile(cc, E_GET_NODE(cc->ast, node)->val.if_stmt.condition);
       if (e) return e;
 
       // condition failed :<
@@ -229,7 +230,7 @@ compile(struct e_compiler* cc, int node)
 
       e_emit_instruction(cc, E_OPCODE_POP_VARIABLES, E_ATTR_NONE);
 
-      return NV_SUCCESS;
+      return 0;
     }
 
     case E_ASNODE_UNARYOP: {
@@ -240,10 +241,10 @@ compile(struct e_compiler* cc, int node)
 
         e_emit_instruction(cc, op == E_OPERATOR_INC ? E_OPCODE_INC : E_OPCODE_DEC, E_ATTR_NONE);
         e_emit_u32(cc, right_hash);
-        return NV_SUCCESS;
+        return 0;
       }
 
-      nv_error e = compile(cc, E_GET_NODE(cc->ast, node)->val.unaryop.right);
+      int e = compile(cc, E_GET_NODE(cc->ast, node)->val.unaryop.right);
       if (e) return e;
 
       e_opcode opcode = -1;
@@ -253,7 +254,7 @@ compile(struct e_compiler* cc, int node)
       {
         case E_OPERATOR_NOT: opcode = E_OPCODE_NOT; break;
         case E_OPERATOR_BNOT: opcode = E_OPCODE_BNOT; break;
-        default: printf("Operator %u can not be used as a unary operator\n", E_GET_NODE(cc->ast, node)->val.unaryop.op); return NV_ERROR_INVALID_ARG;
+        default: printf("Operator %u can not be used as a unary operator\n", E_GET_NODE(cc->ast, node)->val.unaryop.op); return -1;
       }
       // clang-format on
 
@@ -262,7 +263,7 @@ compile(struct e_compiler* cc, int node)
 
       e_emit_instruction(cc, opcode, attrs);
 
-      return NV_SUCCESS;
+      return 0;
     }
 
     case E_ASNODE_WHILE: {
@@ -280,7 +281,7 @@ compile(struct e_compiler* cc, int node)
 
       e_emit_label(cc, condition_label);
 
-      nv_error e = compile(cc, E_GET_NODE(cc->ast, node)->val.while_stmt.condition);
+      int e = compile(cc, E_GET_NODE(cc->ast, node)->val.while_stmt.condition);
       if (e) return e;
 
       e_emit_instruction(cc, E_OPCODE_JZ, E_ATTR_CLEAN);
@@ -309,16 +310,16 @@ compile(struct e_compiler* cc, int node)
     case E_ASNODE_BREAK: {
       if (!cc->loop) {
         fprintf(stderr, "break Used outside loop\n");
-        return NV_ERROR_INVALID_ARG;
+        return -1;
       }
       e_emit_instruction(cc, E_OPCODE_JMP, E_ATTR_NONE);
       e_emit_u32(cc, cc->loop->break_label);
-      return NV_SUCCESS;
+      return 0;
     }
     case E_ASNODE_CONTINUE: {
       if (!cc->loop) {
         fprintf(stderr, "continue Used outside loop\n");
-        return NV_ERROR_INVALID_ARG;
+        return -1;
       }
       e_emit_instruction(cc, E_OPCODE_JMP, E_ATTR_NONE);
       e_emit_u32(cc, cc->loop->continue_label);
@@ -336,12 +337,12 @@ compile(struct e_compiler* cc, int node)
         e_emit_instruction(cc, E_OPCODE_RETURN, E_ATTR_NONE);
         e_emit_u8(cc, false); /* Returning void! */
       }
-      return NV_SUCCESS;
+      return 0;
     }
 
     case E_ASNODE_VARIABLE: {
       e_emit_lvalue_load(cc, e_make_value(cc->ast, node));
-      return NV_SUCCESS;
+      return 0;
     }
 
     case E_ASNODE_VARIABLE_DECL: {
@@ -349,8 +350,8 @@ compile(struct e_compiler* cc, int node)
       u32         id          = e_hash_fnv(name, strlen(name));
       int         initializer = E_GET_NODE(cc->ast, node)->val.let.initializer;
 
-      nv_error e     = NV_SUCCESS;
-      e_attr   attrs = E_ATTR_NONE;
+      int    e     = 0;
+      e_attr attrs = E_ATTR_NONE;
       if (initializer >= 0) {
         e = compile(cc, initializer);
         attrs |= E_ATTR_COMPOUND; // Compound sets variable value to top of stack.
@@ -359,22 +360,22 @@ compile(struct e_compiler* cc, int node)
 
       e_emit_instruction(cc, E_OPCODE_INIT, attrs);
       e_emit_u32(cc, id);
-      return NV_SUCCESS;
+      return 0;
     }
 
     case E_ASNODE_ASSIGN: {
-      nv_error e = compile(cc, E_GET_NODE(cc->ast, node)->val.assign.right);
+      int e = compile(cc, E_GET_NODE(cc->ast, node)->val.assign.right);
       if (e) return e;
 
       u32 left_id = e_make_value(cc->ast, E_GET_NODE(cc->ast, node)->val.assign.left).val.var_id;
 
       e_emit_instruction(cc, E_OPCODE_ASSIGN, E_ATTR_NONE);
       e_emit_u32(cc, left_id);
-      return NV_SUCCESS;
+      return 0;
     }
 
     case E_ASNODE_CALL: {
-      nv_error e = NV_SUCCESS;
+      int e = 0;
       for (int i = 0; i < E_GET_NODE(cc->ast, node)->val.call.nargs; i++) {
         e = compile(cc, E_GET_NODE(cc->ast, node)->val.call.args[i]);
         if (e) return e;
@@ -385,11 +386,13 @@ compile(struct e_compiler* cc, int node)
       const char* function = E_GET_NODE(cc->ast, node)->val.call.function;
       u32         id       = e_hash_fnv(function, strlen(function));
 
-      e_emit_instruction(cc, E_OPCODE_CALL, E_ATTR_NONE);        // 2 bytes
-      e_emit_u32(cc, id);                                        // 4 bytes, Emit function ID
-      e_emit_u16(cc, E_GET_NODE(cc->ast, node)->val.call.nargs); // 2 bytes, Emit number of arguments
+      printf("%s: %u\n", function, id);
 
-      return NV_SUCCESS;
+      e_emit_instruction(cc, E_OPCODE_CALL, E_ATTR_NONE);        // 2 bytes
+      e_emit_u32(cc, id);                                        // 4 bytes, function ID
+      e_emit_u16(cc, E_GET_NODE(cc->ast, node)->val.call.nargs); // 2 bytes, number of arguments
+
+      return 0;
     }
 
     case E_ASNODE_INT:
@@ -415,7 +418,7 @@ compile(struct e_compiler* cc, int node)
         .code_capacity  = init_code_capacity,
       };
 
-      nv_error e = e_compile_function(&copy, node);
+      int e = e_compile_function(&copy, node);
 
       /* Always return void if no other return value was specified */
       e_emit_instruction(&copy, E_OPCODE_RETURN, E_ATTR_NONE);
@@ -439,14 +442,14 @@ compile(struct e_compiler* cc, int node)
         .code      = copy.emit,
         .code_size = copy.emitted,
         .arg_slots = arg_slots,
-        .hash      = e_hash_fnv(name, strlen(name)),
+        .hash      = (u32)e_hash_fnv(name, strlen(name)),
         .nargs     = nargs,
       };
 
       if (cc->functions_size >= cc->functions_capacity) {
         u32         new_capacity  = cc->functions_capacity * 2;
         e_function* new_functions = realloc(cc->functions, sizeof(e_function) * new_capacity);
-        if (!new_functions) return NV_ERROR_MALLOC_FAILED;
+        if (!new_functions) return -1;
 
         cc->functions          = new_functions;
         cc->functions_capacity = new_capacity;
@@ -461,22 +464,22 @@ compile(struct e_compiler* cc, int node)
     case E_ASNODE_MEMBER_ASSIGN: break;
   }
 
-  return NV_ERROR_UNKNOWN;
+  return -1;
 }
 
-nv_error
+int
 e_compile_function(e_compiler* cc, int node)
 {
   int  nexprs = E_GET_NODE(cc->ast, node)->val.func.nexprs;
   int* exprs  = E_GET_NODE(cc->ast, node)->val.func.exprs;
   for (int i = 0; i < nexprs; i++) {
-    nv_error e = compile(cc, exprs[i]);
+    int e = compile(cc, exprs[i]);
     if (e) return e;
   }
-  return NV_SUCCESS;
+  return 0;
 }
 
-nv_error
+int
 e_compile(struct e_ast* ast, int root_node, u8** bytecode, u32* bytecode_size, e_var** literals, u32* nliterals, e_function** functions, u32* nfunctions)
 {
   const int init_code_capacity     = 256;
@@ -498,7 +501,7 @@ e_compile(struct e_ast* ast, int root_node, u8** bytecode, u32* bytecode_size, e
     .functions          = malloc(sizeof(e_function) * init_function_capacity),
   };
 
-  nv_error e = compile(&cc, root_node);
+  int e = compile(&cc, root_node);
   if (e) return e;
 
   /* Resolve all labels after compilation. Ensure this is the last optimization / cleanup function called! */
