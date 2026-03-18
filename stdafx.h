@@ -24,6 +24,14 @@ extern "C" {
 #  define MIN(a, b) ((a) < (b) ? (a) : (b))
 #endif
 
+#ifndef _UNREACHABLE
+#  if defined(__has_builtin) && __has_builtin(__builtin_unreachable)
+#    define _UNREACHABLE() __builtin_unreachable()
+#  else
+#    define _UNREACHABLE()
+#  endif
+#endif
+
 typedef uint8_t uchar;
 
 typedef uint8_t  uchar;

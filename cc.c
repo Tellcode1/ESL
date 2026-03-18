@@ -7,13 +7,31 @@
 #include "lval.h"
 #include "refcount.h"
 #include "rwhelp.h"
+#include "stdafx.h"
 #include "var.h"
 
 #include <error.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+static inline int
+_cerror(const char* file, size_t line, e_filespan span, const char* msg, ...)
+{
+  va_list ap;
+  va_start(ap, msg);
+
+  fprintf(stderr, "[%s:%zu] [%s:%i:%i] compilation error: ", file, line, span.file, span.line, span.col);
+  vfprintf(stderr, msg, ap);
+
+  va_end(ap);
+
+  return true;
+}
+
+#define cerror(span, ...) _cerror(__FILE__, __LINE__, span, __VA_ARGS__)
 
 static inline u32
 ec_get_pos(const e_compiler* cc)
@@ -309,7 +327,7 @@ compile(struct e_compiler* cc, int node)
 
     case E_ASNODE_BREAK: {
       if (!cc->loop) {
-        fprintf(stderr, "break Used outside loop\n");
+        cerror(E_GET_NODE(cc->ast, node)->span, "break Used outside loop\n");
         return -1;
       }
       e_emit_instruction(cc, E_OPCODE_JMP, E_ATTR_NONE);
@@ -318,7 +336,7 @@ compile(struct e_compiler* cc, int node)
     }
     case E_ASNODE_CONTINUE: {
       if (!cc->loop) {
-        fprintf(stderr, "continue Used outside loop\n");
+        cerror(E_GET_NODE(cc->ast, node)->span, "continue Used outside loop\n");
         return -1;
       }
       e_emit_instruction(cc, E_OPCODE_JMP, E_ATTR_NONE);
@@ -384,9 +402,24 @@ compile(struct e_compiler* cc, int node)
       if (e) return e;
 
       const char* function = E_GET_NODE(cc->ast, node)->val.call.function;
+      u16         nargs    = E_GET_NODE(cc->ast, node)->val.call.nargs;
       u32         id       = e_hash_fnv(function, strlen(function));
 
-      printf("%s: %u\n", function, id);
+      // Find the function, if it is user defined and check if the argument count matches
+      {
+        e_function* func = nullptr;
+        for (int i = 0; i < cc->functions_size; i++) {
+          if (cc->functions[i].hash == id) {
+            func = &cc->functions[i];
+            break;
+          }
+        }
+
+        if (func && func->nargs != nargs) {
+          cerror(E_GET_NODE(cc->ast, node)->span, "Function \"%s\" expects %u arguments (%u were given)\n", function, func->nargs, nargs);
+          return -1;
+        }
+      }
 
       e_emit_instruction(cc, E_OPCODE_CALL, E_ATTR_NONE);        // 2 bytes
       e_emit_u32(cc, id);                                        // 4 bytes, function ID
@@ -404,6 +437,18 @@ compile(struct e_compiler* cc, int node)
     case E_ASNODE_MAP: return compile_literal(cc, node);
 
     case E_ASNODE_FUNCTION_DEFINITION: {
+      const char* function_name = E_GET_NODE(cc->ast, node)->val.func.name;
+      u32         hash          = e_hash_fnv(function_name, strlen(function_name));
+
+      /* Ensure it doesn't already exist */
+      for (u32 i = 0; i < cc->functions_size; i++) {
+        if (cc->functions[i].hash == hash) {
+          _UNREACHABLE();
+          cerror(E_GET_NODE(cc->ast, node)->span, "Multiple definitions of function \"%s\"", function_name);
+          return -1;
+        }
+      }
+
       int init_code_capacity = 256;
 
       struct e_compiler copy = {

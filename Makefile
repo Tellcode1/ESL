@@ -1,10 +1,6 @@
 CC ?= gcc
-CFLAGS += -g -Wall -Wpedantic
-LDFLAGS += -lm
-
-RUNTIME_CFLAGS=$(CFLAGS) -D_K_RUNTIME_BUILTINS
-
-SCRIPT_CFLAGS=-O
+CFLAGS ?= -g -Wall -Wpedantic -DDEBUG
+LDFLAGS ?=
 
 SRC_DIR=.
 BUILD_DIR=build
@@ -48,8 +44,8 @@ $(BUILD_DIR)/cc/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-$(BUILD_DIR)/%.bin: src/%.dis $(BUILD_DIR)/kcc | $(BUILD_DIR)
-	$(BUILD_DIR)/kcc $(SCRIPT_CFLAGS) $< -o $@
+$(BUILD_DIR)/%.eb: %.e $(BUILD_DIR)/ec | $(BUILD_DIR)
+	$(BUILD_DIR)/ec $< -o $@
 
 clean:
 	rm -rf $(BUILD_DIR)

@@ -27,25 +27,25 @@ fn never_return_because_im_evil()
   while (true) {}
 }
 
-let position;
-let velocity;
-
-fn update(dt)
+fn update()
 {
-  let position;
-  let velocity;
+  println("Running 100 iterations of free fall test (Results are for after 100 seconds):");
+
+  let position = 0;
+  let velocity = 0;
   let acceleration = 9.8;
 
   let i = 0;
   while (i < 100)
   {
-    velocity = velocity + acceleration * dt;
-    position = position + velocity * dt;
+    let tmp_v = velocity + acceleration;
+    position = position + velocity;
+    velocity = tmp_v;
     i++;
   }
 
-  println("position = ", position);
-  println("velocity = ", velocity);
+  println("position = ", position, " meters");
+  println("velocity = ", velocity, " meters/sec");
 }
 
 println("Im gaming rn");
@@ -144,4 +144,13 @@ println(why_does_it_work_now);
 let NO_LEAKS_YAYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY = 68;
 println(NO_LEAKS_YAYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY, " ", NO_LEAKS_YAYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY, " ", NO_LEAKS_YAYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY);
 
-update(0.016);
+update();
+
+// Unlike C, functions can be called before they are declared!
+call_before_declare();
+fn call_before_declare()
+{
+  println("This function was called before it was declared!");
+}
+
+say_hello_from_c();

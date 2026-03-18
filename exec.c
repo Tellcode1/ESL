@@ -3,6 +3,7 @@
 #include "bc.h"
 #include "fn.h"
 #include "rwhelp.h"
+#include "stdafx.h"
 #include "var.h"
 
 #include <assert.h>
@@ -99,11 +100,11 @@ struct stack {
 static inline int
 stack_init(struct stack* st)
 {
-  const size_t stack_capacity = 256;
+  const size_t init_capacity = 16;
 
   st->size     = 0;
-  st->capacity = stack_capacity;
-  st->stack    = malloc(sizeof(e_var) * stack_capacity);
+  st->capacity = init_capacity;
+  st->stack    = malloc(sizeof(e_var) * init_capacity);
   if (st->stack == nullptr) return -1;
 
   return 0;
@@ -163,66 +164,51 @@ stack_top(struct stack* st)
 static e_var
 call(const e_exec_info* info, struct stack* stack, u32 hash, u32 nargs)
 {
-  // printf("DEBUG: entering call\n");
-
-  const u32 println = (u32)e_hash_fnv("println", strlen("println"));
-  const u32 print   = (u32)e_hash_fnv("print", strlen("print"));
-
   e_var return_value = { .type = E_VARTYPE_VOID };
-  bool  found        = false;
 
-  if (hash == println) {
-    // printf("%s\n", stack[stack.size - j - 1].val.s->s);
-
-    // Pushed in correct order, must be popped in reverse.
-    for (int64_t j = nargs - 1; j >= 0; j--) { e_var_print(&stack->stack[stack->size - j - 1], stdout); }
+  // builtins
+  if (hash == e_hash_fnv("println", strlen("println"))) {
+    for (int64_t j = nargs - 1; j >= 0; j--) e_var_print(&stack->stack[stack->size - j - 1], stdout);
     fputc('\n', stdout);
-
-    found = true;
-  } else if (hash == print) {
-    for (int64_t j = nargs - 1; j >= 0; j--) { e_var_print(&stack->stack[stack->size - j - 1], stdout); }
-    found = true;
-  } else {
-    for (int f = 0; f < info->nfuncs; f++) {
-      const e_function* func = &info->funcs[f];
-      if (info->funcs[f].hash == hash) {
-        e_var* args_ptr = &stack->stack[stack->size - info->funcs[f].nargs];
-
-        e_exec_info exec_func = {
-          .code      = func->code,
-          .args      = args_ptr,
-          .slots     = func->arg_slots,
-          .literals  = info->literals,
-          .funcs     = info->funcs,
-          .code_size = func->code_size,
-          .nargs     = func->nargs,
-          .nliterals = info->nliterals,
-          .nfuncs    = info->nfuncs,
-        };
-
-        return_value = e_exec(&exec_func);
-
-        found = true;
-
-        // printf("Got return value: ");
-        // e_var_print(&v, stderr);
-        // fputc('\n', stderr);
-        break;
-      }
-    }
+    goto pop_and_ret;
+  }
+  if (hash == e_hash_fnv("print", strlen("print"))) {
+    for (int64_t j = nargs - 1; j >= 0; j--) e_var_print(&stack->stack[stack->size - j - 1], stdout);
+    goto pop_and_ret;
   }
 
-  if (!found) {
-#if defined(__has_builtin) && __has_builtin(__builtin_unreachable)
-    __builtin_unreachable();
-#endif
-    fprintf(stderr, "Function %u not defined\n", hash);
-    exit(-1);
+  // user defined
+  for (int f = 0; f < info->nfuncs; f++) {
+    if (info->funcs[f].hash != hash) continue;
+    e_exec_info fi = {
+      .code          = info->funcs[f].code,
+      .args          = &stack->stack[stack->size - info->funcs[f].nargs],
+      .slots         = info->funcs[f].arg_slots,
+      .literals      = info->literals,
+      .funcs         = info->funcs,
+      .extern_funcs  = info->extern_funcs,
+      .code_size     = info->funcs[f].code_size,
+      .nargs         = info->funcs[f].nargs,
+      .nliterals     = info->nliterals,
+      .nfuncs        = info->nfuncs,
+      .nextern_funcs = info->nextern_funcs,
+    };
+    return_value = e_exec(&fi);
+    goto pop_and_ret;
   }
 
-  // Pop all arguments off
-  for (size_t i = 0; i < nargs; i++) { stack_pop(stack); }
+  // extern
+  for (u32 i = 0; i < info->nextern_funcs; i++) {
+    if (info->extern_funcs[i].hash != hash) continue;
+    if (info->extern_funcs[i].func) return_value = info->extern_funcs[i].func(&stack->stack[stack->size - nargs]);
+    goto pop_and_ret;
+  }
 
+  fprintf(stderr, "Function %u not defined\n", hash);
+  exit(-1);
+
+pop_and_ret:
+  for (size_t i = 0; i < nargs; i++) stack_pop(stack);
   return return_value;
 }
 
@@ -239,7 +225,7 @@ e_exec(const e_exec_info* info)
     u32    id;
   };
 
-  size_t       cvariables = 64;
+  size_t       cvariables = 4;
   size_t       nvariables = 0;
   struct pair* variables  = (struct pair*)calloc(cvariables, sizeof(struct pair));
 
