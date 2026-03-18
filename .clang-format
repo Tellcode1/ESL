@@ -1,0 +1,40 @@
+BasedOnStyle: gnu
+IndentWidth: 2
+TabWidth: 2
+UseTab: Never
+ColumnLimit: 175
+AllowAllParametersOfDeclarationOnNextLine: true
+AlignAfterOpenBracket: AlwaysBreak
+AlignConsecutiveAssignments: Consecutive
+AlignConsecutiveDeclarations: Consecutive
+AlignOperands: DontAlign
+AlignTrailingComments: true
+BreakConstructorInitializersBeforeComma: false
+SpaceBeforeParens: ControlStatements 
+SpacesBeforeTrailingComments: 1
+IndentCaseLabels: true
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+PointerAlignment: Left
+SortIncludes: CaseSensitive
+SpaceBeforeAssignmentOperators: true
+IndentPPDirectives: AfterHash
+PPIndentWidth: 2
+IncludeBlocks: Regroup
+AllowShortBlocksOnASingleLine: Always
+AllowShortIfStatementsOnASingleLine: AllIfsAndElse
+AllowShortLoopsOnASingleLine: true
+AllowShortCaseLabelsOnASingleLine: true
+BreakBeforeTernaryOperators: true
+BinPackArguments: false
+BinPackParameters: false
+BreakBeforeBinaryOperators: NonAssignment
+BreakBeforeBraces: Linux
+BraceWrapping:
+  AfterStruct: true
+  AfterUnion: true
+  BeforeElse: true
+  BeforeCatch: true
+  BeforeLambdaBody: true
+  AfterEnum: true
+BreakConstructorInitializers: BeforeComma

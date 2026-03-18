@@ -1,0 +1,31 @@
+0: literal [0]
+4: call [63654] [1]
+9: literal [1]
+13: call [63654] [1]
+18: literal [2]
+22: call [63654] [1]
+27: literal [3]
+31: call [63654] [1]
+36: literal [4]
+40: literal [5]
+44: mul
+46: call [63654] [1]
+51: literal [6]
+55: literal [7]
+59: add
+61: call [63654] [1]
+66: literal [8]
+70: literal [9]
+74: div
+76: call [63654] [1]
+81: literal [10]
+85: literal [11]
+89: div
+91: call [63654] [1]
+96: literal [12]
+100: not
+102: not
+104: not
+106: not
+108: call [63654] [1]
+113: halt

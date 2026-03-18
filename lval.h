@@ -1,0 +1,67 @@
+#ifndef E_CC_LVALUE_H
+#define E_CC_LVALUE_H
+
+#include "../std/include/types.h"
+#include "ast.h"
+#include "bc.h"
+#include "cc.h"
+#include "rwhelp.h"
+#include "var.h"
+
+typedef enum e_lval_type {
+  E_LVAL_VAR,
+  E_LVAL_MEMBER, // struct member
+  E_LVAL_INDEX,  // indexed array
+} e_lval_type;
+
+typedef union e_lval_value {
+  u32 var_id;
+  struct {
+    char* name;
+    u32   struct_hash;
+  } member;
+  struct {
+    int left_node;  // Compile to get LHS of index. For vec[16], it will push vec to stack.
+    int index_node; // Compile to get index. For vec[16], it will push 16 to stack.
+  } index;
+} e_lval_value;
+
+typedef struct e_lval {
+  e_lval_type  type;
+  e_lval_value val;
+} e_lval;
+
+static inline e_lval
+e_make_value(const e_ast* ast, int node)
+{
+  switch (E_GET_NODE(ast, node)->type) {
+    case E_ASNODE_VARIABLE: {
+      const char* name = E_GET_NODE(ast, node)->val.ident;
+
+      e_lval l;
+      l.type       = E_LVAL_VAR;
+      l.val.var_id = e_hash_fnv(name, strlen(name));
+      return l;
+    }
+
+    default: printf("%i can not be represented as a value (it is %u)\n", node, E_GET_NODE(ast, node)->type); exit(-1);
+  }
+
+  return (e_lval){};
+}
+
+static inline void
+e_emit_lvalue_load(e_compiler* cc, e_lval lv)
+{
+  e_emit_instruction(cc, E_OPCODE_LOAD, E_ATTR_NONE);
+  e_emit_u32(cc, lv.val.var_id);
+}
+
+// static inline void
+// e_emit_lvalue_load_address(e_compiler* cc, e_lval lv)
+// {
+//   // e_emit_instruction(cc, E_OPCODE_LOAD_REFERENCE, E_ATTR_NONE);
+//   e_emit_u16(cc, lv.val.var_id);
+// }
+
+#endif // E_CC_LVALUE_H

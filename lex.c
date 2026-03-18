@@ -1,0 +1,360 @@
+#include "lex.h"
+
+#include "../std/include/alloc.h"
+#include "../std/include/strconv.h"
+#include "cerr.h"
+
+#include <ctype.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#if E_LEX_NO_SPAN
+#  define SPAN (e_filespan){ 0 }
+#else
+#  define SPAN span
+#endif
+
+static inline void
+__advance(const char** s, int* line, int* col)
+{
+  if (**s == '\n') {
+    (*line)++;
+    (*col) = 1;
+  } else {
+    (*col)++;
+  }
+  (*s)++;
+}
+
+static inline char*
+parse_string(const char* s, size_t max)
+{
+  char*  news = strdup(s);
+  size_t r    = 0;
+  size_t w    = 0;
+
+  while (s[r] && r < max) {
+    if (s[r] != '\\') {
+      news[w++] = s[r++];
+      continue;
+    }
+    r++; // skip backslash
+
+    if (r >= max) break;
+
+    switch (s[r]) {
+      case '\'': news[w] = '\''; break;
+      case '\"': news[w] = '\"'; break;
+      case '\\': news[w] = '\\'; break;
+      case 'n': news[w] = '\n'; break;
+      case 't': news[w] = '\t'; break;
+      case '0': news[w] = '\0'; break;
+      default:
+        fprintf(stderr, "Unrecognized escape sequence\n");
+        r++;
+        continue;
+    }
+    r++;
+    w++;
+  }
+  news[w] = 0;
+
+  return news;
+}
+
+#define advance(s, line, col) __advance((&s), &(line), &(col))
+
+struct tklist {
+  e_token* toks;
+  int      ntoks;
+  int      capacity;
+};
+
+static inline nv_error
+tklist_init(int capacity, struct tklist* list)
+{
+  if (capacity <= 0) { capacity = 1; }
+
+  list->ntoks = 0;
+  list->toks  = nv_zmalloc(capacity * sizeof(e_token));
+  if (!list->toks) { return NV_ERROR_MALLOC_FAILED; }
+  list->capacity = capacity;
+
+  return NV_SUCCESS;
+}
+
+static inline nv_error
+tklist_resize(struct tklist* toks, int newcap)
+{
+  if (newcap == 0) { newcap = 1; }
+
+  e_token* newtoks = malloc(sizeof(e_token) * newcap);
+  if (!newtoks) { return NV_ERROR_MALLOC_FAILED; }
+  memcpy(newtoks, toks->toks, sizeof(e_token) * toks->ntoks);
+  free(toks->toks);
+
+  toks->toks     = newtoks;
+  toks->capacity = newcap;
+
+  return NV_SUCCESS;
+}
+
+static inline void
+tklist_append(struct tklist* toks, const e_token* tk)
+{
+  if (toks->ntoks + 1 >= toks->capacity) {
+    if (tklist_resize(toks, NV_MAX(toks->capacity * 2, 1))) { return; }
+  }
+
+  memcpy(&toks->toks[toks->ntoks++], tk, sizeof(e_token));
+}
+
+#define collectspan                                                                                                                                                           \
+  (struct e_filespan) { .file = advertised_file, .line = line, .col = col }
+
+static inline void
+_lexerror(const char* scriptfile, int script_line, int script_col, const char* this_file, int this_line, const char* fmt, ...)
+{
+  va_list ap;
+  va_start(ap, fmt);
+
+  fprintf(stderr, "[%s:%i] ", this_file, this_line);
+  fprintf(stderr, "[%s:%i:%i] ", scriptfile, script_line, script_col);
+  vfprintf(stderr, fmt, ap);
+
+  va_end(ap);
+}
+#define lexerror(...) _lexerror(advertised_file, line, col, __FILE__, __LINE__, __VA_ARGS__)
+
+nv_error
+e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, int* ntoks)
+{
+  nv_error    e = NV_SUCCESS;
+  const char* s = input;
+
+  int line = 1;
+  int col  = 1;
+
+  struct tklist toks;
+  e = tklist_init(128, &toks);
+  if (e) { return e; }
+
+  while (*s) {
+    while (isspace(*s) || *s == '\n') { advance(s, line, col); }
+
+    if (s[0] && s[0] == '/' && s[1] == '/') {
+      advance(s, line, col); // skip over comment start
+      advance(s, line, col);
+      while (*s != '\n') { advance(s, line, col); }
+      continue;
+    }
+
+    if (!*s) break;
+
+#if !E_LEX_NO_SPAN
+    const struct e_filespan span = { .file = strdup(advertised_file), .line = line, .col = col };
+#endif
+    if (isdigit(*s)) {
+      char*  end1 = NULL;
+      char*  end2 = NULL;
+      int    i    = (int)nv_atoi2(s, SIZE_MAX, &end1);
+      double f    = nv_atof2(s, SIZE_MAX, &end2);
+
+      bool is_float = end2 > end1 || end1 == NULL;
+
+      // both of them errored out
+      if (end1 == NULL && end2 == NULL) {
+        lexerror("Invalid integer or floating point literal\n");
+        return NV_ERROR_INVALID_ARG;
+      }
+
+      if (is_float) {
+        e_token tk = { .type = E_TOKENTYPE_FLOAT, .val.f = f, .span = SPAN };
+        tklist_append(&toks, &tk);
+      } else {
+        e_token tk = { .type = E_TOKENTYPE_INT, .val.i = i, .span = SPAN };
+        tklist_append(&toks, &tk);
+      }
+
+      while (s < NV_MAX(end1, end2)) { advance(s, line, col); }
+    } else if (isalpha(*s) || *s == '_') {
+      const char* snap = s;
+      while (isalpha(*s) || isdigit(*s) || *s == '_') { advance(s, line, col); }
+
+      int len = (int)(s - snap);
+
+      e_token tk = { 0 };
+      /* TODO: Refactor. */
+      if (strncmp(snap, "fn", len) == 0) {
+        tk = (e_token){ .type = E_TOKENTYPE_FN, .span = SPAN };
+      } else if (len == strlen("let") && strncmp(snap, "let", len) == 0) {
+        tk = (e_token){ .type = E_TOKENTYPE_LET, .span = SPAN };
+      } else if (len == strlen("true") && strncmp(snap, "true", len) == 0) {
+        tk = (e_token){ .type = E_TOKENTYPE_BOOL, .val.b = true, .span = SPAN };
+      } else if (len == strlen("false") && strncmp(snap, "false", len) == 0) {
+        tk = (e_token){ .type = E_TOKENTYPE_BOOL, .val.b = false, .span = SPAN };
+      } else if (len == strlen("if") && strncmp(snap, "if", len) == 0) {
+        tk = (e_token){ .type = E_TOKENTYPE_IF, .span = SPAN };
+      } else if (len == strlen("else") && strncmp(snap, "else", len) == 0) {
+        tk = (e_token){ .type = E_TOKENTYPE_ELSE, .span = SPAN };
+      } else if (len == strlen("while") && strncmp(snap, "while", len) == 0) {
+        tk = (e_token){ .type = E_TOKENTYPE_WHILE, .span = SPAN };
+      } else if (len == strlen("break") && strncmp(snap, "break", len) == 0) {
+        tk = (e_token){ .type = E_TOKENTYPE_BREAK, .span = SPAN };
+      } else if (len == strlen("continue") && strncmp(snap, "continue", len) == 0) {
+        tk = (e_token){ .type = E_TOKENTYPE_CONTINUE, .span = SPAN };
+      } else if (len == strlen("return") && strncmp(snap, "return", len) == 0) {
+        tk = (e_token){ .type = E_TOKENTYPE_RETURN, .span = SPAN };
+      } else {
+        tk = (e_token){ .type = E_TOKENTYPE_IDENT, .val.ident = nv_strndup(snap, len), .span = SPAN };
+      }
+      tklist_append(&toks, &tk);
+    } else if (*s == '"') {
+      advance(s, line, col);
+
+      const char* snap = s;
+      while (*s && *s != '"') { advance(s, line, col); }
+
+      // reached end of file
+      if (!*s) {
+        lexerror("Unterminated string literal\n");
+        return NV_ERROR_INVALID_ARG;
+      }
+
+      int len = (int)(s - snap);
+
+      char* parsed = parse_string(snap, len);
+
+      e_token tk = (e_token){ .type = E_TOKENTYPE_STRING, .val.s = parsed, .span = SPAN };
+      tklist_append(&toks, &tk);
+
+      advance(s, line, col);
+    }
+
+    else if (*s == '\'') {
+      advance(s, line, col);
+
+      char ch = -1;
+      if (*s != '\\') {
+        ch = *s;
+        advance(s, line, col);
+      } else {
+        advance(s, line, col);
+        switch (*s) {
+          case 'n': ch = '\n'; break;
+          case 't': ch = '\t'; break;
+          case 'r': ch = '\r'; break;
+          case 'b': ch = '\b'; break;
+          case '0': ch = '\0'; break;
+        }
+        advance(s, line, col);
+      }
+
+      if (*s != '\'') {
+        fprintf(stderr, "Expected closing quote after character literal\n");
+        return NV_ERROR_INVALID_ARG;
+      }
+
+      advance(s, line, col);
+
+      e_token tk = (e_token){ .type = E_TOKENTYPE_CHAR, .val.c = ch, .span = SPAN };
+      tklist_append(&toks, &tk);
+    } else {
+      const char  ch          = *s;
+      e_tokentype type        = E_TOKENTYPE_EOF;
+      bool        is_compound = false;
+
+      if (s[1] == '=') // non compound
+      {
+        switch (*s) {
+            // clang-format off
+          case '+': type = E_TOKENTYPE_PLUS; is_compound = true; break;
+          case '-': type = E_TOKENTYPE_MINUS; is_compound = true; break;
+          case '*': type = E_TOKENTYPE_MULTIPLY; is_compound = true; break;
+          case '/': type = E_TOKENTYPE_DIVIDE; is_compound = true; break;
+          case '%': type = E_TOKENTYPE_MOD; is_compound = true; break;
+          case '~': type = E_TOKENTYPE_BNOT; is_compound = true; break;
+          case '|': type = E_TOKENTYPE_BOR; is_compound = true; break;
+          case '^': type = E_TOKENTYPE_XOR; is_compound = true; break;
+          case '&': type = E_TOKENTYPE_BAND; is_compound = true; break;
+            // clang-format on
+
+          case '=': type = E_TOKENTYPE_DOUBLEEQUAL; break;
+          case '!': type = E_TOKENTYPE_NOTEQUAL; break;
+          case '<': type = E_TOKENTYPE_LTE; break;
+          case '>': type = E_TOKENTYPE_GTE; break;
+          default: lexerror("Unrecognized sequence or character\n"); return NV_ERROR_INVALID_ARG;
+        }
+        advance(s, line, col);
+        advance(s, line, col);
+      } else if (s[0] == '+' && s[1] == '+') {
+        type        = E_TOKENTYPE_PLUSPLUS;
+        is_compound = false;
+        advance(s, line, col);
+        advance(s, line, col);
+      } else if (s[0] == '-' && s[1] == '-') {
+        type        = E_TOKENTYPE_MINUSMINUS;
+        is_compound = false;
+        advance(s, line, col);
+        advance(s, line, col);
+      } else if (s[0] == '*' && s[1] == '*') {
+        type        = E_TOKENTYPE_EXPONENT;
+        is_compound = false;
+        advance(s, line, col);
+        advance(s, line, col);
+      } else {
+        switch (*s) {
+          case '+': type = E_TOKENTYPE_PLUS; break;
+          case '-': type = E_TOKENTYPE_MINUS; break;
+          case '*': type = E_TOKENTYPE_MULTIPLY; break;
+          case '/': type = E_TOKENTYPE_DIVIDE; break;
+          case '%': type = E_TOKENTYPE_MOD; break;
+          case '=': type = E_TOKENTYPE_EQUAL; break;
+          case '~': type = E_TOKENTYPE_BNOT; break;
+          case '|': type = E_TOKENTYPE_BOR; break;
+          case '^': type = E_TOKENTYPE_XOR; break;
+          case '&': type = E_TOKENTYPE_BAND; break;
+          case '!': type = E_TOKENTYPE_NOT; break;
+          case '<': type = E_TOKENTYPE_LT; break;
+          case '>': type = E_TOKENTYPE_GT; break;
+
+          case ';': type = E_TOKENTYPE_SEMICOLON; break;
+          case ':': type = E_TOKENTYPE_COLON; break;
+          case ',': type = E_TOKENTYPE_COMMA; break;
+          case '{': type = E_TOKENTYPE_OPENBRACE; break;
+          case '}': type = E_TOKENTYPE_CLOSEBRACE; break;
+          case '(': type = E_TOKENTYPE_OPENPAREN; break;
+          case ')': type = E_TOKENTYPE_CLOSEPAREN; break;
+
+          default: lexerror("Unrecognized sequence or character\n"); return NV_ERROR_INVALID_ARG;
+        }
+        advance(s, line, col);
+      }
+      e_token tk = { .type = type, .val.op = { .c = ch, .is_compound = is_compound }, .span = SPAN };
+      tklist_append(&toks, &tk);
+    }
+  }
+
+  // e_token tk = {
+  //   .type = E_TOKENTYPE_EOF,
+  //   .span = { .file = strdup(advertised_file), .line = line, .col = col, },
+  // };
+  // tklist_append(&toks, &tk);
+
+  if (outtoks) { *outtoks = toks.toks; }
+  if (ntoks) { *ntoks = toks.ntoks; }
+
+  return NV_SUCCESS;
+}
+
+void
+e_freetoks(e_token* toks, int ntoks)
+{
+  for (int i = 0; i < ntoks; i++) {
+    if (toks[i].type == E_TOKENTYPE_STRING || toks[i].type == E_TOKENTYPE_IDENT) { free(toks[i].val.s); }
+    free(toks[i].span.file);
+  }
+  free(toks);
+}
