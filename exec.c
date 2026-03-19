@@ -96,16 +96,25 @@ operate(e_var l, e_var r, e_opcode op)
     default: return (e_var){ 0 };
   }
 }
+
+typedef struct stack_frame {
+  size_t variable_offset;
+  size_t stack_size;
+} stack_frame;
+
 struct stack {
-  size_t size;
-  size_t capacity;
-  e_var* stack;
+  stack_frame frames[64];
+  size_t      depth;
+  size_t      size;
+  size_t      capacity;
+  e_var*      stack;
 };
 
 static inline int
 stack_init(size_t init_capacity, struct stack* st)
 {
   st->size     = 0;
+  st->depth    = 0;
   st->capacity = init_capacity;
   st->stack    = malloc(sizeof(e_var) * init_capacity);
   if (st->stack == nullptr) return -1;
@@ -274,8 +283,6 @@ e_exec(const e_exec_info* info)
 
   const u8* ip  = info->code;
   const u8* end = info->code + info->code_size;
-
-  size_t save_sp = 0;
 
   while (ip < end) {
     e_opcode opcode = *(e_opcode*)ip;
@@ -483,12 +490,26 @@ e_exec(const e_exec_info* info)
         break;
       }
 
-      case E_OPCODE_PUSH_VARIABLES: save_sp = stack.size; break;
+      case E_OPCODE_PUSH_VARIABLES:
+        stack.frames[stack.depth++] = (stack_frame){
+          .stack_size      = stack.size,
+          .variable_offset = nvariables,
+        };
 
-      case E_OPCODE_POP_VARIABLES:
-        for (size_t i = save_sp; i < stack.size; i++) e_var_release(&stack.stack[i]); // Release the popped variables
-        stack.size = save_sp;
+        if (stack.depth >= (sizeof(stack.frames) / sizeof(stack.frames[0]))) {
+          _UNREACHABLE();
+          fprintf(stderr, "Stack frame depth exceeded %zu\n", sizeof(stack.frames) / sizeof(stack.frames[0]));
+          exit(-1);
+        }
         break;
+
+      case E_OPCODE_POP_VARIABLES: {
+        const stack_frame* frame = &stack.frames[--stack.depth];
+        for (size_t i = frame->stack_size; i < stack.size; i++) e_var_release(&stack.stack[i]);
+        stack.size = frame->stack_size;
+        nvariables = frame->variable_offset;
+        break;
+      }
 
       // case E_OPCODE_LOAD_REFERENCE:
       default: printf("Unknown instruction\n"); exit(-1);

@@ -455,7 +455,7 @@ compile(struct e_compiler* cc, int node)
 
     case E_ASNODE_BREAK: {
       if (!cc->loop) {
-        cerror(E_GET_NODE(cc->ast, node)->span, "break Used outside loop\n");
+        cerror(E_GET_NODE(cc->ast, node)->span, "break used outside loop\n");
         return -1;
       }
       e_emit_instruction(cc, E_OPCODE_JMP, E_ATTR_NONE);
@@ -464,7 +464,7 @@ compile(struct e_compiler* cc, int node)
     }
     case E_ASNODE_CONTINUE: {
       if (!cc->loop) {
-        cerror(E_GET_NODE(cc->ast, node)->span, "continue Used outside loop\n");
+        cerror(E_GET_NODE(cc->ast, node)->span, "continue used outside loop\n");
         return -1;
       }
       e_emit_instruction(cc, E_OPCODE_JMP, E_ATTR_NONE);
