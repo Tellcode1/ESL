@@ -69,7 +69,7 @@ e_file_load(FILE* f, u32* nins, u8** inss, u32* nlits, e_var** lits, u32* nfunct
     e_function func;
     fread(&func.code_size, sizeof(func.code_size), 1, f);
     fread(&func.nargs, sizeof(func.nargs), 1, f);
-    fread(&func.hash, sizeof(func.hash), 1, f);
+    fread(&func.name_hash, sizeof(func.name_hash), 1, f);
 
     func.arg_slots = (u32*)malloc(sizeof(u32) * func.nargs);
     fread(func.arg_slots, sizeof(*func.arg_slots), func.nargs, f);
@@ -83,6 +83,49 @@ e_file_load(FILE* f, u32* nins, u8** inss, u32* nlits, e_var** lits, u32* nfunct
 
   *inss = (u8*)malloc(*nins);
   fread(*inss, 1, *nins, f);
+}
+
+static inline void
+e_file_write(e_compilation_result* r, FILE* f)
+{
+  fwrite(&r->nliterals, sizeof(r->nliterals), 1, f);
+  for (int i = 0; i < r->nliterals; i++) {
+    const e_var* lit = &r->literals[i];
+    fwrite(&lit->type, sizeof(e_vartype), 1, f);
+
+    if (lit->type == E_VARTYPE_STRING) {
+      u32 len = strlen(lit->val.s->s);
+      fwrite(&len, sizeof(len), 1, f);
+      fwrite(lit->val.s->s, sizeof(char), len, f);
+    } else {
+      fwrite(&lit->val, sizeof(lit->val), 1, f);
+    }
+  }
+  fwrite(&r->nfunctions, sizeof(r->nfunctions), 1, f);
+  for (u32 i = 0; i < r->nfunctions; i++) {
+    const e_function* fn = &r->functions[i];
+    fwrite(&fn->code_size, sizeof(fn->code_size), 1, f);
+    fwrite(&fn->nargs, sizeof(fn->nargs), 1, f);
+    fwrite(&fn->name_hash, sizeof(fn->name_hash), 1, f);
+    fwrite(fn->arg_slots, sizeof(*fn->arg_slots), fn->nargs, f);
+    fwrite(fn->code, 1, fn->code_size, f);
+  }
+
+  fwrite(&r->bytecode_size, sizeof(r->bytecode_size), 1, f);
+  fwrite(r->bytecode, 1, r->bytecode_size, f);
+}
+
+static inline void
+e_compilation_result_free(e_compilation_result* r)
+{
+  for (int i = 0; i < r->nfunctions; i++) {
+    free(r->functions[i].code);
+    free(r->functions[i].arg_slots);
+  }
+  free(r->functions);
+  for (int i = 0; i < r->nliterals; i++) { e_var_release(&r->literals[i]); }
+  free(r->literals);
+  free(r->bytecode);
 }
 
 #endif // E_BYTECODE_STREAM_READ_WRITE_HELP_H

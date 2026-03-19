@@ -53,7 +53,16 @@ typedef struct e_compiler {
   u32         functions_capacity;
 } e_compiler;
 
-int e_compile(struct e_ast* ast, int root_node, u8** bytecode, u32* bytecode_size, e_var** literals, u32* nliterals, e_function** functions, u32* nfunctions);
+typedef struct e_compilation_result {
+  u32         bytecode_size;
+  u32         nliterals;
+  u32         nfunctions;
+  u8*         bytecode;
+  e_var*      literals;
+  e_function* functions;
+} e_compilation_result;
+
+int e_compile(struct e_ast* ast, int root_node, e_compilation_result* result);
 
 static inline void
 ecc_stream_resize(e_compiler* cc, int new_cap)

@@ -1,5 +1,5 @@
-#ifndef ESL_H
-#define ESL_H
+#ifndef ESL_VAR_H
+#define ESL_VAR_H
 
 #include "refcount.h"
 #include "stdafx.h"

@@ -154,3 +154,10 @@ fn call_before_declare()
 }
 
 say_hello_from_c();
+
+let multi_assign_test1 = 2;
+let multi_assign_test2 = 1;
+let multi_assign_test3 = 4;
+println("Before multi assignment: ", multi_assign_test1, ", ", multi_assign_test2, ", ", multi_assign_test3);
+multi_assign_test1 = multi_assign_test2 = multi_assign_test3 = 16;
+println("After multi assignment: ", multi_assign_test1, ", ", multi_assign_test2, ", ", multi_assign_test3);

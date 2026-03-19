@@ -3,9 +3,8 @@
 #include "ast.h"
 #include "astfree.h"
 #include "cc.h"
-#include "fn.h"
 #include "lex.h"
-#include "var.h"
+#include "rwhelp.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -17,9 +16,6 @@
 int
 main(int argc, char* argv[])
 {
-  //             0  1  2  3  4  5  6  7  8  9
-  // int x[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
-
   bool tokenizer_only = false;
   bool ast_only       = false;
 
@@ -55,7 +51,7 @@ main(int argc, char* argv[])
     return -1;
   }
 
-  e_token* tokens = 0;
+  e_token* tokens = nullptr;
   int      ntoks  = 0;
   int      e      = e_tokenize(contents, in, &tokens, &ntoks);
   if (e) {
@@ -91,14 +87,9 @@ main(int argc, char* argv[])
     return 0;
   }
 
-  u8*         bytecode;
-  u32         bytecode_size;
-  e_var*      literals;
-  u32         nliterals;
-  e_function* functions;
-  u32         nfunctions;
+  e_compilation_result compiled = { 0 };
 
-  e = e_compile(&ast, root, &bytecode, &bytecode_size, &literals, &nliterals, &functions, &nfunctions);
+  e = e_compile(&ast, root, &compiled);
   if (e) {
     fprintf(stderr, "ec: Compilation failed\n");
     return -1;
@@ -110,43 +101,16 @@ main(int argc, char* argv[])
     return -1;
   }
 
-  fwrite(&nliterals, sizeof(nliterals), 1, f);
-  for (int i = 0; i < nliterals; i++) {
-    const e_var* lit = &literals[i];
-    fwrite(&lit->type, sizeof(e_vartype), 1, f);
-
-    if (lit->type == E_VARTYPE_STRING) {
-      u32 len = strlen(lit->val.s->s);
-      fwrite(&len, sizeof(len), 1, f);
-      fwrite(lit->val.s->s, sizeof(char), len, f);
-    } else {
-      fwrite(&lit->val, sizeof(lit->val), 1, f);
-    }
-  }
-  fwrite(&nfunctions, sizeof(nfunctions), 1, f);
-  for (u32 i = 0; i < nfunctions; i++) {
-    const e_function* fn = &functions[i];
-    fwrite(&fn->code_size, sizeof(fn->code_size), 1, f);
-    fwrite(&fn->nargs, sizeof(fn->nargs), 1, f);
-    fwrite(&fn->hash, sizeof(fn->hash), 1, f);
-    fwrite(fn->arg_slots, sizeof(*fn->arg_slots), fn->nargs, f);
-    fwrite(fn->code, 1, fn->code_size, f);
-  }
-
-  fwrite(&bytecode_size, sizeof(bytecode_size), 1, f);
-  fwrite(bytecode, 1, bytecode_size, f);
+  e_file_write(&compiled, f);
 
   fclose(f);
+
+  e_compilation_result_free(&compiled);
+
   e_asnode_free(&ast, root);
-  for (int i = 0; i < nfunctions; i++) {
-    free(functions[i].code);
-    free(functions[i].arg_slots);
-  }
-  free(functions);
-  for (int i = 0; i < nliterals; i++) { e_var_release(&literals[i]); }
-  free(literals);
-  free(bytecode);
   e_ast_free(&ast);
+
   e_freetoks(tokens, ntoks);
+
   free(contents);
 }

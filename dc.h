@@ -68,8 +68,8 @@ e_print_instruction(e_opcode o, e_attr a, const u8** ip)
       break;
     }
     case E_OPCODE_CALL: {
-      u32 id    = e_read_u32(ip);
       u16 nargs = e_read_u16(ip);
+      u32 id    = e_read_u32(ip);
       printf("call [%u] [%u]\n", id, nargs);
       break;
     }

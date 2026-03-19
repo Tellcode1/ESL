@@ -63,6 +63,7 @@ typedef enum e_operator {
 
   /**
    * Contrary to C, the VM doesn't push any value for these. Only increments the variable.
+   * Treated as compound operators always!
    */
   E_OPERATOR_DEC,
   E_OPERATOR_INC,

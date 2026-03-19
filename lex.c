@@ -302,12 +302,12 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, in
         advance(s, line, col);
       } else if (s[0] == '+' && s[1] == '+') {
         type        = E_TOKENTYPE_PLUSPLUS;
-        is_compound = false;
+        is_compound = true;
         advance(s, line, col);
         advance(s, line, col);
       } else if (s[0] == '-' && s[1] == '-') {
         type        = E_TOKENTYPE_MINUSMINUS;
-        is_compound = false;
+        is_compound = true;
         advance(s, line, col);
         advance(s, line, col);
       } else if (s[0] == '*' && s[1] == '*') {

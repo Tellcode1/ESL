@@ -33,7 +33,7 @@ main(int argc, char** argv)
   e_print_instruction_stream((const u8*)inss, nins, 0);
 
   for (int i = 0; i < nfuncs; i++) {
-    printf("%u(%u):\n", funcs[i].hash, funcs[i].nargs);
+    printf("%u(%u):\n", funcs[i].name_hash, funcs[i].nargs);
     e_print_instruction_stream((const u8*)funcs[i].code, funcs[i].code_size, 4);
   }
 

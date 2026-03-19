@@ -720,16 +720,18 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
     }
 
     case E_TOKENTYPE_PLUSPLUS: {
-      E_GET_NODE(p, node)->type              = E_ASNODE_UNARYOP;
-      E_GET_NODE(p, node)->val.unaryop.op    = E_OPERATOR_INC;
-      E_GET_NODE(p, node)->val.unaryop.right = leftidx; // operand is left
+      E_GET_NODE(p, node)->type                    = E_ASNODE_UNARYOP;
+      E_GET_NODE(p, node)->val.unaryop.op          = E_OPERATOR_INC;
+      E_GET_NODE(p, node)->val.unaryop.is_compound = true;
+      E_GET_NODE(p, node)->val.unaryop.right       = leftidx; // operand is left
       return node;
     }
 
     case E_TOKENTYPE_MINUSMINUS: {
-      E_GET_NODE(p, node)->type              = E_ASNODE_UNARYOP;
-      E_GET_NODE(p, node)->val.unaryop.op    = E_OPERATOR_DEC;
-      E_GET_NODE(p, node)->val.unaryop.right = leftidx;
+      E_GET_NODE(p, node)->type                    = E_ASNODE_UNARYOP;
+      E_GET_NODE(p, node)->val.unaryop.op          = E_OPERATOR_DEC;
+      E_GET_NODE(p, node)->val.unaryop.is_compound = true;
+      E_GET_NODE(p, node)->val.unaryop.right       = leftidx;
       return node;
     }
 
