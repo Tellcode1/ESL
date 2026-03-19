@@ -52,7 +52,7 @@ main(int argc, char* argv[])
   }
 
   e_token* tokens = nullptr;
-  int      ntoks  = 0;
+  u32      ntoks  = 0;
   int      e      = e_tokenize(contents, in, &tokens, &ntoks);
   if (e) {
     fprintf(stderr, "ec: Failed to tokenize input string\n");
@@ -60,7 +60,7 @@ main(int argc, char* argv[])
   }
 
   if (tokenizer_only) {
-    for (int i = 0; i < ntoks; i++) {
+    for (u32 i = 0; i < ntoks; i++) {
       printf("%s", e_tokentype_to_string(tokens[i].type));
       if (i != ntoks - 1) { fputs(" ", stdout); }
     }

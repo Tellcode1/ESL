@@ -45,7 +45,7 @@ typedef int32_t  i32;
 typedef int64_t  i64;
 
 static inline char*
-read_file(const char* path, int* size)
+read_file(const char* path, u64* size)
 {
   FILE* f        = nullptr;
   char* contents = nullptr;

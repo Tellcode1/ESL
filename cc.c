@@ -134,7 +134,7 @@ compile_function_definition(struct e_compiler* cc, int node)
     }
   }
 
-  int init_code_capacity = 256;
+  u32 init_code_capacity = 256;
 
   struct e_compiler copy = {
     .ast            = cc->ast,
@@ -271,7 +271,7 @@ static int
 compile_function_call(struct e_compiler* cc, int node)
 {
   int e = 0;
-  for (int i = 0; i < E_GET_NODE(cc->ast, node)->val.call.nargs; i++) {
+  for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->val.call.nargs; i++) {
     e = compile(cc, E_GET_NODE(cc->ast, node)->val.call.args[i]);
     if (e) return e;
   }
@@ -285,7 +285,7 @@ compile_function_call(struct e_compiler* cc, int node)
   // Find the function, if it is user defined and check if the argument count matches
   {
     e_function* func = nullptr;
-    for (int i = 0; i < cc->functions_size; i++) {
+    for (u32 i = 0; i < cc->functions_size; i++) {
       if (cc->functions[i].name_hash == id) {
         func = &cc->functions[i];
         break;
@@ -321,7 +321,7 @@ compile_if_statement(struct e_compiler* cc, int node)
   e_emit_instruction(cc, E_OPCODE_JZ, E_ATTR_CLEAN);
   e_emit_u32(cc, next_in_chain_label);
 
-  for (int i = 0; i < E_GET_NODE(cc->ast, node)->val.if_stmt.nstmts; i++) {
+  for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->val.if_stmt.nstmts; i++) {
     e = compile(cc, E_GET_NODE(cc->ast, node)->val.if_stmt.body[i]);
     if (e) return e;
   }
@@ -329,7 +329,7 @@ compile_if_statement(struct e_compiler* cc, int node)
   e_emit_instruction(cc, E_OPCODE_JMP, E_ATTR_NONE); // JUMP!
   e_emit_u32(cc, end_label);
 
-  for (int else_if = 0; else_if < E_GET_NODE(cc->ast, node)->val.if_stmt.nelse_ifs; else_if++) {
+  for (u32 else_if = 0; else_if < E_GET_NODE(cc->ast, node)->val.if_stmt.nelse_ifs; else_if++) {
     e_emit_label(cc, next_in_chain_label);
     next_in_chain_label = make_label_id();
 
@@ -341,7 +341,7 @@ compile_if_statement(struct e_compiler* cc, int node)
     e_emit_instruction(cc, E_OPCODE_JZ, E_ATTR_NONE);
     e_emit_u32(cc, next_in_chain_label);
 
-    for (int i = 0; i < if_stmt->nstmts; i++) {
+    for (u32 i = 0; i < if_stmt->nstmts; i++) {
       e = compile(cc, if_stmt->body[i]);
       if (e) return e;
     }
@@ -351,7 +351,7 @@ compile_if_statement(struct e_compiler* cc, int node)
   }
 
   e_emit_label(cc, next_in_chain_label); // BAM!
-  for (int i = 0; i < E_GET_NODE(cc->ast, node)->val.if_stmt.nelse_stmts; i++) {
+  for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->val.if_stmt.nelse_stmts; i++) {
     e = compile(cc, E_GET_NODE(cc->ast, node)->val.if_stmt.else_body[i]);
     if (e) return e;
   }
@@ -386,7 +386,7 @@ compile_while_statement(struct e_compiler* cc, int node)
   e_emit_instruction(cc, E_OPCODE_JZ, E_ATTR_CLEAN);
   e_emit_u32(cc, end_label);
 
-  for (int i = 0; i < E_GET_NODE(cc->ast, node)->val.while_stmt.nexprs; i++) {
+  for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->val.while_stmt.nexprs; i++) {
     e = compile(cc, E_GET_NODE(cc->ast, node)->val.while_stmt.exprs[i]);
     if (e) return e;
   }
@@ -412,7 +412,7 @@ compile(struct e_compiler* cc, int node)
   switch (E_GET_NODE(cc->ast, node)->type) {
     case E_ASNODE_ROOT: {
       e_asnode* root = E_GET_NODE(cc->ast, node);
-      for (int i = 0; i < root->val.root.nexprs; i++) {
+      for (u32 i = 0; i < root->val.root.nexprs; i++) {
         int e = compile(cc, root->val.root.exprs[i]);
         if (e) { return e; }
       }
@@ -423,7 +423,7 @@ compile(struct e_compiler* cc, int node)
 
     case E_ASNODE_EXPRESSION_LIST: {
       int e = 0;
-      for (int i = 0; i < E_GET_NODE(cc->ast, node)->val.exprs.nexprs; i++) {
+      for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->val.exprs.nexprs; i++) {
         e = compile(cc, E_GET_NODE(cc->ast, node)->val.exprs.exprs[i]);
         if (e) return e;
       }
@@ -543,9 +543,9 @@ compile(struct e_compiler* cc, int node)
 int
 e_compile_function(e_compiler* cc, int node)
 {
-  int  nexprs = E_GET_NODE(cc->ast, node)->val.func.nexprs;
+  u32  nexprs = E_GET_NODE(cc->ast, node)->val.func.nexprs;
   int* exprs  = E_GET_NODE(cc->ast, node)->val.func.exprs;
-  for (int i = 0; i < nexprs; i++) {
+  for (u32 i = 0; i < nexprs; i++) {
     int e = compile(cc, exprs[i]);
     if (e) return e;
   }
@@ -555,9 +555,9 @@ e_compile_function(e_compiler* cc, int node)
 int
 e_compile(struct e_ast* ast, int root_node, e_compilation_result* result)
 {
-  const int init_code_capacity     = 256;
-  const int init_literal_capacity  = 64;
-  const int init_function_capacity = 64;
+  const u32 init_code_capacity     = 256;
+  const u32 init_literal_capacity  = 64;
+  const u32 init_function_capacity = 64;
 
   e_compiler cc = {
     .ast                = ast,

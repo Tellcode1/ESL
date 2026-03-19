@@ -74,15 +74,15 @@ conv_token_type_to_operator(e_tokentype t)
  * Keeping the parser from getting polluted
  */
 static inline int
-parse_braces(e_ast* p, int** outexprs, int* outnexprs)
+parse_braces(e_ast* p, int** outexprs, u32* outnexprs)
 {
-  int  capacity = 16;
-  int  nexprs   = 0;
+  u32  capacity = 16;
+  u32  nexprs   = 0;
   int* exprs    = malloc(sizeof(int) * capacity);
 
   while (peek(p) != NULL && peek(p)->type != E_TOKENTYPE_CLOSEBRACE) {
     if (nexprs + 1 >= capacity) {
-      int  newcap   = MAX(capacity * 2, 1);
+      u32  newcap   = MAX(capacity * 2, 1);
       int* newexprs = realloc(exprs, sizeof(int) * newcap);
       if (!newexprs) {
         // Avoid returning partially parsed bodies on error!
@@ -129,7 +129,7 @@ parse_braces(e_ast* p, int** outexprs, int* outnexprs)
  * while(true) i++; or for(;;i++); if you're cool.
  */
 static inline int
-parse_body(e_ast* p, int** outexprs, int* outnexprs)
+parse_body(e_ast* p, int** outexprs, u32* outnexprs)
 {
   if (peek(p) && peek(p)->type == E_TOKENTYPE_OPENBRACE) {
     next(p); // consume {
@@ -252,18 +252,18 @@ parse_if(e_ast* p, int nodeid)
   e_filespan body_span = peek(p)->span;
 
   int* body   = NULL;
-  int  nstmts = 0;
+  u32  nstmts = 0;
   if ((e = parse_body(p, &body, &nstmts))) {
     asterror(body_span, "Error in parsing body of if statement\n");
     return -1;
   }
 
-  int        num_elseifs = 0;
-  int        capacity    = 4;
+  u32        num_elseifs = 0;
+  u32        capacity    = 4;
   e_if_stmt* else_ifs    = malloc(sizeof(e_if_stmt) * capacity);
 
   int* else_body   = NULL;
-  int  nelse_stmts = 0;
+  u32  nelse_stmts = 0;
 
   if (peek(p) && peek(p)->type == E_TOKENTYPE_ELSE) {
     while (true) {
@@ -276,7 +276,7 @@ parse_if(e_ast* p, int nodeid)
         next(p);
 
         if (num_elseifs >= capacity) {
-          int newcap = MAX(capacity * 2, 1);
+          u32 newcap = MAX(capacity * 2, 1);
           else_ifs   = realloc(else_ifs, sizeof(e_if_stmt) * newcap);
           capacity   = newcap;
           if (!else_ifs) return -1;
@@ -295,7 +295,7 @@ parse_if(e_ast* p, int nodeid)
         }
 
         int* else_if_body   = NULL;
-        int  else_if_nstmts = 0;
+        u32  else_if_nstmts = 0;
         if (parse_body(p, &else_if_body, &else_if_nstmts)) {
           asterror(peek(p)->span, "Error in parsing body of else if statement\n");
           return -1;
@@ -355,7 +355,7 @@ parse_while(e_ast* p, int nodeid)
   }
 
   int* exprs;
-  int  nexprs;
+  u32  nexprs;
   if (parse_body(p, &exprs, &nexprs)) {
     asterror(e_ast_peek(p)->span, "Expected while statement body\n");
     return -1;
@@ -401,7 +401,7 @@ parse_for(e_ast* p, int nodeid)
   }
 
   int* exprs;
-  int  nexprs;
+  u32  nexprs;
   if (parse_body(p, &exprs, &nexprs)) {
     asterror(e_ast_peek(p)->span, "Expected for statement body\n");
     return -1;
@@ -435,8 +435,8 @@ parse_function(e_ast* p, int nodeid)
 
   char* function_name = strdup(name_tk->val.ident);
 
-  int    names_capacity = 32; // NON ZERO
-  int    arg_names_size = 0;
+  u32    names_capacity = 32; // NON ZERO
+  u32    arg_names_size = 0;
   char** arg_names      = malloc(sizeof(char*) * names_capacity);
 
   while (peek(p) && peek(p)->type != E_TOKENTYPE_CLOSEPAREN) {
@@ -448,7 +448,7 @@ parse_function(e_ast* p, int nodeid)
     next(p);
 
     if (arg_names_size >= names_capacity) {
-      int    new_capacity = names_capacity * 2;
+      u32    new_capacity = names_capacity * 2;
       char** new_names    = realloc(arg_names, sizeof(char*) * new_capacity);
 
       if (!new_names) {
@@ -479,7 +479,7 @@ parse_function(e_ast* p, int nodeid)
   e_filespan parsing_span = peek(p)->span;
 
   int* exprs;
-  int  nexprs;
+  u32  nexprs;
   if (parse_body(p, &exprs, &nexprs)) {
     asterror(parsing_span, "Failed to parse function body\n");
     return -1;
@@ -553,13 +553,13 @@ e_ast_nud(e_ast* p, e_token* tk)
         E_GET_NODE(p, node)->val.call.function = strdup(tk->val.ident);
         // printf("AST: Detected function call: %s\n", tk->val.ident);
 
-        int  capacity = 4;
-        int  nargs    = 0;
+        u32  capacity = 4;
+        u32  nargs    = 0;
         int* args     = malloc(capacity * sizeof(int));
 
         while (peek(p) && peek(p)->type != E_TOKENTYPE_CLOSEPAREN) {
           if (nargs >= capacity) {
-            int newcap = MAX(capacity * 2, 1);
+            u32 newcap = MAX(capacity * 2, 1);
             args       = realloc(args, newcap * sizeof(int));
             capacity   = newcap;
             if (!args) return -1;
@@ -596,8 +596,7 @@ e_ast_nud(e_ast* p, e_token* tk)
     /* { stmts;stmts;stmts; } */
     case E_TOKENTYPE_OPENBRACE: {
       int* exprs  = NULL;
-      int  nexprs = 0;
-
+      u32  nexprs = 0;
       if (parse_braces(p, &exprs, &nexprs)) return -1;
 
       E_GET_NODE(p, node)->type             = E_ASNODE_EXPRESSION_LIST;
@@ -766,8 +765,8 @@ e_ast_parse(e_ast* p, int* out_root_node)
 
   e_ast_get_node(p, rootnode)->type = E_ASNODE_ROOT;
 
-  int  cap    = 16;
-  int  nexprs = 0;
+  u32  cap    = 16;
+  u32  nexprs = 0;
   int* exprs  = malloc(cap * sizeof(int));
 
   if (!exprs) { return -1; }
@@ -788,7 +787,7 @@ e_ast_parse(e_ast* p, int* out_root_node)
     }
 
     if (nexprs >= cap) {
-      int  newcap   = MAX(cap * 2, 1);
+      u32  newcap   = MAX(cap * 2, 1);
       int* newexprs = realloc(exprs, newcap * sizeof(int));
       if (!newexprs) {
         // TODO: Free
@@ -810,10 +809,10 @@ e_ast_parse(e_ast* p, int* out_root_node)
 }
 
 int
-e_ast_init(e_token* toks, int ntoks, e_ast* prsr)
+e_ast_init(e_token* toks, u32 ntoks, e_ast* prsr)
 {
   if (prsr) {
-    const int init_nodes = 64;
+    const u32 init_nodes = 64;
 
     *prsr = (e_ast){
       .nodes    = malloc(sizeof(e_asnode) * init_nodes),

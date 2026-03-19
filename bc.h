@@ -201,24 +201,23 @@ typedef u8 e_attr;
 static inline e_ins
 e_pack_ins(e_opcode opcode, e_attr tags)
 {
-  const int bits = sizeof(e_opcode) * 8;
+  const u32 bits = sizeof(e_opcode) * 8;
   return (e_ins)opcode | ((e_ins)tags << bits);
 }
 
 static inline u64
 e_pack_label_ins(u32 target)
 {
-  const int bits = sizeof(e_opcode) * 8;
+  const u32 bits = sizeof(e_opcode) * 8;
   return E_OPCODE_LABEL | ((u64)target << bits);
 }
 
 static inline void
 e_unpack_ins(e_ins ins, e_opcode* opcode, e_attr* tags)
 {
-  const int bits = sizeof(e_opcode) * 8;
-
-  *opcode = (e_opcode)(ins & 0xFF);
-  *tags   = (e_attr)((ins >> bits) & 0xFF);
+  const u32 bits = sizeof(e_opcode) * 8;
+  *opcode        = (e_opcode)(ins & 0xFF);
+  *tags          = (e_attr)((ins >> bits) & 0xFF);
 }
 
 #endif // E_IR_H

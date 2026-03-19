@@ -181,7 +181,7 @@ call(const e_exec_info* info, struct stack* stack, u32 hash, u32 nargs)
   }
 
   // user defined
-  for (int f = 0; f < info->nfuncs; f++) {
+  for (u32 f = 0; f < info->nfuncs; f++) {
     if (info->funcs[f].name_hash != hash) continue;
     e_exec_info fi = {
       .code          = info->funcs[f].code,
@@ -443,7 +443,7 @@ e_exec(const e_exec_info* info)
 
       case E_OPCODE_ASSIGN: {
         u32 id = e_read_u32(&ip);
-        for (int i = 0; i < nvariables; i++) {
+        for (u32 i = 0; i < nvariables; i++) {
           if (id == variables[i].id) {
             e_var* slot = &stack.stack[variables[i].offset_index];
             e_var_release(slot); // free old value in slot

@@ -84,9 +84,9 @@ typedef struct e_token {
  * outtoks will be set to a an array of tokens, allocated on the heap. Free using e_freetoks.
  * advertised_file is a string that should contain the file name that is shown to the user on errors/warnings by the compiler.
  */
-int e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, int* ntoks);
+int e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u32* ntoks);
 
-void e_freetoks(e_token* toks, int ntoks);
+void e_freetoks(e_token* toks, u32 ntoks);
 
 static inline const char*
 e_tokentype_to_string(e_tokentype e)

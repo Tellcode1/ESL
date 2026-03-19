@@ -67,12 +67,12 @@ parse_string(const char* s, size_t max)
 
 struct tklist {
   e_token* toks;
-  int      ntoks;
-  int      capacity;
+  u32      ntoks;
+  u32      capacity;
 };
 
 static inline int
-tklist_init(int capacity, struct tklist* list)
+tklist_init(u32 capacity, struct tklist* list)
 {
   if (capacity <= 0) { capacity = 1; }
 
@@ -85,7 +85,7 @@ tklist_init(int capacity, struct tklist* list)
 }
 
 static inline int
-tklist_resize(struct tklist* toks, int newcap)
+tklist_resize(struct tklist* toks, u32 newcap)
 {
   if (newcap == 0) { newcap = 1; }
 
@@ -140,7 +140,7 @@ _strndup(const char* s, size_t n)
 }
 
 int
-e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, int* ntoks)
+e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u32* ntoks)
 {
   int         e = 0;
   const char* s = input;
@@ -194,7 +194,7 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, in
       const char* snap = s;
       while (isalpha(*s) || isdigit(*s) || *s == '_') { advance(s, line, col); }
 
-      int len = (int)(s - snap);
+      u32 len = (u32)(s - snap);
 
       e_token tk = { 0 };
       /* TODO: Refactor. */
@@ -234,7 +234,7 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, in
         return -1;
       }
 
-      int len = (int)(s - snap);
+      u32 len = (u32)(s - snap);
 
       char* parsed = parse_string(snap, len);
 
@@ -361,9 +361,9 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, in
 }
 
 void
-e_freetoks(e_token* toks, int ntoks)
+e_freetoks(e_token* toks, u32 ntoks)
 {
-  for (int i = 0; i < ntoks; i++) {
+  for (u32 i = 0; i < ntoks; i++) {
     if (toks[i].type == E_TOKENTYPE_STRING || toks[i].type == E_TOKENTYPE_IDENT) { free(toks[i].val.s); }
     free(toks[i].span.file);
   }

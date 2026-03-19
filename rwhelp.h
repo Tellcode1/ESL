@@ -44,7 +44,7 @@ e_file_load(FILE* f, u32* nins, u8** inss, u32* nlits, e_var** lits, u32* nfunct
   e_var* alits = (e_var*)malloc(sizeof(e_var) * (*nlits));
   *lits        = alits;
 
-  for (int i = 0; i < *nlits; i++) {
+  for (u32 i = 0; i < *nlits; i++) {
     fread(&alits[i].type, sizeof(e_vartype), 1, f);
 
     e_var* lit = &alits[i];
@@ -65,7 +65,7 @@ e_file_load(FILE* f, u32* nins, u8** inss, u32* nlits, e_var** lits, u32* nfunct
 
   fread(nfunctions, sizeof(*nfunctions), 1, f);
   *functions = (e_function*)malloc(sizeof(e_function) * (*nfunctions));
-  for (int i = 0; i < *nfunctions; i++) {
+  for (u32 i = 0; i < *nfunctions; i++) {
     e_function func;
     fread(&func.code_size, sizeof(func.code_size), 1, f);
     fread(&func.nargs, sizeof(func.nargs), 1, f);
@@ -89,7 +89,7 @@ static inline void
 e_file_write(e_compilation_result* r, FILE* f)
 {
   fwrite(&r->nliterals, sizeof(r->nliterals), 1, f);
-  for (int i = 0; i < r->nliterals; i++) {
+  for (u32 i = 0; i < r->nliterals; i++) {
     const e_var* lit = &r->literals[i];
     fwrite(&lit->type, sizeof(e_vartype), 1, f);
 
@@ -118,12 +118,12 @@ e_file_write(e_compilation_result* r, FILE* f)
 static inline void
 e_compilation_result_free(e_compilation_result* r)
 {
-  for (int i = 0; i < r->nfunctions; i++) {
+  for (u32 i = 0; i < r->nfunctions; i++) {
     free(r->functions[i].code);
     free(r->functions[i].arg_slots);
   }
   free(r->functions);
-  for (int i = 0; i < r->nliterals; i++) { e_var_release(&r->literals[i]); }
+  for (u32 i = 0; i < r->nliterals; i++) { e_var_release(&r->literals[i]); }
   free(r->literals);
   free(r->bytecode);
 }

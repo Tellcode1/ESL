@@ -81,9 +81,9 @@ typedef struct e_if_stmt {
   struct e_if_stmt* else_ifs;  // Allocated, free after compilation.
 
   int condition;
-  int nstmts;
-  int nelse_stmts;
-  int nelse_ifs;
+  u32 nstmts;
+  u32 nelse_stmts;
+  u32 nelse_ifs;
 } e_if_stmt;
 
 typedef union e_asnode_val {
@@ -108,12 +108,12 @@ typedef union e_asnode_val {
 
   struct {
     int* elems;
-    int  nelems;
+    u32  nelems;
   } list;
 
   struct {
     int* kvpairs;
-    int  npairs;
+    u32  npairs;
   } map;
 
   struct {
@@ -136,7 +136,7 @@ typedef union e_asnode_val {
 
   struct {
     int* exprs;
-    int  nexprs;
+    u32  nexprs;
   } exprs, root;
 
   struct {
@@ -147,28 +147,28 @@ typedef union e_asnode_val {
   struct {
     char* function;
     int*  args;
-    int   nargs;
+    u32   nargs;
   } call;
 
   struct {
     char*  name;
     char** args;  // Allocated, + each string is allocated individually.
     int*   exprs; // Function body
-    int    nargs;
-    int    nexprs;
+    u32    nargs;
+    u32    nexprs;
   } func;
 
   struct {
     int  condition;
     int* exprs;
-    int  nexprs;
+    u32  nexprs;
   } while_stmt;
 
   struct {
-    int  initializers;
-    int  condition;
-    int  iterators;
-    int  nexprs;
+    int  initializers; // for (<let x = 0>;
+    int  condition;    // x >= 0;
+    int  iterators;    // x++)
+    u32  nexprs;
     int* exprs;
   } for_stmt;
 
@@ -183,15 +183,15 @@ typedef struct e_asnode {
 
 typedef struct e_ast {
   e_asnode* nodes;
-  int       nnodes;
-  int       capacity;
+  u32       nnodes;
+  u32       capacity;
 
   e_token* toks;
-  int      ntoks;
-  int      head;
+  u32      ntoks;
+  u32      head;
 } e_ast;
 
-int  e_ast_init(e_token* toks, int ntoks, e_ast* prsr);
+int  e_ast_init(e_token* toks, u32 ntoks, e_ast* prsr);
 void e_ast_free(e_ast* prsr);
 
 static inline e_token*
@@ -302,7 +302,7 @@ static inline int
 e_ast_make_node(e_ast* p)
 {
   if (p->nnodes + 1 >= p->capacity) {
-    int       newcap   = MAX(p->capacity * 2, 1);
+    u32       newcap   = MAX(p->capacity * 2, 1);
     e_asnode* newnodes = (e_asnode*)realloc(p->nodes, newcap * sizeof(e_asnode));
     if (newnodes == NULL) {
       perror("Allocation failed");
@@ -313,10 +313,10 @@ e_ast_make_node(e_ast* p)
     p->capacity = newcap;
   }
 
-  int idx = p->nnodes++;
+  u32 idx = p->nnodes++;
   memset(&p->nodes[idx], 0, sizeof(e_asnode));
 
-  return idx;
+  return (int)idx;
 }
 
 #define E_GET_NODE e_ast_get_node
