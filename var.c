@@ -73,7 +73,10 @@ e_var_deep_cpy(const e_var* var, e_var* dst)
 void
 e_var_free(e_var* var)
 {
-  e_refc_free(var->refc);
+  if (var->refc) {
+    e_refc_free(var->refc);
+    var->refc = nullptr;
+  }
   switch (var->type) {
     case E_VARTYPE_VOID:
     case E_VARTYPE_INT:

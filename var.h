@@ -81,12 +81,15 @@ void e_var_free(e_var* var);
 static inline i32
 e_var_acquire(e_var* v)
 {
+  if (v->refc == nullptr) return -1;
   return e_refc_acquire(v->refc);
 }
 
 static inline void
 e_var_release(e_var* v)
 {
+  if (v->refc == nullptr) return;
+
   e_refc_release(v->refc);
   if (v->refc->ctr <= 0) e_var_free(v);
 }

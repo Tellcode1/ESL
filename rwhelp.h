@@ -37,7 +37,7 @@ e_emit_label(e_compiler* cc, u32 labelid)
 }
 
 static inline void
-e_file_load(FILE* f, u32* nins, u8** inss, u32* nlits, e_var** lits, u32* nfunctions, e_function** functions)
+e_file_load(FILE* f, u32* nlits, e_var** lits, u32* nfunctions, e_function** functions)
 {
   fread(nlits, sizeof(*nlits), 1, f);
 
@@ -78,11 +78,6 @@ e_file_load(FILE* f, u32* nins, u8** inss, u32* nlits, e_var** lits, u32* nfunct
     fread(func.code, 1, func.code_size, f);
     (*functions)[i] = func;
   }
-
-  fread(nins, sizeof(*nins), 1, f);
-
-  *inss = (u8*)malloc(*nins);
-  fread(*inss, 1, *nins, f);
 }
 
 static inline void
@@ -110,9 +105,6 @@ e_file_write(e_compilation_result* r, FILE* f)
     fwrite(fn->arg_slots, sizeof(*fn->arg_slots), fn->nargs, f);
     fwrite(fn->code, 1, fn->code_size, f);
   }
-
-  fwrite(&r->bytecode_size, sizeof(r->bytecode_size), 1, f);
-  fwrite(r->bytecode, 1, r->bytecode_size, f);
 }
 
 static inline void
@@ -125,7 +117,6 @@ e_compilation_result_free(e_compilation_result* r)
   free(r->functions);
   for (u32 i = 0; i < r->nliterals; i++) { e_var_release(&r->literals[i]); }
   free(r->literals);
-  free(r->bytecode);
 }
 
 #endif // E_BYTECODE_STREAM_READ_WRITE_HELP_H

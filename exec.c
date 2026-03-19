@@ -294,8 +294,9 @@ e_exec(const e_exec_info* info)
         u32 hash       = e_read_u32(&ip);
 
         e_var r = call(info, &stack, hash, func_nargs);
+
         /* Push the return value only after popping the arguments. */
-        if (r.type != E_VARTYPE_VOID) stack_push(&stack, r);
+        if (r.type != E_VARTYPE_VOID) { stack_push(&stack, r); }
         break;
       }
 
@@ -471,15 +472,13 @@ e_exec(const e_exec_info* info)
           // now safe to release the stack slot
           // YASS NO LEAKS!!!!
           for (size_t i = 0; i < stack.size; i++) { e_var_release(&stack.stack[i]); }
+
           stack_free(&stack);
           free(variables);
+
           return r;
         } else {
-          // Don't free the arguments!
-          for (size_t i = 0; i < stack.size; i++) { e_var_release(&stack.stack[i]); }
-          stack_free(&stack);
-          free(variables);
-          return (e_var){ .type = E_VARTYPE_VOID };
+          goto _RETURN;
         }
         break;
       }
@@ -497,18 +496,16 @@ e_exec(const e_exec_info* info)
       // Non fatal return
       case E_OPCODE_HALT:
         // Don't free the arguments!
-        for (size_t i = 0; i < stack.size; i++) { e_var_release(&stack.stack[i]); }
-        stack_free(&stack);
-        free(variables);
-        return (e_var){ .type = E_VARTYPE_INT, .refc = e_refc_init(), .val.i = (int)e_read_u32(&ip) };
+        goto _RETURN;
 
       case E_OPCODE_COUNT: printf("Illegal instruction"); exit(-1);
     }
   }
 
+_RETURN:
   // Don't free the arguments!
   for (size_t i = 0; i < stack.size; i++) { e_var_release(&stack.stack[i]); }
   free(variables);
   stack_free(&stack);
-  return (e_var){ .type = E_VARTYPE_VOID, .refc = e_refc_init() };
+  return (e_var){ .type = E_VARTYPE_VOID };
 }

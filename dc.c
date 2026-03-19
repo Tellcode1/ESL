@@ -22,15 +22,11 @@ main(int argc, char** argv)
     return -1;
   }
 
-  u32         nins;
-  u8*         inss;
   u32         nlits;
   e_var*      lits;
   u32         nfuncs;
   e_function* funcs;
-  e_file_load(f, &nins, &inss, &nlits, &lits, &nfuncs, &funcs);
-
-  e_print_instruction_stream((const u8*)inss, nins, 0);
+  e_file_load(f, &nlits, &lits, &nfuncs, &funcs);
 
   for (int i = 0; i < nfuncs; i++) {
     printf("%u(%u):\n", funcs[i].name_hash, funcs[i].nargs);

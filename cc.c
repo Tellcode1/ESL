@@ -137,15 +137,18 @@ compile_function_definition(struct e_compiler* cc, int node)
   u32 init_code_capacity = 256;
 
   struct e_compiler copy = {
-    .ast            = cc->ast,
-    .loop           = nullptr, // reset loop on function.
-    .literals       = cc->literals,
-    .literal_hashes = cc->literal_hashes,
-    .nliterals      = cc->nliterals,
-    .cliterals      = cc->cliterals,
-    .emit           = (u8*)malloc(init_code_capacity),
-    .emitted        = 0,
-    .code_capacity  = init_code_capacity,
+    .ast                = cc->ast,
+    .loop               = nullptr, // reset loop on function.
+    .literals           = cc->literals,
+    .literal_hashes     = cc->literal_hashes,
+    .nliterals          = cc->nliterals,
+    .cliterals          = cc->cliterals,
+    .emit               = (u8*)malloc(init_code_capacity),
+    .emitted            = 0,
+    .code_capacity      = init_code_capacity,
+    .functions          = cc->functions,
+    .functions_capacity = cc->functions_capacity,
+    .functions_size     = cc->functions_size,
   };
 
   int e = e_compile_function(&copy, node);
@@ -154,9 +157,12 @@ compile_function_definition(struct e_compiler* cc, int node)
   e_emit_instruction(&copy, E_OPCODE_RETURN, E_ATTR_NONE);
   e_emit_u8(&copy, false);
 
-  cc->literals  = copy.literals;
-  cc->nliterals = copy.nliterals;
-  cc->cliterals = copy.cliterals;
+  cc->literals           = copy.literals;
+  cc->nliterals          = copy.nliterals;
+  cc->cliterals          = copy.cliterals;
+  cc->functions          = copy.functions;
+  cc->functions_size     = copy.functions_size;
+  cc->functions_capacity = copy.functions_capacity;
 
   u32 nargs = E_GET_NODE(cc->ast, node)->val.func.nargs;
 
@@ -416,8 +422,6 @@ compile(struct e_compiler* cc, int node)
         int e = compile(cc, root->val.root.exprs[i]);
         if (e) { return e; }
       }
-      e_emit_instruction(cc, E_OPCODE_HALT, E_ATTR_NONE);
-      e_emit_u32(cc, 0); // Return 0 by default.
       return 0;
     }
 
@@ -567,7 +571,7 @@ e_compile(struct e_ast* ast, int root_node, e_compilation_result* result)
     .nliterals          = 0,
     .cliterals          = init_literal_capacity,
     .code_capacity      = init_code_capacity,
-    .emit               = (u8*)malloc(sizeof(u8) * init_code_capacity),
+    .emit               = nullptr,
     .emitted            = 0,
     .functions_capacity = init_function_capacity,
     .functions_size     = 0,
@@ -582,12 +586,10 @@ e_compile(struct e_ast* ast, int root_node, e_compilation_result* result)
   for (size_t i = 0; i < cc.functions_size; i++) { e_resolve_labels(cc.functions[i].code, cc.functions[i].code_size); } // resolve all function labels
 
   if (result) {
-    result->bytecode      = cc.emit;
-    result->bytecode_size = cc.emitted;
-    result->literals      = cc.literals;
-    result->nliterals     = cc.nliterals;
-    result->functions     = cc.functions;
-    result->nfunctions    = cc.functions_size;
+    result->literals   = cc.literals;
+    result->nliterals  = cc.nliterals;
+    result->functions  = cc.functions;
+    result->nfunctions = cc.functions_size;
   }
 
   free(cc.literal_hashes);

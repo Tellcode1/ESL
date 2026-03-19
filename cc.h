@@ -54,10 +54,8 @@ typedef struct e_compiler {
 } e_compiler;
 
 typedef struct e_compilation_result {
-  u32         bytecode_size;
   u32         nliterals;
   u32         nfunctions;
-  u8*         bytecode;
   e_var*      literals;
   e_function* functions;
 } e_compilation_result;

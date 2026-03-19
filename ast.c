@@ -199,13 +199,14 @@ parse_variable_decleration(e_ast* ast, int nodeid)
     asterror(name_tk ? name_tk->span : (e_filespan){ 0 }, "Expected identifier\n");
     return -1;
   }
-  next(ast); // now consume it
+
+  next(ast);
   char* name = strdup(name_tk->val.ident);
 
   // printf("%s declared\n", name);
 
   E_GET_NODE(ast, nodeid)->type         = E_ASNODE_VARIABLE_DECL;
-  E_GET_NODE(ast, nodeid)->val.let.name = strdup(name);
+  E_GET_NODE(ast, nodeid)->val.let.name = name; // name is strdup'd.
 
   /* This is a variable without an initializer */
   if (peek(ast)->type == E_TOKENTYPE_SEMICOLON) {
@@ -778,6 +779,12 @@ e_ast_parse(e_ast* p, int* out_root_node)
     int node = e_ast_expr(p, 0);
     if (node < 0) {
       asterror(take_span, "Error parsing AST\n");
+      return -1;
+    }
+
+    e_asnode_type type = E_GET_NODE(p, node)->type;
+    if (type != E_ASNODE_FUNCTION_DEFINITION && type != E_ASNODE_VARIABLE_DECL) {
+      asterror(take_span, "Expected function definition or variable declerations in global scope\n");
       return -1;
     }
 

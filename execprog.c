@@ -4,6 +4,7 @@
 #include "var.h"
 
 #include <stdio.h>
+#include <string.h>
 
 e_var
 say_hello_from_c(e_var* args)
@@ -26,13 +27,13 @@ main(int argc, char* argv[])
     return -1;
   }
 
-  e_var*      lits;
-  u8*         ins;
-  e_function* funcs;
-  u32         nlits;
-  u32         nins;
-  u32         nfuncs;
-  e_file_load(f, &nins, &ins, &nlits, &lits, &nfuncs, &funcs);
+  e_var*      lits   = nullptr;
+  u8*         ins    = nullptr;
+  e_function* funcs  = nullptr;
+  u32         nlits  = 0;
+  u32         nins   = 0;
+  u32         nfuncs = 0;
+  e_file_load(f, &nlits, &lits, &nfuncs, &funcs);
   // printf("nlits=%u nins=%u\n", nlits, nins);
 
   // Don't let exec free a literal!
@@ -43,6 +44,15 @@ main(int argc, char* argv[])
     .nargs = 0,
     .func  = say_hello_from_c,
   };
+
+  const u32 main_func = e_hash_fnv("main", strlen("main"));
+  for (u32 i = 0; i < nfuncs; i++) {
+    if (funcs[i].name_hash == main_func) {
+      ins  = funcs[i].code;
+      nins = funcs[i].code_size;
+      break;
+    }
+  }
   e_exec_info info = {
     .code          = ins,
     .args          = nullptr,
@@ -63,7 +73,6 @@ main(int argc, char* argv[])
 
   for (u32 i = 0; i < nlits; i++) { e_var_release(&lits[i]); }
   free(lits);
-  free(ins);
   for (u32 i = 0; i < nfuncs; i++) {
     free(funcs[i].arg_slots);
     free(funcs[i].code);
