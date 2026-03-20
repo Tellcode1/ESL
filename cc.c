@@ -40,22 +40,40 @@ make_label_id(e_compiler* cc)
 }
 
 static inline int
-lower_node_to_literal(const e_asnode* node, e_var* o)
+lower_node_to_literal(const e_ast* p, int node, e_var* o)
 {
-  switch (node->type) {
-    case E_ASNODE_INT: *o = (e_var){ .type = E_VARTYPE_INT, .refc = e_refc_init(), .val.i = node->val.i }; return 0;
-    case E_ASNODE_FLOAT: *o = (e_var){ .type = E_VARTYPE_FLOAT, .refc = e_refc_init(), .val.f = node->val.f }; return 0;
-    case E_ASNODE_CHAR: *o = (e_var){ .type = E_VARTYPE_CHAR, .refc = e_refc_init(), .val.c = node->val.c }; return 0;
-    case E_ASNODE_BOOL: *o = (e_var){ .type = E_VARTYPE_BOOL, .refc = e_refc_init(), .val.b = node->val.b }; return 0;
+  switch (E_GET_NODE(p, node)->type) {
+    case E_ASNODE_INT: *o = (e_var){ .type = E_VARTYPE_INT, .refc = e_refc_init(), .val.i = E_GET_NODE(p, node)->val.i }; return 0;
+    case E_ASNODE_FLOAT: *o = (e_var){ .type = E_VARTYPE_FLOAT, .refc = e_refc_init(), .val.f = E_GET_NODE(p, node)->val.f }; return 0;
+    case E_ASNODE_CHAR: *o = (e_var){ .type = E_VARTYPE_CHAR, .refc = e_refc_init(), .val.c = E_GET_NODE(p, node)->val.c }; return 0;
+    case E_ASNODE_BOOL: *o = (e_var){ .type = E_VARTYPE_BOOL, .refc = e_refc_init(), .val.b = E_GET_NODE(p, node)->val.b }; return 0;
     case E_ASNODE_STRING: {
       struct e_string* s = malloc(sizeof(e_string));
       if (!s) return -1;
 
-      s->s = strdup(node->val.s);
+      s->s = strdup(E_GET_NODE(p, node)->val.s);
       *o   = (e_var){ .type = E_VARTYPE_STRING, .refc = e_refc_init(), .val.s = s };
       return 0;
     }
-    case E_ASNODE_LIST:
+
+    case E_ASNODE_LIST: {
+      // u32 nelems = E_GET_NODE(p, node)->val.list.nelems;
+
+      // o->type     = E_VARTYPE_LIST;
+      // o->val.list = (e_list*)malloc(sizeof(e_list));
+
+      // e_var* vars_tmp = (e_var*)malloc(sizeof(e_var) * nelems);
+      // for (u32 i = 0; i < nelems; i++) {
+      //   int elem_node = E_GET_NODE(p, node)->val.list.elems[i];
+      //   if (lower_node_to_literal(p, elem_node, &vars_tmp[i])) { cerror(E_GET_NODE(p, elem_node)->span, "Failed to compile literal for list"); }
+      // }
+
+      // e_list_init(vars_tmp, nelems, o->val.list);
+
+      // free(vars_tmp);
+      // return 0;
+    }
+
     case E_ASNODE_MAP: /* TODO: Implement */ abort(); break;
 
     default: return 1;
@@ -85,7 +103,7 @@ compile_literal(e_compiler* cc, int node)
   u16  id    = cc->nliterals;
 
   e_var v = { 0 };
-  if (lower_node_to_literal(E_GET_NODE(cc->ast, node), &v)) return -1;
+  if (lower_node_to_literal(cc->ast, node, &v)) return -1;
 
   /* Search for the literal in our table. */
   u16 hash = (u16)e_var_hash(&v);
@@ -165,6 +183,7 @@ compile_function_definition(struct e_compiler* cc, int node)
   e_emit_u8(&copy, false);
 
   cc->literals           = copy.literals;
+  cc->literal_hashes     = copy.literal_hashes;
   cc->nliterals          = copy.nliterals;
   cc->cliterals          = copy.cliterals;
   cc->functions          = copy.functions;
@@ -346,8 +365,8 @@ compile_if_statement(struct e_compiler* cc, int node)
   if (e) return e;
 
   // condition failed :<
-  e_emit_instruction(cc, E_OPCODE_JZ, E_ATTR_CLEAN); // Jump to the next in chain
-                                                     // Possibly else if or else
+  e_emit_instruction(cc, E_OPCODE_JZ, E_ATTR_NONE); // Jump to the next in chain
+                                                    // Possibly else if or else
   e_emit_u32(cc, next_in_chain_label);
 
   // BODY OF ROOT IF STATEMENT
@@ -439,7 +458,7 @@ compile_while_statement(struct e_compiler* cc, int node)
   if (e) return e;
 
   // Break out of loop if condition is false.
-  e_emit_instruction(cc, E_OPCODE_JZ, E_ATTR_CLEAN);
+  e_emit_instruction(cc, E_OPCODE_JZ, E_ATTR_NONE);
   e_emit_u32(cc, end_label);
 
   // WHILE BODY
@@ -593,6 +612,17 @@ compile(struct e_compiler* cc, int node)
       return 0;
     }
 
+    case E_ASNODE_INDEX: {
+      int e = compile(cc, E_GET_NODE(cc->ast, node)->val.index.base);
+      if (e < 0) return e;
+
+      e = compile(cc, E_GET_NODE(cc->ast, node)->val.index.offset);
+      if (e < 0) return e;
+
+      e_emit_instruction(cc, E_OPCODE_INDEX, E_ATTR_NONE);
+      return 0;
+    }
+
     case E_ASNODE_BINARYOP: {
       return compile_binary_op(cc, node);
     }
@@ -689,6 +719,24 @@ compile(struct e_compiler* cc, int node)
       return 0;
     }
 
+    case E_ASNODE_INDEX_ASSIGN: {
+      int base  = E_GET_NODE(cc->ast, node)->val.index_assign.base;
+      int index = E_GET_NODE(cc->ast, node)->val.index_assign.offset;
+      int value = E_GET_NODE(cc->ast, node)->val.index_assign.value;
+
+      int e = compile(cc, base);
+      if (e) return e;
+
+      e = compile(cc, index);
+      if (e) return e;
+
+      e = compile(cc, value);
+      if (e) return e;
+
+      e_emit_instruction(cc, E_OPCODE_INDEX_ASSIGN, E_ATTR_NONE);
+      return 0;
+    }
+
     case E_ASNODE_CALL: {
       return compile_function_call(cc, node);
     }
@@ -698,16 +746,26 @@ compile(struct e_compiler* cc, int node)
     case E_ASNODE_BOOL:
     case E_ASNODE_STRING:
     case E_ASNODE_FLOAT:
-    case E_ASNODE_LIST:
     case E_ASNODE_MAP: {
       return compile_literal(cc, node);
+    }
+
+    case E_ASNODE_LIST: {
+      u32 nelems = E_GET_NODE(cc->ast, node)->val.list.nelems;
+      for (u32 i = 0; i < nelems; i++) {
+        int elem_node = E_GET_NODE(cc->ast, node)->val.list.elems[i];
+        compile(cc, elem_node);
+      }
+
+      e_emit_instruction(cc, E_OPCODE_MK_LIST, E_ATTR_NONE);
+      e_emit_u32(cc, nelems);
+
+      return 0;
     }
 
     case E_ASNODE_FUNCTION_DEFINITION: {
       return compile_function_definition(cc, node);
     }
-    case E_ASNODE_MEMBER_ACCESS:
-    case E_ASNODE_MEMBER_ASSIGN: break;
   }
 
   return -1;

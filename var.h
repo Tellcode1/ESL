@@ -22,31 +22,18 @@ typedef enum e_vartype {
   E_VARTYPE_ERROR, // use e_error_string to get string representation of the error.
 } e_vartype;
 
-struct e_list {
-#ifdef NV_64BIT
-  u64            size;
-  u64            capacity;
-  struct e_var** vars;
-#else
-  u32            size;
-  u32            capacity;
-  struct e_var** vars;
-#endif
-};
+typedef struct e_list {
+  u64           size;
+  u64           capacity;
+  struct e_var* vars;
+} e_list;
 
-struct e_map {
-#ifdef NV_64BIT
-  u64            size;
-  u64            capacity;
-  struct e_var** keys;
-  struct e_var** vals;
-#else
-  u32            size;
-  u32            capacity;
-  struct e_var** keys;
-  struct e_var** vals;
-#endif
-};
+typedef struct e_map {
+  u64           size;
+  u64           capacity;
+  struct e_var* keys;
+  struct e_var* vals;
+} e_map;
 
 typedef struct e_string {
   char* s;
@@ -74,7 +61,12 @@ int e_var_deep_cpy(const e_var* var, e_var* dst);
 
 void e_var_print(const struct e_var* v, FILE* f);
 
-int e_list_init(e_var* vars_to_reference, u64 nvars, struct e_list* list);
+int  e_list_init(e_var* vars, u64 nvars, struct e_list* list);
+void e_list_free(struct e_list* list);
+
+e_var* e_list_index(struct e_list* list, u64 index);
+int    e_list_append(e_var* v, struct e_list* list);
+int    e_list_remove(u64 index, struct e_list* list);
 
 void e_var_free(e_var* var);
 
@@ -154,7 +146,7 @@ e_var_equal(const e_var* a, const e_var* b)
     case E_VARTYPE_LIST:
       if (a->val.list->size != b->val.list->size) return false;
       for (size_t i = 0; i < a->val.list->size; i++) {
-        if (!e_var_equal(a->val.list->vars[i], b->val.list->vars[i])) return false;
+        if (!e_var_equal(&a->val.list->vars[i], &b->val.list->vars[i])) return false;
       }
       return true;
     case E_VARTYPE_MAP:

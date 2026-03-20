@@ -21,6 +21,11 @@ e_asnode_free(e_ast* p, int nodeID)
       e_asnode_free(p, E_GET_NODE(p, nodeID)->val.binaryop.left);
       e_asnode_free(p, E_GET_NODE(p, nodeID)->val.binaryop.right);
       break;
+    case E_ASNODE_INDEX: {
+      e_asnode_free(p, E_GET_NODE(p, nodeID)->val.index.base);
+      e_asnode_free(p, E_GET_NODE(p, nodeID)->val.index.offset);
+      break;
+    }
     case E_ASNODE_UNARYOP: e_asnode_free(p, E_GET_NODE(p, nodeID)->val.unaryop.right); break;
     case E_ASNODE_EXPRESSION_LIST:
       for (u32 i = 0; i < E_GET_NODE(p, nodeID)->val.stmts.nstmts; i++) e_asnode_free(p, E_GET_NODE(p, nodeID)->val.stmts.stmts[i]);
@@ -80,8 +85,12 @@ e_asnode_free(e_ast* p, int nodeID)
       e_asnode_free(p, E_GET_NODE(p, nodeID)->val.assign.right);
       break;
 
-    case E_ASNODE_MEMBER_ACCESS:
-    case E_ASNODE_MEMBER_ASSIGN: break;
+    case E_ASNODE_INDEX_ASSIGN:
+      e_asnode_free(p, E_GET_NODE(p, nodeID)->val.index_assign.base);
+      e_asnode_free(p, E_GET_NODE(p, nodeID)->val.index_assign.offset);
+      e_asnode_free(p, E_GET_NODE(p, nodeID)->val.index_assign.value);
+      break;
+
     case E_ASNODE_CALL:
       free(E_GET_NODE(p, nodeID)->val.call.function);
       for (u32 i = 0; i < E_GET_NODE(p, nodeID)->val.call.nargs; i++) e_asnode_free(p, E_GET_NODE(p, nodeID)->val.call.args[i]);
@@ -90,11 +99,15 @@ e_asnode_free(e_ast* p, int nodeID)
 
     case E_ASNODE_STRING: free(E_GET_NODE(p, nodeID)->val.s); break;
 
+    case E_ASNODE_LIST:
+      for (u32 i = 0; i < E_GET_NODE(p, nodeID)->val.list.nelems; i++) e_asnode_free(p, E_GET_NODE(p, nodeID)->val.list.elems[i]);
+      free(E_GET_NODE(p, nodeID)->val.list.elems);
+      break;
+
     case E_ASNODE_INT:
     case E_ASNODE_CHAR:
     case E_ASNODE_BOOL:
     case E_ASNODE_FLOAT:
-    case E_ASNODE_LIST:
     case E_ASNODE_MAP: break;
   }
 }

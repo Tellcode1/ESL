@@ -105,13 +105,21 @@ typedef enum e_opcode_bck {
 
   /**
    * Assign the top of the stack to the variable on the 1st operand.
-   * The assigned value will be left on the stack (can be disabled using CLEAN attr)
+   * The assigned value will be left on the stack.
    * If the MEMBER_ACCESS attr is used, the 1st operand will be the member index, and the 2nd operand is the variable ID of the struct.
    * If the CLEAN attr is used, assigned value will be popped off the stack.
    * Usage(noattr/CLEAN): ASSIGN [var ID]
    * Usage(MEMBER_ACCESS): ASSIGN [member index] [struct variable ID]
    */
   E_OPCODE_ASSIGN,
+
+  /**
+   * Assign to a member of a struct/container.
+   * The assigned value and index will be popped.
+   * Base struct/container is kept.
+   * Usage(noattr): INDEX_ASSIGN [var], Stack is Top=Value, Top-1=Index, Top-2=Base struct/container
+   */
+  E_OPCODE_INDEX_ASSIGN,
 
   /**
    * Push a variable to the stack, and set its ID on the variable table.
@@ -125,6 +133,26 @@ typedef enum e_opcode_bck {
    * !!! The MULTIPLE attr cannot be used with the VARIABLE attr.
    */
   E_OPCODE_INIT,
+
+  /**
+   * Pack elements into a single list.
+   * The list is pushed to the stack.
+   * nelems is allowed to be 0.
+   * If the CLEAN attr is used, the elements are popped from the stack on copy.
+   * Usage(noattr): MK_LIST [num_elems:u32]
+   */
+  E_OPCODE_MK_LIST,
+
+  /**
+   * Index into an list, string or structure.
+   * The returned value is not an lvalue, you can not modify it and expect
+   * modifications to propogate across all copies.
+   * If index is out of range, program HALTs with E_EOUTOFRANGE.
+   * Base (structure/string/list) will NOT be popped off the stack.
+   * Usage(noattr): INDEX
+   * Stack is: Top=Index, Top-1=Base
+   */
+  E_OPCODE_INDEX,
 
   /**
    * A label. Removed from the instruction stream on optimization levels >= 2
@@ -194,7 +222,6 @@ typedef enum e_attr_bits {
   E_ATTR_INLINE        = 1 << 2,
   E_ATTR_VARIABLE      = 1 << 3,
   E_ATTR_MULTIPLE      = 1 << 4,
-  E_ATTR_CLEAN         = 1 << 5,
 } e_attr_bits;
 typedef u8 e_attr;
 

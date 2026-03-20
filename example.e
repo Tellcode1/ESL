@@ -192,6 +192,36 @@ fn main() {
     }
   }
   print('\n');
+
+  println([12, 2 + 2, "Gaming", 68.0, 16, false, ["Another list!", 2 - 2.5, true], "More_stuff"]);
+
+  let l = [1,2,3,4,5,6,7,8,9,10];
+  println(l[2]);
+
+  println("len(", l, ") = ", len(l));
+
+  for (let i = 0; i < len(l); i++)
+  {
+    print(l[i]);
+    if (i != len(l) - 1)
+    {
+      print(", ");
+    }
+  }
+  print("\n");
+  for (let i = 0; i < len(l); i++)
+  {
+    l[i] *= 2;
+  }
+  for (let i = 0; i < len(l); i++)
+  {
+    print(l[i]);
+    if (i != len(l) - 1)
+    {
+      print(", ");
+    }
+  }
+  print("\n");
 }
 
 fn file_test()

@@ -343,6 +343,8 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
           case ',': type = E_TOKENTYPE_COMMA; break;
           case '{': type = E_TOKENTYPE_OPENBRACE; break;
           case '}': type = E_TOKENTYPE_CLOSEBRACE; break;
+          case '[': type = E_TOKENTYPE_OPENBRACKET; break;
+          case ']': type = E_TOKENTYPE_CLOSEBRACKET; break;
           case '(': type = E_TOKENTYPE_OPENPAREN; break;
           case ')': type = E_TOKENTYPE_CLOSEPAREN; break;
 

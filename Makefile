@@ -5,7 +5,7 @@ LDFLAGS ?=
 SRC_DIR=.
 BUILD_DIR=build
 
-SOURCES=ast.c lex.c var.c
+SOURCES=ast.c lex.c var.c list.c
 COMPILER_SOURCES=cc.c cfront.c $(SOURCES)
 DECOMPILER_SOURCES=dc.c $(SOURCES)
 RUNTIME_SOURCES=exec.c execprog.c $(SOURCES)

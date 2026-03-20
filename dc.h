@@ -20,7 +20,6 @@ e_attrs_to_string(e_attr a, char* buffer, size_t buffer_size)
   if ((a & E_ATTR_INLINE) != 0) strlcat(buffer, "Inline|", buffer_size);
   if ((a & E_ATTR_VARIABLE) != 0) strlcat(buffer, "Variable|", buffer_size);
   if ((a & E_ATTR_MULTIPLE) != 0) strlcat(buffer, "Multiple|", buffer_size);
-  if ((a & E_ATTR_CLEAN) != 0) strlcat(buffer, "Clean|", buffer_size);
 }
 
 static inline void
@@ -93,6 +92,13 @@ e_print_instruction(e_opcode o, e_attr a, const u8** ip)
     case E_OPCODE_POP_VARIABLES: printf("restore vars\n"); break;
     case E_OPCODE_HALT: printf("halt [%u]\n", e_read_u32(ip)); break;
     case E_OPCODE_COUNT: printf("count\n"); break;
+    case E_OPCODE_MK_LIST: {
+      u32 nelems = e_read_u32(ip);
+      printf("mklist [%u]\n", nelems);
+      break;
+    }
+    case E_OPCODE_INDEX: printf("index\n"); break;
+    case E_OPCODE_INDEX_ASSIGN: printf("idx_assign\n"); break;
   }
 }
 

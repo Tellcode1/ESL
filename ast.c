@@ -1,6 +1,7 @@
 #include "ast.h"
 
 #include "astfree.h"
+#include "cerr.h"
 #include "lex.h"
 
 #include <error.h>
@@ -702,6 +703,53 @@ make_literal_node(e_ast* p, int nodeid, const e_token* tk)
   return nodeid;
 }
 
+static int
+parse_list(e_ast* p, int node)
+{
+  u32  capelems = 8;
+  u32  nelems   = 0;
+  int* elems    = malloc(sizeof(int) * capelems);
+
+  while (peek(p) && peek(p)->type != E_TOKENTYPE_CLOSEBRACKET) {
+    int elem = e_ast_expr(p, 0);
+
+    if (nelems >= capelems) {
+      u32  new_cap   = MAX(capelems * 2, 1);
+      int* new_elems = realloc(elems, new_cap * sizeof(int));
+      if (!new_elems) { goto err; }
+
+      elems    = new_elems;
+      capelems = new_cap;
+    }
+
+    elems[nelems++] = elem;
+
+    if (peek(p) && peek(p)->type == E_TOKENTYPE_CLOSEBRACKET) { break; }
+
+    if (e_ast_expect(p, E_TOKENTYPE_COMMA)) {
+      asterror(peek(p)->span, "Expected ',' between elements (list literal)\n");
+      goto err;
+    }
+  }
+
+  e_filespan span = peek(p)->span;
+  if (e_ast_expect(p, E_TOKENTYPE_CLOSEBRACKET)) {
+    asterror(span, "Expected ']' (list literal)\n");
+    goto err;
+  }
+
+  E_GET_NODE(p, node)->type            = E_ASNODE_LIST;
+  E_GET_NODE(p, node)->val.list.elems  = elems;
+  E_GET_NODE(p, node)->val.list.nelems = nelems;
+
+  return node;
+
+err:
+  for (u32 i = 0; i < nelems; i++) e_asnode_free(p, elems[i]);
+  free(elems);
+  return -1;
+}
+
 int
 e_ast_nud(e_ast* p, e_token* tk)
 {
@@ -736,6 +784,15 @@ e_ast_nud(e_ast* p, e_token* tk)
          * This doesn't really have anything much to do with releasing the literal
          * Mostly just about freeing the node metadata.
          */
+        e_asnode_free(p, node);
+        return -1;
+      }
+      return node;
+    }
+
+    /* List declerator ([elem1,elem2,]) */
+    case E_TOKENTYPE_OPENBRACKET: {
+      if (parse_list(p, node) < 0) {
         e_asnode_free(p, node);
         return -1;
       }
@@ -909,18 +966,23 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
     case E_TOKENTYPE_EQUAL: {
       // printf("ASSIGN YAYY!!\n");
 
-      // Assigning to a member of a struct
-      if (e_ast_get_node(p, leftidx)->type == E_ASNODE_MEMBER_ACCESS) {
+      // Assigning to a member of a (list/struct)
+      if (e_ast_get_node(p, leftidx)->type == E_ASNODE_INDEX) {
         int rightidx = e_ast_expr(p, rbp);
         if (rightidx < 0) {
-          asterror(peek(p)->span, "Invalid RHS in member assignment\n");
+          asterror(peek(p)->span, "Invalid RHS in index assignment\n");
           e_asnode_free(p, node);
           return -1;
         }
 
-        E_GET_NODE(p, node)->type                    = E_ASNODE_MEMBER_ASSIGN;
-        E_GET_NODE(p, node)->val.member_assign.left  = leftidx;
-        E_GET_NODE(p, node)->val.member_assign.value = rightidx;
+        E_GET_NODE(p, node)->type                    = E_ASNODE_INDEX_ASSIGN;
+        E_GET_NODE(p, node)->val.index_assign.base   = E_GET_NODE(p, leftidx)->val.index.base;
+        E_GET_NODE(p, node)->val.index_assign.offset = E_GET_NODE(p, leftidx)->val.index.offset;
+        E_GET_NODE(p, node)->val.index_assign.value  = rightidx;
+
+        // we stole lefts' children, we don't want to recursively free it.
+        free(E_GET_NODE(p, leftidx)->span.file);
+
         return node;
       }
 
@@ -936,6 +998,29 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
       E_GET_NODE(p, node)->val.binaryop.left  = leftidx;
       E_GET_NODE(p, node)->val.binaryop.right = rightidx;
 
+      return node;
+    }
+
+    // Index: LEFT [ INDEX ]
+    case E_TOKENTYPE_OPENBRACKET: {
+      e_filespan span = peek(p)->span;
+
+      int offset = e_ast_expr(p, 0);
+      if (offset < 0) {
+        cerror(span, "Failed to parse index statement\n");
+        e_asnode_free(p, node);
+        return -1;
+      }
+
+      span = peek(p)->span;
+      if (e_ast_expect(p, E_TOKENTYPE_CLOSEBRACKET)) {
+        cerror(span, "Expected ']' [Index expression]\n");
+        return -1;
+      }
+
+      E_GET_NODE(p, node)->type             = E_ASNODE_INDEX;
+      E_GET_NODE(p, node)->val.index.base   = leftidx;
+      E_GET_NODE(p, node)->val.index.offset = offset;
       return node;
     }
 

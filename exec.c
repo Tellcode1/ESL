@@ -2,6 +2,7 @@
 
 #include "bc.h"
 #include "fn.h"
+#include "perr.h"
 #include "refcount.h"
 #include "rwhelp.h"
 #include "stdafx.h"
@@ -198,6 +199,17 @@ stack_top(struct stack* st)
 //   }
 // }
 
+static inline int
+len(e_var* var)
+{
+  if (var->type == E_VARTYPE_LIST) {
+    return (int)var->val.list->size;
+  } else if (var->type == E_VARTYPE_MAP) {
+    return (int)var->val.map->size;
+  }
+  return E_ENONEXISTENT;
+}
+
 static e_var
 call(const e_exec_info* info, struct stack* stack, u32 hash, u32 nargs)
 {
@@ -250,6 +262,13 @@ call(const e_exec_info* info, struct stack* stack, u32 hash, u32 nargs)
       .val.f = f,
     };
     return_value = v;
+    goto pop_and_ret;
+  } else if (hash == e_hash_fnv("len", strlen("len"))) {
+    return_value = (e_var){
+      .type  = E_VARTYPE_INT,
+      .refc  = e_refc_init(),
+      .val.i = len(stack_top(stack)),
+    };
     goto pop_and_ret;
   }
 
@@ -345,6 +364,8 @@ e_exec(const e_exec_info* info)
     stack_push(&stack, v);
   }
 
+  e_ecode retcode = E_OK;
+
   const u8* ip  = info->code;
   const u8* end = info->code + info->code_size;
 
@@ -383,6 +404,27 @@ e_exec(const e_exec_info* info)
         break;
       }
 
+      case E_OPCODE_MK_LIST: {
+        u32 nelems = e_read_u32(&ip);
+
+        e_var new_list = {
+          .type     = E_VARTYPE_LIST,
+          .refc     = e_refc_init(),
+          .val.list = calloc(1, sizeof(e_list)),
+        };
+
+        e_var* elems = &stack.stack[stack.size - nelems];
+        e_list_init(elems, nelems, new_list.val.list); // acquires the elements.
+
+        // Release variables from the stack.
+        for (u32 i = 0; i < nelems; i++) { e_var_release(&stack.stack[stack.size - nelems + i]); }
+        stack.size -= nelems;
+
+        stack_push(&stack, new_list);
+
+        break;
+      }
+
       case E_OPCODE_ADD:
       case E_OPCODE_SUB:
       case E_OPCODE_MUL:
@@ -403,12 +445,11 @@ e_exec(const e_exec_info* info)
         // Since we compile left first, right next
         // right will be at the top of the stack and left will be below it
         e_var r = operate(stack.stack[stack.size - 2], stack.stack[stack.size - 1], opcode);
-        if (attrs & E_ATTR_CLEAN) {
-          stack_pop(&stack); // remove L & R
-          stack_pop(&stack);
-        }
 
-        /* Dont acquire the r. it's new. */
+        stack_pop(&stack); // remove L & R
+        stack_pop(&stack);
+
+        /* No need to acquire r. */
         stack_push(&stack, r);
         break;
       }
@@ -428,7 +469,7 @@ e_exec(const e_exec_info* info)
 
         if (attrs & E_ATTR_COMPOUND) {
           assign(get_variable_slot(variables, nvariables, id), &stack, variables, *v);
-          stack.size--;
+          stack.size--; // Variable slot owns v now!
         }
 
         break;
@@ -437,9 +478,9 @@ e_exec(const e_exec_info* info)
       case E_OPCODE_NOT:
       case E_OPCODE_BNOT: {
         // Provide an empty variable for the LHS
-        e_var r = operate((e_var){ 0 }, stack.stack[stack.size - 1], opcode);
-        // if (attrs & E_ATTR_CLEAN) stack.size--; // remove R
-        stack_pop(&stack);
+        e_var r = operate((e_var){ 0 }, *stack_top(&stack), opcode);
+
+        stack_pop(&stack); // remove R
 
         stack_push(&stack, r);
 
@@ -448,17 +489,17 @@ e_exec(const e_exec_info* info)
 
       case E_OPCODE_JZ: {
         u32 target = e_read_u32(&ip); // always read the operand
-        if (!stack.stack[stack.size - 1].val.i) ip = info->code + target;
+        if (!stack_top(&stack)->val.i) ip = info->code + target;
 
-        if (attrs & E_ATTR_CLEAN) stack_pop(&stack);
+        stack_pop(&stack); // remove condition
         break;
       }
 
       case E_OPCODE_JNZ: {
         u32 target = e_read_u32(&ip); // always read the operand
-        if (stack.stack[stack.size - 1].val.i) ip = info->code + target;
+        if (stack_top(&stack)->val.i) ip = info->code + target;
 
-        if (attrs & E_ATTR_CLEAN) stack_pop(&stack);
+        stack_pop(&stack); // remove condition
         break;
       }
 
@@ -513,6 +554,46 @@ e_exec(const e_exec_info* info)
         break;
       }
 
+      case E_OPCODE_INDEX: {
+        int     idx  = to_int(stack.stack[stack.size - 1]);
+        e_list* list = stack.stack[stack.size - 2].type == E_VARTYPE_LIST ? stack.stack[stack.size - 2].val.list : NULL;
+
+        stack_pop(&stack); // pop index
+        stack_pop(&stack); // pop base
+
+        if (list && idx >= 0 && (u64)idx < list->size) {
+          e_var_acquire(&list->vars[idx]);
+          stack_push(&stack, list->vars[idx]);
+        }
+        break;
+      }
+
+      case E_OPCODE_INDEX_ASSIGN: {
+        u32     idx  = stack.stack[stack.size - 2].val.i;
+        e_list* list = stack.stack[stack.size - 3].type == E_VARTYPE_LIST ? stack.stack[stack.size - 3].val.list : NULL;
+
+        // Copy value and acquire it temporarily
+        e_var value = stack.stack[stack.size - 1];
+        e_var_acquire(&value);
+
+        stack_pop(&stack); // pop value
+        stack_pop(&stack); // pop index
+        stack_pop(&stack); // pop base
+
+        if (!list || idx >= list->size) {
+          e_var_release(&value);
+          fprintf(stderr, "List has size %zu, but index is %zu\n", list->size, (size_t)idx);
+          retcode = E_EOUTOFRANGE;
+          goto _RETURN;
+        }
+
+        e_var_release(&list->vars[idx]);
+        e_var_shallow_cpy(&value, &list->vars[idx]);
+        e_var_acquire(&list->vars[idx]);
+        e_var_release(&value); // release our temporary hold
+        break;
+      }
+
       case E_OPCODE_ASSIGN: {
         u32 id = e_read_u32(&ip);
         for (u32 i = 0; i < nvariables; i++) {
@@ -520,14 +601,19 @@ e_exec(const e_exec_info* info)
             e_var* slot = &stack.stack[variables[i].offset_index];
             e_var_release(slot); // free old value in slot
 
-            *slot = *stack_top(&stack); // move ownership from stack top to slot
+            /**
+             * Copy it. We need the variable on the stack to support.
+             * chained assignments
+             * let x = 16;
+             * let y = 32;
+             * let z = 64;
+             * x = y = z = 68;
+             *             ^ value needs to be on the stack!
+             */
+            e_var_shallow_cpy(stack_top(&stack), slot);
 
-            if (attrs & E_ATTR_CLEAN) {
-              stack.size--; // just drop the stack entry without freeing,
-                            // slot owns the variable
-            } else {
-              e_var_acquire(slot);
-            }
+            e_var_acquire(slot);
+
             break;
           }
         }
@@ -563,7 +649,8 @@ e_exec(const e_exec_info* info)
         if (stack.depth >= (sizeof(stack.frames) / sizeof(stack.frames[0]))) {
           _UNREACHABLE();
           fprintf(stderr, "Stack frame depth exceeded %zu\n", sizeof(stack.frames) / sizeof(stack.frames[0]));
-          exit(-1);
+          retcode = E_EOUTOFRANGE;
+          goto _RETURN;
         }
         break;
 
@@ -579,9 +666,7 @@ e_exec(const e_exec_info* info)
       default: printf("Unknown instruction\n"); exit(-1);
 
       // Non fatal return
-      case E_OPCODE_HALT:
-        // Don't free the arguments!
-        goto _RETURN;
+      case E_OPCODE_HALT: retcode = E_OK; goto _RETURN;
 
       case E_OPCODE_COUNT: printf("Illegal instruction"); exit(-1);
     }
@@ -592,5 +677,13 @@ _RETURN:
   for (size_t i = 0; i < stack.size; i++) { e_var_release(&stack.stack[i]); }
   free(variables);
   stack_free(&stack);
-  return (e_var){ .type = E_VARTYPE_VOID };
+  if (retcode == E_OK) {
+    return (e_var){ .type = E_VARTYPE_VOID };
+  } else {
+    return (e_var){
+      .type  = E_VARTYPE_INT,
+      .refc  = e_refc_init(),
+      .val.i = retcode,
+    };
+  }
 }

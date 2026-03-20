@@ -28,8 +28,8 @@ typedef enum e_asnodetype {
   // let <name> [ : type] [ = initializer];
   E_ASNODE_VARIABLE_DECL,
   E_ASNODE_ASSIGN,
-  E_ASNODE_MEMBER_ACCESS,
-  E_ASNODE_MEMBER_ASSIGN,
+  E_ASNODE_INDEX,
+  E_ASNODE_INDEX_ASSIGN, // Assign to member
 
   E_ASNODE_CALL,
   E_ASNODE_INT,
@@ -129,6 +129,17 @@ typedef union e_asnode_val {
     int left;
     int right;
   } assign;
+
+  struct {
+    int base;
+    int offset;
+  } index;
+
+  struct {
+    int base;   // list/structure
+    int offset; // index: integer
+    int value;  // any value.
+  } index_assign;
 
   struct {
     int        right; // index of right
@@ -285,6 +296,7 @@ e_getbp(e_tokentype type, int* left, int* right)
       break;
 
     case E_TOKENTYPE_OPENBRACE:
+    case E_TOKENTYPE_OPENBRACKET:
       *left  = 100;
       *right = 99;
       break;

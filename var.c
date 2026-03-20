@@ -3,26 +3,8 @@
 #include "refcount.h"
 #include "stdafx.h"
 
+#include <stdio.h>
 #include <stdlib.h>
-
-static const u32 klist_init_capacity = 16;
-
-int
-e_list_init(e_var* vars_to_reference, u64 nvars, struct e_list* list)
-{
-  list->size     = nvars;
-  list->capacity = MAX(klist_init_capacity, nvars);
-
-  /**
-   * Pointers to the variables.
-   */
-  list->vars = (e_var**)malloc(sizeof(void*) * nvars);
-  if (list->vars == nullptr) return -1;
-
-  for (u64 i = 0; i < nvars; i++) { e_var_shallow_cpy(&vars_to_reference[i], list->vars[i]); }
-
-  return 0;
-}
 
 int
 e_var_shallow_cpy(const e_var* var, e_var* dst)
@@ -62,7 +44,10 @@ e_var_deep_cpy(const e_var* var, e_var* dst)
       dst->val.s    = malloc(sizeof(e_string));
       dst->val.s->s = strdup(var->val.s->s);
       break;
-    case E_VARTYPE_LIST:
+    case E_VARTYPE_LIST: {
+      dst->val.list = malloc(sizeof(e_list));
+      return e_list_init(var->val.list->vars, var->val.list->size, dst->val.list);
+    }
     case E_VARTYPE_MAP:
     case E_VARTYPE_ERROR: break;
   }
@@ -91,13 +76,13 @@ e_var_free(e_var* var)
       break;
 
     case E_VARTYPE_LIST:
-      for (u64 i = 0; i < var->val.list->size; i++) { e_var_release(var->val.list->vars[i]); }
+      e_list_free(var->val.list);
       free(var->val.list);
       break;
 
     case E_VARTYPE_MAP:
-      for (u64 i = 0; i < var->val.map->size; i++) { e_var_release(var->val.map->keys[i]); }
-      for (u64 i = 0; i < var->val.map->size; i++) { e_var_release(var->val.map->vals[i]); }
+      for (u64 i = 0; i < var->val.map->size; i++) { e_var_release(&var->val.map->keys[i]); }
+      for (u64 i = 0; i < var->val.map->size; i++) { e_var_release(&var->val.map->vals[i]); }
       free(var->val.map);
       break;
   }
@@ -111,9 +96,15 @@ e_var_print(const struct e_var* v, FILE* f)
     case E_VARTYPE_INT: fprintf(f, "%i", v->val.i); break;
     case E_VARTYPE_CHAR: fprintf(f, "%c", v->val.c); break;
     case E_VARTYPE_BOOL: fprintf(f, "%s", v->val.b ? "true" : "false"); break;
-    case E_VARTYPE_FLOAT: fprintf(f, "%f", v->val.f); break;
+    case E_VARTYPE_FLOAT: fprintf(f, "%g", v->val.f); break;
     case E_VARTYPE_STRING: fprintf(f, "%s", v->val.s->s); break;
     case E_VARTYPE_LIST: {
+      fputc('[', f);
+      for (u32 i = 0; i < v->val.list->size; i++) {
+        e_var_print(&v->val.list->vars[i], f);
+        if (i < v->val.list->size - 1) { fputs(", ", f); }
+      }
+      fputc(']', f);
       break;
     }
     case E_VARTYPE_MAP: break;
