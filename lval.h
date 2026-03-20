@@ -31,6 +31,13 @@ typedef struct e_lval {
   e_lval_value val;
 } e_lval;
 
+static inline bool
+e_can_make_value(const e_ast* ast, int node)
+{
+  if (ast == nullptr || node < 0) return false;
+  return E_GET_NODE(ast, node)->type == E_ASNODE_VARIABLE;
+}
+
 static inline e_lval
 e_make_value(const e_ast* ast, int node)
 {

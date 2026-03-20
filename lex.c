@@ -27,8 +27,11 @@ __advance(const char** s, int* line, int* col)
   (*s)++;
 }
 
+/**
+ * Walk through the string and parse all backslash escape sequences.
+ */
 static inline char*
-parse_string(const char* s, size_t max)
+parse_backslash_sequences(const char* s, size_t max)
 {
   char*  news = strdup(s);
   size_t r    = 0;
@@ -79,6 +82,7 @@ tklist_init(u32 capacity, struct tklist* list)
   list->ntoks = 0;
   list->toks  = calloc(capacity, sizeof(e_token));
   if (!list->toks) { return -1; }
+
   list->capacity = capacity;
 
   return 0;
@@ -91,6 +95,7 @@ tklist_resize(struct tklist* toks, u32 newcap)
 
   e_token* newtoks = malloc(sizeof(e_token) * newcap);
   if (!newtoks) { return -1; }
+
   memcpy(newtoks, toks->toks, sizeof(e_token) * toks->ntoks);
   free(toks->toks);
 
@@ -178,7 +183,7 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
       // both of them errored out
       if (end1 == NULL && end2 == NULL) {
         lexerror("Invalid integer or floating point literal\n");
-        return -1;
+        goto err;
       }
 
       if (is_float) {
@@ -212,6 +217,8 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
         tk = (e_token){ .type = E_TOKENTYPE_ELSE, .span = SPAN };
       } else if (len == strlen("while") && strncmp(snap, "while", len) == 0) {
         tk = (e_token){ .type = E_TOKENTYPE_WHILE, .span = SPAN };
+      } else if (len == strlen("for") && strncmp(snap, "for", len) == 0) {
+        tk = (e_token){ .type = E_TOKENTYPE_FOR, .span = SPAN };
       } else if (len == strlen("break") && strncmp(snap, "break", len) == 0) {
         tk = (e_token){ .type = E_TOKENTYPE_BREAK, .span = SPAN };
       } else if (len == strlen("continue") && strncmp(snap, "continue", len) == 0) {
@@ -231,12 +238,12 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
       // reached end of file
       if (!*s) {
         lexerror("Unterminated string literal\n");
-        return -1;
+        goto err;
       }
 
       u32 len = (u32)(s - snap);
 
-      char* parsed = parse_string(snap, len);
+      char* parsed = parse_backslash_sequences(snap, len);
 
       e_token tk = (e_token){ .type = E_TOKENTYPE_STRING, .val.s = parsed, .span = SPAN };
       tklist_append(&toks, &tk);
@@ -265,7 +272,7 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
 
       if (*s != '\'') {
         fprintf(stderr, "Expected closing quote after character literal\n");
-        return -1;
+        goto err;
       }
 
       advance(s, line, col);
@@ -296,7 +303,7 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
           case '!': type = E_TOKENTYPE_NOTEQUAL; break;
           case '<': type = E_TOKENTYPE_LTE; break;
           case '>': type = E_TOKENTYPE_GTE; break;
-          default: lexerror("Unrecognized sequence or character\n"); return -1;
+          default: lexerror("Unrecognized sequence or character\n"); goto err;
         }
         advance(s, line, col);
         advance(s, line, col);
@@ -339,13 +346,19 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
           case '(': type = E_TOKENTYPE_OPENPAREN; break;
           case ')': type = E_TOKENTYPE_CLOSEPAREN; break;
 
-          default: lexerror("Unrecognized sequence or character\n"); return -1;
+          default: lexerror("Unrecognized sequence or character\n"); goto err;
         }
         advance(s, line, col);
       }
       e_token tk = { .type = type, .val.op = { .c = ch, .is_compound = is_compound }, .span = SPAN };
       tklist_append(&toks, &tk);
     }
+
+    continue;
+
+  err:
+    e_freetoks(toks.toks, toks.ntoks);
+    return -1;
   }
 
   // e_token tk = {

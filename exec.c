@@ -2,6 +2,7 @@
 
 #include "bc.h"
 #include "fn.h"
+#include "refcount.h"
 #include "rwhelp.h"
 #include "stdafx.h"
 #include "var.h"
@@ -49,6 +50,30 @@ to_int(e_var v)
     case E_VARTYPE_CHAR: return (int)v.val.c;
     case E_VARTYPE_BOOL: return (int)v.val.b;
     default: return 0;
+  }
+}
+
+static inline char
+to_char(e_var v)
+{
+  switch (v.type) {
+    case E_VARTYPE_INT: return (char)v.val.i;
+    case E_VARTYPE_FLOAT: return (char)v.val.f;
+    case E_VARTYPE_CHAR: return (char)v.val.c;
+    case E_VARTYPE_BOOL: return (char)v.val.b;
+    default: return 0;
+  }
+}
+
+static inline bool
+to_bool(e_var v)
+{
+  switch (v.type) {
+    case E_VARTYPE_INT: return (bool)v.val.i;
+    case E_VARTYPE_FLOAT: return (bool)v.val.f;
+    case E_VARTYPE_CHAR: return (bool)v.val.c;
+    case E_VARTYPE_BOOL: return (bool)v.val.b;
+    default: return false;
   }
 }
 
@@ -183,9 +208,48 @@ call(const e_exec_info* info, struct stack* stack, u32 hash, u32 nargs)
     for (int64_t j = nargs - 1; j >= 0; j--) e_var_print(&stack->stack[stack->size - j - 1], stdout);
     fputc('\n', stdout);
     goto pop_and_ret;
-  }
-  if (hash == e_hash_fnv("print", strlen("print"))) {
+  } else if (hash == e_hash_fnv("print", strlen("print"))) {
     for (int64_t j = nargs - 1; j >= 0; j--) e_var_print(&stack->stack[stack->size - j - 1], stdout);
+    goto pop_and_ret;
+  } else if (hash == e_hash_fnv("int", strlen("int"))) {
+    int i = to_int(stack->stack[stack->size - 1]);
+
+    e_var v = {
+      .type  = E_VARTYPE_INT,
+      .refc  = e_refc_init(),
+      .val.i = i,
+    };
+    return_value = v;
+    goto pop_and_ret;
+  } else if (hash == e_hash_fnv("char", strlen("char"))) {
+    char c = to_char(stack->stack[stack->size - 1]);
+
+    e_var v = {
+      .type  = E_VARTYPE_CHAR,
+      .refc  = e_refc_init(),
+      .val.c = c,
+    };
+    return_value = v;
+    goto pop_and_ret;
+  } else if (hash == e_hash_fnv("bool", strlen("bool"))) {
+    bool b = to_bool(stack->stack[stack->size - 1]);
+
+    e_var v = {
+      .type  = E_VARTYPE_BOOL,
+      .refc  = e_refc_init(),
+      .val.b = b,
+    };
+    return_value = v;
+    goto pop_and_ret;
+  } else if (hash == e_hash_fnv("float", strlen("float"))) {
+    double f = to_float(stack->stack[stack->size - 1]);
+
+    e_var v = {
+      .type  = E_VARTYPE_FLOAT,
+      .refc  = e_refc_init(),
+      .val.f = f,
+    };
+    return_value = v;
     goto pop_and_ret;
   }
 

@@ -51,6 +51,8 @@ typedef struct e_compiler {
   e_function* functions;
   u32         functions_size;
   u32         functions_capacity;
+
+  u32 next_label;
 } e_compiler;
 
 typedef struct e_compilation_result {

@@ -2,6 +2,7 @@
 
 #include "ast.h"
 #include "bc.h"
+#include "cerr.h"
 #include "fn.h"
 #include "label.h"
 #include "lval.h"
@@ -33,11 +34,9 @@ ec_get_pos(const e_compiler* cc)
 }
 
 static inline u32
-make_label_id()
+make_label_id(e_compiler* cc)
 {
-  static u32 counter = 0;
-  counter++;
-  return counter;
+  return cc->next_label++;
 }
 
 static inline int
@@ -50,13 +49,14 @@ lower_node_to_literal(const e_asnode* node, e_var* o)
     case E_ASNODE_BOOL: *o = (e_var){ .type = E_VARTYPE_BOOL, .refc = e_refc_init(), .val.b = node->val.b }; return 0;
     case E_ASNODE_STRING: {
       struct e_string* s = malloc(sizeof(e_string));
+      if (!s) return -1;
 
       s->s = strdup(node->val.s);
       *o   = (e_var){ .type = E_VARTYPE_STRING, .refc = e_refc_init(), .val.s = s };
       return 0;
     }
     case E_ASNODE_LIST:
-    case E_ASNODE_MAP: abort(); break;
+    case E_ASNODE_MAP: /* TODO: Implement */ abort(); break;
 
     default: return 1;
   }
@@ -70,7 +70,11 @@ compile_literal(e_compiler* cc, int node)
     size_t new_c              = cc->cliterals * 2;
     e_var* new_literals       = realloc(cc->literals, sizeof(e_var) * new_c);
     u16*   new_literal_hashes = realloc(cc->literal_hashes, sizeof(u16) * new_c);
-    if (!new_literals || !new_literal_hashes) return -1;
+    if (!new_literals || !new_literal_hashes) {
+      free(new_literals); // free(NULL) = noop
+      free(new_literal_hashes);
+      return -1;
+    }
 
     cc->literals       = new_literals;
     cc->literal_hashes = new_literal_hashes;
@@ -83,6 +87,7 @@ compile_literal(e_compiler* cc, int node)
   e_var v = { 0 };
   if (lower_node_to_literal(E_GET_NODE(cc->ast, node), &v)) return -1;
 
+  /* Search for the literal in our table. */
   u16 hash = (u16)e_var_hash(&v);
   for (u32 i = 0; i < cc->nliterals; i++) {
     if (cc->literal_hashes[i] == hash && e_var_equal(&v, &cc->literals[i])) {
@@ -93,7 +98,9 @@ compile_literal(e_compiler* cc, int node)
   }
 
   if (!found) {
-    id                     = cc->nliterals;
+    // Add it to our list
+    id = cc->nliterals;
+
     cc->literals[id]       = v;
     cc->literal_hashes[id] = e_var_hash(&v);
     cc->nliterals++;
@@ -129,7 +136,7 @@ compile_function_definition(struct e_compiler* cc, int node)
   for (u32 i = 0; i < cc->functions_size; i++) {
     if (cc->functions[i].name_hash == hash) {
       _UNREACHABLE();
-      cerror(E_GET_NODE(cc->ast, node)->span, "Multiple definitions of function \"%s\"", function_name);
+      cerror(E_GET_NODE(cc->ast, node)->span, "Multiple definitions of function \"%s\"\n", function_name);
       return -1;
     }
   }
@@ -230,7 +237,7 @@ compile_binary_op(struct e_compiler* cc, int node)
           case E_OPERATOR_GTE: opcode = E_OPCODE_GTE; break;
       // clang-format on
 
-    default: printf("Operator %u can not be used as a binary operator\n", E_GET_NODE(cc->ast, node)->val.binaryop.op); return -1;
+    default: cerror(E_GET_NODE(cc->ast, node)->span, "Operator %u can not be used as a binary operator\n", E_GET_NODE(cc->ast, node)->val.binaryop.op); return -1;
   }
 
   e_attr attrs = E_ATTR_NONE;
@@ -256,7 +263,7 @@ compile_unary_op(struct e_compiler* cc, int node)
         case E_OPERATOR_BNOT: opcode = E_OPCODE_BNOT; break;
         case E_OPERATOR_INC: opcode = E_OPCODE_INC; break;
         case E_OPERATOR_DEC: opcode = E_OPCODE_DEC; break;
-        default: printf("Operator %u can not be used as a unary operator\n", E_GET_NODE(cc->ast, node)->val.unaryop.op); return -1;
+        default: cerror(E_GET_NODE(cc->ast, node)->span, "Operator %u can not be used as a unary operator\n", E_GET_NODE(cc->ast, node)->val.unaryop.op); return -1;
       }
   // clang-format on
 
@@ -266,7 +273,14 @@ compile_unary_op(struct e_compiler* cc, int node)
   e_emit_instruction(cc, opcode, attrs);
 
   if (E_GET_NODE(cc->ast, node)->val.unaryop.is_compound) {
-    int right_node = E_GET_NODE(cc->ast, node)->val.unaryop.right;
+    int        right_node = E_GET_NODE(cc->ast, node)->val.unaryop.right;
+    e_filespan span       = E_GET_NODE(cc->ast, right_node)->span;
+
+    if (!e_can_make_value(cc->ast, right_node)) {
+      cerror(span, "Can not lower right to lvalue. Are you sure it's a modifiable variable?\n");
+      return -1;
+    }
+
     e_emit_u32(cc, e_make_value(cc->ast, right_node).val.var_id);
   }
 
@@ -311,12 +325,20 @@ compile_function_call(struct e_compiler* cc, int node)
   return 0;
 }
 
+// This is the dirtiest of them all...
 static int
 compile_if_statement(struct e_compiler* cc, int node)
 {
-  u32 end_label           = make_label_id();
-  u32 next_in_chain_label = make_label_id();
+  /* Label after if statements body */
+  u32 end_label = make_label_id(cc);
 
+  /**
+   * Label of the next else if / else to jump to. Still used if no branches are present, there's
+   * just a jmp instruction directly after the JMP to where the branch would be.
+   */
+  u32 next_in_chain_label = make_label_id(cc);
+
+  /* Push a new scope before everything. */
   e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES, E_ATTR_NONE);
 
   // condition
@@ -324,46 +346,63 @@ compile_if_statement(struct e_compiler* cc, int node)
   if (e) return e;
 
   // condition failed :<
-  e_emit_instruction(cc, E_OPCODE_JZ, E_ATTR_CLEAN);
+  e_emit_instruction(cc, E_OPCODE_JZ, E_ATTR_CLEAN); // Jump to the next in chain
+                                                     // Possibly else if or else
   e_emit_u32(cc, next_in_chain_label);
 
+  // BODY OF ROOT IF STATEMENT
   for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->val.if_stmt.nstmts; i++) {
     e = compile(cc, E_GET_NODE(cc->ast, node)->val.if_stmt.body[i]);
     if (e) return e;
   }
 
+  // Still inside the body, JMP over all other branches
+  // since we're done executing the body of the if statement
   e_emit_instruction(cc, E_OPCODE_JMP, E_ATTR_NONE); // JUMP!
   e_emit_u32(cc, end_label);
 
+  // ELSE IFS
   for (u32 else_if = 0; else_if < E_GET_NODE(cc->ast, node)->val.if_stmt.nelse_ifs; else_if++) {
+    // Emit the next in chain label for instructions to jump to.
     e_emit_label(cc, next_in_chain_label);
-    next_in_chain_label = make_label_id();
+    next_in_chain_label = make_label_id(cc);
 
+    // dont worry about it dont worry about it dont worry about it dont worry about it
     struct e_if_stmt* if_stmt = &E_GET_NODE(cc->ast, node)->val.if_stmt.else_ifs[else_if];
 
+    // CONDITION
     e = compile(cc, if_stmt->condition);
     if (e) return e;
 
+    /* Failed. Jump to the next in chain. */
     e_emit_instruction(cc, E_OPCODE_JZ, E_ATTR_NONE);
     e_emit_u32(cc, next_in_chain_label);
 
+    /* Condition true! Execute the body */
     for (u32 i = 0; i < if_stmt->nstmts; i++) {
       e = compile(cc, if_stmt->body[i]);
       if (e) return e;
     }
 
+    /* JMP over all other branches. */
     e_emit_instruction(cc, E_OPCODE_JMP, E_ATTR_NONE); // skip remaining elseifs and else
     e_emit_u32(cc, end_label);
   }
 
+  /* Emit the final next in chain label for the else statement. */
   e_emit_label(cc, next_in_chain_label); // BAM!
+  /* ELSE BODY */
   for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->val.if_stmt.nelse_stmts; i++) {
     e = compile(cc, E_GET_NODE(cc->ast, node)->val.if_stmt.else_body[i]);
     if (e) return e;
+
+    /* No need to jump! we're already at the end :> */
   }
 
+  /* END LABEL. There's still one instruction after this and it's to ensure we always pop our variables. */
   e_emit_label(cc, end_label);
 
+  /* Pop scope. */
   e_emit_instruction(cc, E_OPCODE_POP_VARIABLES, E_ATTR_NONE);
 
   return 0;
@@ -372,42 +411,160 @@ compile_if_statement(struct e_compiler* cc, int node)
 static int
 compile_while_statement(struct e_compiler* cc, int node)
 {
+  /* Push a new scope */
   e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES, E_ATTR_NONE);
 
-  const u32 condition_label = make_label_id();
-  const u32 end_label       = make_label_id();
+  /* Computes the condition and jumps to the end label (breaks) if condition is false */
+  const u32 pre_condition_label = make_label_id(cc);
 
+  /* After the while loop, with one POP_VARIABLES to ensure we always pop our variables. */
+  const u32 end_label = make_label_id(cc);
+
+  /* Append a loop entry to our compiler. */
   ecc_loop_location loop = {
-    .continue_label = condition_label,
+    .continue_label = pre_condition_label,
     .break_label    = end_label,
   };
+
+  /* Ensure we don't overwrite it... */
   ecc_loop_location* last = cc->loop;
   cc->loop                = &loop;
 
-  e_emit_label(cc, condition_label);
+  //
+  e_emit_label(cc, pre_condition_label);
+  //
 
+  /* CONDITION */
   int e = compile(cc, E_GET_NODE(cc->ast, node)->val.while_stmt.condition);
   if (e) return e;
 
+  // Break out of loop if condition is false.
   e_emit_instruction(cc, E_OPCODE_JZ, E_ATTR_CLEAN);
   e_emit_u32(cc, end_label);
 
-  for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->val.while_stmt.nexprs; i++) {
-    e = compile(cc, E_GET_NODE(cc->ast, node)->val.while_stmt.exprs[i]);
+  // WHILE BODY
+  for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->val.while_stmt.nstmts; i++) {
+    e = compile(cc, E_GET_NODE(cc->ast, node)->val.while_stmt.stmts[i]);
     if (e) return e;
   }
 
-  // Jump to condition
+  /* Jump to condition, body is done executing */
   e_emit_instruction(cc, E_OPCODE_JMP, E_ATTR_NONE);
-  e_emit_u32(cc, condition_label);
+  e_emit_u32(cc, pre_condition_label);
 
+  // End label.
   e_emit_label(cc, end_label);
 
+  // Pop the scope
+  e_emit_instruction(cc, E_OPCODE_POP_VARIABLES, E_ATTR_NONE);
+
+  // swap the old loop metadata back in
+  cc->loop = last;
+
+  return e;
+}
+
+static int
+compile_for_statement(struct e_compiler* cc, int node)
+{
+  int initializers = -1;
+  int condition    = -1;
+  int iterators    = -1;
+
+  /* Push a new scope */
+  e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES, E_ATTR_NONE);
+
+  /**
+   * The for statement is compiled as:
+   * Initializers (inlined)
+   * TOP_LABEL:
+   * Condition
+   * JZ END_LABEL
+   * BODY
+   * ITERATOR_LABEL:
+   * Iterators
+   * JMP TOP_LABEL
+   * END_LABEL:
+   *  (next instruction)
+   */
+
+  const u32 top_label      = make_label_id(cc);
+  const u32 end_label      = make_label_id(cc);
+  const u32 iterator_label = make_label_id(cc); // Needed so continue can jmp directly to iterators
+
+  /* Append a loop entry to our compiler. */
+  ecc_loop_location loop = {
+    .continue_label = iterator_label,
+    .break_label    = end_label,
+  };
+
+  /* Ensure we don't overwrite it... */
+  ecc_loop_location* last = cc->loop;
+  cc->loop                = &loop;
+
+  // INITIALIZERS
+  initializers = E_GET_NODE(cc->ast, node)->val.for_stmt.initializers;
+  if (initializers >= 0 && compile(cc, initializers) < 0) {
+    cerror(E_GET_NODE(cc->ast, initializers)->span, "Failed to compile initializers [for statement]");
+    goto err;
+  }
+
+  // TOP_LABEL
+  e_emit_label(cc, top_label);
+
+  // CONDITION
+  condition = E_GET_NODE(cc->ast, node)->val.for_stmt.condition;
+  if (condition < 0) {
+    // Can't use condition's span!
+    cerror(E_GET_NODE(cc->ast, initializers)->span, "Empty for statement conditions are not currently supported [for statement]\n");
+    goto err;
+  }
+
+  if (condition >= 0 && compile(cc, condition) < 0) {
+    cerror(E_GET_NODE(cc->ast, condition)->span, "Failed to compile condition [for statement]");
+    goto err;
+  }
+
+  // JZ END_LABEL
+  e_emit_instruction(cc, E_OPCODE_JZ, E_ATTR_NONE);
+  e_emit_u32(cc, end_label);
+
+  // BODY
+  u32 nstmts = E_GET_NODE(cc->ast, node)->val.for_stmt.nstmts;
+  for (u32 i = 0; i < nstmts; i++) {
+    int stmt = E_GET_NODE(cc->ast, node)->val.for_stmt.stmts[i];
+    if (compile(cc, stmt) < 0) {
+      cerror(E_GET_NODE(cc->ast, stmt)->span, "Failed to compile statement in body [for statement]");
+      goto err;
+    }
+  }
+
+  // ITERATOR_LABEL
+  e_emit_label(cc, iterator_label);
+
+  // ITERATORS
+  iterators = E_GET_NODE(cc->ast, node)->val.for_stmt.iterators;
+  if (iterators >= 0 && compile(cc, iterators) < 0) {
+    cerror(E_GET_NODE(cc->ast, iterators)->span, "Failed to compile iterators [for statement]");
+    goto err;
+  }
+
+  // JMP TOP_LABEL
+  e_emit_instruction(cc, E_OPCODE_JMP, E_ATTR_NONE);
+  e_emit_u32(cc, top_label);
+
+  // END_LABEL
+  e_emit_label(cc, end_label);
+
+  // Pop scope
   e_emit_instruction(cc, E_OPCODE_POP_VARIABLES, E_ATTR_NONE);
 
   cc->loop = last;
 
-  return e;
+  return 0;
+
+err:
+  return -1;
 }
 
 static int
@@ -416,10 +573,12 @@ compile(struct e_compiler* cc, int node)
   if (node < 0) return -1;
 
   switch (E_GET_NODE(cc->ast, node)->type) {
+    case E_ASNODE_NOP: return 0;
+
     case E_ASNODE_ROOT: {
       e_asnode* root = E_GET_NODE(cc->ast, node);
-      for (u32 i = 0; i < root->val.root.nexprs; i++) {
-        int e = compile(cc, root->val.root.exprs[i]);
+      for (u32 i = 0; i < root->val.root.nstmts; i++) {
+        int e = compile(cc, root->val.root.stmts[i]);
         if (e) { return e; }
       }
       return 0;
@@ -427,8 +586,8 @@ compile(struct e_compiler* cc, int node)
 
     case E_ASNODE_EXPRESSION_LIST: {
       int e = 0;
-      for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->val.exprs.nexprs; i++) {
-        e = compile(cc, E_GET_NODE(cc->ast, node)->val.exprs.exprs[i]);
+      for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->val.stmts.nstmts; i++) {
+        e = compile(cc, E_GET_NODE(cc->ast, node)->val.stmts.stmts[i]);
         if (e) return e;
       }
       return 0;
@@ -438,7 +597,6 @@ compile(struct e_compiler* cc, int node)
       return compile_binary_op(cc, node);
     }
 
-    // This is the dirtiest of them all...
     case E_ASNODE_IF: {
       return compile_if_statement(cc, node);
     }
@@ -451,7 +609,9 @@ compile(struct e_compiler* cc, int node)
       return compile_while_statement(cc, node);
     }
 
-    case E_ASNODE_FOR: break;
+    case E_ASNODE_FOR: {
+      return compile_for_statement(cc, node);
+    }
 
     case E_ASNODE_BREAK: {
       if (!cc->loop) {
@@ -510,10 +670,19 @@ compile(struct e_compiler* cc, int node)
     }
 
     case E_ASNODE_ASSIGN: {
-      int e = compile(cc, E_GET_NODE(cc->ast, node)->val.assign.right);
+      int right = E_GET_NODE(cc->ast, node)->val.assign.right;
+      int left  = E_GET_NODE(cc->ast, node)->val.assign.left;
+
+      if (!e_can_make_value(cc->ast, left)) {
+        e_filespan left_span = E_GET_NODE(cc->ast, left)->span;
+        cerror(left_span, "Can not assign to left: Failed to lower to lvalue\n");
+        return -1;
+      }
+
+      int e = compile(cc, right);
       if (e) return e;
 
-      u32 left_id = e_make_value(cc->ast, E_GET_NODE(cc->ast, node)->val.assign.left).val.var_id;
+      u32 left_id = e_make_value(cc->ast, left).val.var_id;
 
       e_emit_instruction(cc, E_OPCODE_ASSIGN, E_ATTR_NONE);
       e_emit_u32(cc, left_id);
@@ -547,10 +716,10 @@ compile(struct e_compiler* cc, int node)
 int
 e_compile_function(e_compiler* cc, int node)
 {
-  u32  nexprs = E_GET_NODE(cc->ast, node)->val.func.nexprs;
-  int* exprs  = E_GET_NODE(cc->ast, node)->val.func.exprs;
-  for (u32 i = 0; i < nexprs; i++) {
-    int e = compile(cc, exprs[i]);
+  u32  nstmts = E_GET_NODE(cc->ast, node)->val.func.nstmts;
+  int* stmts  = E_GET_NODE(cc->ast, node)->val.func.stmts;
+  for (u32 i = 0; i < nstmts; i++) {
+    int e = compile(cc, stmts[i]);
     if (e) return e;
   }
   return 0;

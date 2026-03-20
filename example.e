@@ -48,7 +48,10 @@ fn update()
   println("velocity = ", velocity, " meters/sec");
 }
 
-// let goob = 23;
+fn divide_by_2(v)
+{
+  return v / 2;
+}
 
 fn main() {
   println("Im gaming rn");
@@ -88,7 +91,8 @@ fn main() {
     println("goop");
   }
   else {
-    // println("Gambing: ", goob);
+    let goob = "goob";
+    println("Gambing: ", goob);
   }
 
   let x = 16;
@@ -158,10 +162,43 @@ fn main() {
 
   say_hello_from_c();
 
+  file_test();
+
   let multi_assign_test1 = 2;
   let multi_assign_test2 = 1;
   let multi_assign_test3 = 4;
   println("Before multi assignment: ", multi_assign_test1, ", ", multi_assign_test2, ", ", multi_assign_test3);
   multi_assign_test1 = multi_assign_test2 = multi_assign_test3 = 16;
   println("After multi assignment: ", multi_assign_test1, ", ", multi_assign_test2, ", ", multi_assign_test3);
+
+  print("For statement test (Running numbers 1 through 10): ");
+  for (let i = 1; i <= 10; i++)
+  {
+    print(i);
+    if (i != 10)
+    {
+      print(", ");
+    }
+  }
+  print("\n");
+
+  for (let i = 0; i <= 16; i++)
+  {
+    // divide by 8
+    print(divide_by_2(divide_by_2(divide_by_2(float(i)))));
+    if (i != 16-1)
+    {
+      print(", ");
+    }
+  }
+  print('\n');
+}
+
+fn file_test()
+{
+  let file = file_open("file", "rb");
+  let size = file_size(file);
+  let contents = file_read(file);
+  println(contents);
+  file_close(file);
 }

@@ -16,8 +16,15 @@
 int
 main(int argc, char* argv[])
 {
-  bool tokenizer_only = false;
-  bool ast_only       = false;
+  bool                 tokenizer_only = false;
+  bool                 ast_only       = false;
+  int                  root           = -1;
+  e_ast                ast;
+  e_token*             tokens   = nullptr;
+  u32                  ntoks    = 0;
+  e_compilation_result compiled = { 0 };
+  FILE*                f        = NULL;
+  char*                contents = NULL;
 
   const char* out = NULL;
   for (int i = 0; i < argc; i++) {
@@ -43,20 +50,18 @@ main(int argc, char* argv[])
     return 0; // well technically its not an error... :3
   }
 
-  char* in = argv[1];
+  const char* in = argv[1];
 
-  char* contents = read_file(in, nullptr);
+  contents = read_file(in, nullptr);
   if (contents == nullptr) {
     fprintf(stderr, "ec: Failed to load input file: %s\n", strerror(errno));
-    return -1;
+    goto err;
   }
 
-  e_token* tokens = nullptr;
-  u32      ntoks  = 0;
-  int      e      = e_tokenize(contents, in, &tokens, &ntoks);
+  int e = e_tokenize(contents, in, &tokens, &ntoks);
   if (e) {
     fprintf(stderr, "ec: Failed to tokenize input string\n");
-    return -1;
+    goto err;
   }
 
   if (tokenizer_only) {
@@ -67,19 +72,16 @@ main(int argc, char* argv[])
     fputc('\n', stdout);
   }
 
-  e_ast ast;
   e = e_ast_init(tokens, ntoks, &ast);
   if (e) {
     fprintf(stderr, "ec: AST initialization failed\n");
-    return -1;
+    goto err;
   }
-
-  int root = -1;
 
   e = e_ast_parse(&ast, &root);
   if (root < 0 || e) {
     fprintf(stderr, "ec: AST parsing failed\n");
-    return -1;
+    goto err;
   }
 
   if (ast_only) {
@@ -87,18 +89,16 @@ main(int argc, char* argv[])
     return 0;
   }
 
-  e_compilation_result compiled = { 0 };
-
   e = e_compile(&ast, root, &compiled);
   if (e) {
     fprintf(stderr, "ec: Compilation failed\n");
-    return -1;
+    goto err;
   }
 
-  FILE* f = fopen(out, "wb");
+  f = fopen(out, "wb");
   if (!f) {
     perror("Failed to open out file");
-    return -1;
+    goto err;
   }
 
   e_file_write(&compiled, f);
@@ -113,4 +113,15 @@ main(int argc, char* argv[])
   e_freetoks(tokens, ntoks);
 
   free(contents);
+
+  return 0;
+
+err:
+  if (contents) free(contents);
+  e_freetoks(tokens, ntoks);
+  e_ast_free(&ast);
+  e_compilation_result_free(&compiled);
+  if (f) fclose(f);
+
+  return -1;
 }

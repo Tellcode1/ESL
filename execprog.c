@@ -1,18 +1,93 @@
 #include "exec.h"
 #include "fn.h"
+#include "refcount.h"
 #include "rwhelp.h"
 #include "var.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
-e_var
+static e_var
 say_hello_from_c(e_var* args)
 {
   (void)args;
-  printf("And this function was called from C, fromt the script!!\n");
+  printf("And this function was called from C, from the script!!\n");
 
   return (e_var){ .type = E_VARTYPE_VOID };
+}
+
+static e_var
+file_open(e_var* args)
+{
+  e_var file_handle = {
+    .type = E_VARTYPE_INT,
+    .refc = e_refc_init(),
+  };
+
+  FILE* f = fopen(args[0].val.s->s, args[1].val.s->s);
+  memcpy(&file_handle.val, &f, sizeof(f));
+
+  return file_handle;
+}
+
+static e_var
+file_close(e_var* args)
+{
+  FILE* f;
+  memcpy(&f, &args[0].val, sizeof(f));
+
+  fclose(f);
+
+  return (e_var){ .type = E_VARTYPE_VOID };
+}
+
+static e_var
+file_read(e_var* args)
+{
+  FILE* f;
+  memcpy(&f, &args[0].val, sizeof(f));
+
+  fseek(f, 0, SEEK_END);
+  long size = ftell(f);
+
+  char* str = malloc(size + 1);
+
+  fseek(f, 0, SEEK_SET);
+  fread(str, size, 1, f);
+
+  str[size] = 0;
+
+  struct e_string* es = malloc(sizeof(struct e_string));
+
+  es->s = str;
+
+  return (e_var){
+    .type  = E_VARTYPE_STRING,
+    .refc  = e_refc_init(),
+    .val.s = es,
+  };
+}
+
+static e_var
+file_size(e_var* args)
+{
+  FILE* f;
+  memcpy(&f, &args[0].val, sizeof(f));
+
+  long pos = ftell(f);
+  if (pos <= 0) return (e_var){ 0 };
+
+  fseek(f, 0, SEEK_END);
+  long size = ftell(f);
+
+  fseek(f, pos, SEEK_SET);
+
+  return (e_var){
+    .type  = E_VARTYPE_INT,
+    .refc  = e_refc_init(),
+    .val.i = (int)size,
+  };
 }
 
 int
@@ -45,6 +120,27 @@ main(int argc, char* argv[])
     .func  = say_hello_from_c,
   };
 
+  e_extern_function reg_file_open = {
+    .hash  = e_hash_fnv("file_open", strlen("file_open")),
+    .nargs = 0,
+    .func  = file_open,
+  };
+  e_extern_function reg_file_close = {
+    .hash  = e_hash_fnv("file_close", strlen("file_close")),
+    .nargs = 0,
+    .func  = file_close,
+  };
+  e_extern_function reg_file_read = {
+    .hash  = e_hash_fnv("file_read", strlen("file_read")),
+    .nargs = 0,
+    .func  = file_read,
+  };
+  e_extern_function reg_file_size = {
+    .hash  = e_hash_fnv("file_size", strlen("file_size")),
+    .nargs = 0,
+    .func  = file_size,
+  };
+
   const u32 main_func = e_hash_fnv("main", strlen("main"));
   for (u32 i = 0; i < nfuncs; i++) {
     if (funcs[i].name_hash == main_func) {
@@ -63,8 +159,15 @@ main(int argc, char* argv[])
     .nargs         = 0,
     .nliterals     = nlits,
     .nfuncs        = nfuncs,
-    .nextern_funcs = 1,
-    .extern_funcs  = (e_extern_function[]){ hello },
+    .nextern_funcs = 5,
+    .extern_funcs =
+        (e_extern_function[]){
+            hello,
+            reg_file_open,
+            reg_file_close,
+            reg_file_read,
+            reg_file_size,
+        },
   };
 
   e_var v = e_exec(&info);

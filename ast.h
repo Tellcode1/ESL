@@ -8,6 +8,8 @@
 #include <stdlib.h>
 
 typedef enum e_asnodetype {
+  E_ASNODE_NOP,
+
   E_ASNODE_ROOT,
   E_ASNODE_BINARYOP,
   E_ASNODE_UNARYOP,
@@ -135,9 +137,9 @@ typedef union e_asnode_val {
   } unaryop;
 
   struct {
-    int* exprs;
-    u32  nexprs;
-  } exprs, root;
+    int* stmts;
+    u32  nstmts;
+  } stmts, root;
 
   struct {
     int left;
@@ -153,23 +155,23 @@ typedef union e_asnode_val {
   struct {
     char*  name;
     char** args;  // Allocated, + each string is allocated individually.
-    int*   exprs; // Function body
+    int*   stmts; // Function body
     u32    nargs;
-    u32    nexprs;
+    u32    nstmts;
   } func;
 
   struct {
     int  condition;
-    int* exprs;
-    u32  nexprs;
+    int* stmts;
+    u32  nstmts;
   } while_stmt;
 
   struct {
     int  initializers; // for (<let x = 0>;
     int  condition;    // x >= 0;
     int  iterators;    // x++)
-    u32  nexprs;
-    int* exprs;
+    u32  nstmts;
+    int* stmts;
   } for_stmt;
 
   e_if_stmt if_stmt;

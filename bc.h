@@ -53,7 +53,7 @@ typedef enum e_opcode_bck {
   /**
    * Increment or Decrement the top of the stack (or optionally a variable).
    * Usage(noattr): INC/DEC , Stack contains operand
-   * Usage(VARIABLE): INC/DEC [var id]
+   * Usage(VARIABLE): INC/DEC [var ID:u32]
    */
   E_OPCODE_INC,
   E_OPCODE_DEC,
@@ -64,9 +64,7 @@ typedef enum e_opcode_bck {
    * If the INLINE attr is used, the function will not push a stack frame.
    * Builtin methods never push a stack frame, so the inline attr is implied and not necessary.
    * If the COMPOUND and VARIABLE attr is used, the functions return value is assigned to the variable ID in 3rd operand.
-   * Usage(noattr/INLINE): CALL [function ID] [nargs]
-   * Usage(COMPOUND|VARIABLE): CALL [function ID] [nargs] [var ID], Result is stored to var ID
-   * Where, function ID = u32, nargs = u16, [var ID = u32]
+   * Usage(noattr/INLINE): CALL [nargs:u16] [function ID:u32]
    */
   E_OPCODE_CALL,
 
@@ -129,8 +127,9 @@ typedef enum e_opcode_bck {
   E_OPCODE_INIT,
 
   /**
-   * A label. Removed from the instruction stream on optimization levels >= 2.
-   * Requires walking through the entire bytestream for each label.
+   * A label. Removed from the instruction stream on optimization levels >= 2
+   * because it requires walking through the entire bytestream for each label,
+   * modifying each jump to point to the correct indices.
    * Should serve as NOOP.
    * One operand is used, as the label ID. All jumps to this label must have the
    * same label ID.
@@ -172,13 +171,14 @@ typedef enum e_opcode_bck {
    * Push the variable state to a custom location on the VM.
    * The state can be restored by calling E_OPCODE_POP_VARIABLES
    * No operands are used.
+   * Usage(noattr): PUSH_VARIABLES/POP_VARIABLES
    */
   E_OPCODE_PUSH_VARIABLES,
   E_OPCODE_POP_VARIABLES,
 
   /**
    * Exit the program with the code specified in 1st operand.
-   * Usage: HALT [exit code]
+   * Usage: HALT [exit code : u32]
    */
   E_OPCODE_HALT,
 
