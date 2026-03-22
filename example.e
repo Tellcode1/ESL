@@ -193,7 +193,11 @@ fn main() {
   }
   print('\n');
 
-  println([12, 2 + 2, "Gaming", 68.0, 16, false, ["Another list!", 2 - 2.5, true], "More_stuff"]);
+  let bigl = [12, 2 + 2, "Gaming", 68.0, 16, false, ["Another list!", 2 - 2.5, true], "More_stuff"];
+  println(bigl);
+
+  bigl[6] = "lmao";
+  println(bigl);
 
   let l = [1,2,3,4,5,6,7,8,9,10];
   println(l[2]);
@@ -219,6 +223,13 @@ fn main() {
   }
 
   println(l);
+
+  let sum = 0;
+  for (let i = 0; i < len(l); i++)
+  {
+    sum += l[i];
+  }
+  println("Sum of all elements in the list is: ", sum);
 }
 
 fn file_test()

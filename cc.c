@@ -253,11 +253,9 @@ compile_binary_op(struct e_compiler* cc, int node)
 {
   int e = 0;
 
-  e = compile(cc, E_GET_NODE(cc->ast, node)->val.binaryop.left);
-  if (e) return e;
-
-  e = compile(cc, E_GET_NODE(cc->ast, node)->val.binaryop.right);
-  if (e) return e;
+  bool is_compound = E_GET_NODE(cc->ast, node)->val.binaryop.is_compound;
+  int  left        = E_GET_NODE(cc->ast, node)->val.binaryop.left;
+  int  right       = E_GET_NODE(cc->ast, node)->val.binaryop.right;
 
   e_opcode opcode = e_operator_to_opcode(E_GET_NODE(cc->ast, node)->val.binaryop.op);
   if (opcode < 0) {
@@ -265,10 +263,20 @@ compile_binary_op(struct e_compiler* cc, int node)
     return -1;
   }
 
-  e_attr attrs = E_ATTR_NONE;
-  if (E_GET_NODE(cc->ast, node)->val.binaryop.is_compound) { attrs |= E_ATTR_COMPOUND; }
+  u32 id = (int)is_compound ? e_make_value(cc->ast, left).val.var_id : 0;
 
-  e_emit_instruction(cc, opcode, attrs);
+  e = compile(cc, left);
+  if (e) return e;
+
+  e = compile(cc, right);
+  if (e) return e;
+
+  e_emit_instruction(cc, opcode, E_ATTR_NONE);
+
+  if (is_compound) {
+    e_emit_instruction(cc, E_OPCODE_ASSIGN, E_ATTR_NONE);
+    e_emit_u32(cc, id);
+  }
 
   return e;
 }
