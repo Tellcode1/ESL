@@ -21,14 +21,10 @@ struct pair {
 
 #define BINOP(l, r, op)                                                                                                                                                       \
   (l.type == E_VARTYPE_FLOAT || r.type == E_VARTYPE_FLOAT) ? (e_var){ .type = E_VARTYPE_FLOAT, .val.f = (double)l.val.f op(double) r.val.f } : (e_var)                        \
-  {                                                                                                                                                                           \
-    .type = E_VARTYPE_INT, .val.i = l.val.i op r.val.i                                                                                                                        \
-  }
+  { .type = E_VARTYPE_INT, .val.i = l.val.i op r.val.i }
 #define BOOLEAN_BINOP(l, r, op)                                                                                                                                               \
   (l.type == E_VARTYPE_FLOAT || r.type == E_VARTYPE_FLOAT) ? (e_var){ .type = E_VARTYPE_BOOL, .val.b = (double)l.val.f op(double) r.val.f } : (e_var)                         \
-  {                                                                                                                                                                           \
-    .type = E_VARTYPE_BOOL, .val.b = l.val.i op r.val.i                                                                                                                       \
-  }
+  { .type = E_VARTYPE_BOOL, .val.b = l.val.i op r.val.i }
 
 static inline double
 to_float(e_var v)
@@ -80,26 +76,20 @@ to_bool(e_var v)
 
 static inline bool
 is_float(e_var v)
-{
-  return v.type == E_VARTYPE_FLOAT;
-}
+{ return v.type == E_VARTYPE_FLOAT; }
 
 #define COERCE_BINOP(l, r, op)                                                                                                                                                \
   (is_float(l) || is_float(r)) ? (e_var){ .type = E_VARTYPE_FLOAT, .refc = e_refc_init(), .val.f = to_float(l) op to_float(r) } : (e_var)                                     \
-  {                                                                                                                                                                           \
-    .type = E_VARTYPE_INT, .refc = e_refc_init(), .val.i = to_int(l) op to_int(r)                                                                                             \
-  }
+  { .type = E_VARTYPE_INT, .refc = e_refc_init(), .val.i = to_int(l) op to_int(r) }
 
 #define COERCE_BOOLEAN_BINOP(l, r, op)                                                                                                                                        \
   (is_float(l) || is_float(r)) ? (e_var){ .type = E_VARTYPE_BOOL, .refc = e_refc_init(), .val.b = to_float(l) op to_float(r) } : (e_var)                                      \
-  {                                                                                                                                                                           \
-    .type = E_VARTYPE_BOOL, .refc = e_refc_init(), .val.b = to_int(l) op to_int(r)                                                                                            \
-  }
+  { .type = E_VARTYPE_BOOL, .refc = e_refc_init(), .val.b = to_int(l) op to_int(r) }
 
 static inline e_var
 operate(e_var l, e_var r, e_opcode op)
 {
-  if (op == E_OPCODE_NOT) return (e_var){ .type = E_VARTYPE_BOOL, .refc = e_refc_init(), .val.b = !to_int(r) };
+  if (op == E_OPCODE_NOT) return (e_var){ .type = E_VARTYPE_BOOL, .refc = e_refc_init(), .val.b = (bool)!to_int(r) };
 
   switch (op) {
     case E_OPCODE_ADD: return COERCE_BINOP(l, r, +);
@@ -150,9 +140,7 @@ stack_init(size_t init_capacity, struct stack* st)
 
 static inline void
 stack_free(struct stack* st)
-{
-  free(st->stack);
-}
+{ free(st->stack); }
 
 static inline void
 stack_free_variables(struct stack* st)
@@ -186,9 +174,7 @@ stack_pop(struct stack* st)
 
 static inline e_var*
 stack_top(struct stack* st)
-{
-  return &st->stack[st->size - 1];
-}
+{ return &st->stack[st->size - 1]; }
 
 // static inline e_var*
 // stack_find_rev(const struct stack* s, u16 id)

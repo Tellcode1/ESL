@@ -18,6 +18,35 @@
 #include <stdlib.h>
 #include <string.h>
 
+static inline e_opcode
+e_operator_to_opcode(e_operator op)
+{
+  switch (op) {
+    case E_OPERATOR_ADD: return E_OPCODE_ADD;
+    case E_OPERATOR_SUB: return E_OPCODE_SUB;
+    case E_OPERATOR_MUL: return E_OPCODE_MUL;
+    case E_OPERATOR_DIV: return E_OPCODE_DIV;
+    case E_OPERATOR_MOD: return E_OPCODE_MOD;
+    case E_OPERATOR_EXP: return E_OPCODE_EXP;
+    case E_OPERATOR_AND: return E_OPCODE_AND;
+    case E_OPERATOR_OR: return E_OPCODE_OR;
+    case E_OPERATOR_BAND: return E_OPCODE_BAND;
+    case E_OPERATOR_BOR: return E_OPCODE_BOR;
+    case E_OPERATOR_XOR: return E_OPCODE_XOR;
+    case E_OPERATOR_EQL: return E_OPCODE_EQL;
+    case E_OPERATOR_NEQ: return E_OPCODE_NEQ;
+    case E_OPERATOR_LT: return E_OPCODE_LT;
+    case E_OPERATOR_LTE: return E_OPCODE_LTE;
+    case E_OPERATOR_GT: return E_OPCODE_GT;
+    case E_OPERATOR_GTE: return E_OPCODE_GTE;
+    case E_OPERATOR_NOT: return E_OPCODE_NOT;
+    case E_OPERATOR_BNOT: return E_OPCODE_BNOT;
+    case E_OPERATOR_DEC: return E_OPCODE_DEC;
+    case E_OPERATOR_INC: return E_OPCODE_INC;
+  }
+  return -1;
+}
+
 static inline int compile_literal(e_compiler* cc, int node);
 static int        compile_function_definition(struct e_compiler* cc, int node);
 static int        compile_function_call(struct e_compiler* cc, int node);
@@ -29,15 +58,11 @@ static int        compile(struct e_compiler* cc, int node);
 
 static inline u32
 ec_get_pos(const e_compiler* cc)
-{
-  return cc->emitted;
-}
+{ return cc->emitted; }
 
 static inline u32
 make_label_id(e_compiler* cc)
-{
-  return cc->next_label++;
-}
+{ return cc->next_label++; }
 
 static inline int
 lower_node_to_literal(const e_ast* p, int node, e_var* o)
@@ -234,29 +259,10 @@ compile_binary_op(struct e_compiler* cc, int node)
   e = compile(cc, E_GET_NODE(cc->ast, node)->val.binaryop.right);
   if (e) return e;
 
-  e_opcode opcode = -1;
-  switch (E_GET_NODE(cc->ast, node)->val.binaryop.op) {
-      // clang-format off
-          case E_OPERATOR_ADD: opcode = E_OPCODE_ADD; break; 
-          case E_OPERATOR_SUB: opcode = E_OPCODE_SUB; break; 
-          case E_OPERATOR_MUL: opcode = E_OPCODE_MUL; break; 
-          case E_OPERATOR_DIV: opcode = E_OPCODE_DIV; break; 
-          case E_OPERATOR_MOD: opcode = E_OPCODE_MOD; break; 
-          case E_OPERATOR_EXP: opcode = E_OPCODE_EXP; break; 
-          case E_OPERATOR_AND: opcode = E_OPCODE_AND; break; 
-          case E_OPERATOR_OR: opcode = E_OPCODE_OR; break; 
-          case E_OPERATOR_BAND: opcode = E_OPCODE_BAND; break; 
-          case E_OPERATOR_BOR: opcode = E_OPCODE_BOR; break; 
-          case E_OPERATOR_XOR: opcode = E_OPCODE_XOR; break; 
-          case E_OPERATOR_EQL: opcode = E_OPCODE_EQL; break; 
-          case E_OPERATOR_NEQ: opcode = E_OPCODE_NEQ; break; 
-          case E_OPERATOR_LT: opcode = E_OPCODE_LT; break; 
-          case E_OPERATOR_LTE: opcode = E_OPCODE_LTE; break; 
-          case E_OPERATOR_GT: opcode = E_OPCODE_GT; break; 
-          case E_OPERATOR_GTE: opcode = E_OPCODE_GTE; break;
-      // clang-format on
-
-    default: cerror(E_GET_NODE(cc->ast, node)->span, "Operator %u can not be used as a binary operator\n", E_GET_NODE(cc->ast, node)->val.binaryop.op); return -1;
+  e_opcode opcode = e_operator_to_opcode(E_GET_NODE(cc->ast, node)->val.binaryop.op);
+  if (opcode < 0) {
+    cerror(E_GET_NODE(cc->ast, node)->span, "Operator %u can not be used as a binary operator\n", E_GET_NODE(cc->ast, node)->val.binaryop.op);
+    return -1;
   }
 
   e_attr attrs = E_ATTR_NONE;
@@ -732,6 +738,38 @@ compile(struct e_compiler* cc, int node)
 
       e = compile(cc, value);
       if (e) return e;
+
+      e_emit_instruction(cc, E_OPCODE_INDEX_ASSIGN, E_ATTR_NONE);
+      return 0;
+    }
+
+    case E_ASNODE_INDEX_COMPOUND_OP: {
+      int base  = E_GET_NODE(cc->ast, node)->val.index_compound.base;
+      int index = E_GET_NODE(cc->ast, node)->val.index_compound.index;
+      int value = E_GET_NODE(cc->ast, node)->val.index_compound.value;
+
+      int e = compile(cc, base);
+      if (e) return e;
+
+      e = compile(cc, index);
+      if (e) return e;
+
+      {
+        e = compile(cc, base);
+        if (e) return e;
+
+        e = compile(cc, index);
+        if (e) return e;
+
+        e_emit_instruction(cc, E_OPCODE_INDEX, E_ATTR_NONE);
+
+        e = compile(cc, value);
+        if (e) return e;
+
+        e_opcode op = e_operator_to_opcode(E_GET_NODE(cc->ast, node)->val.index_compound.op);
+
+        e_emit_instruction(cc, op, E_ATTR_NONE);
+      }
 
       e_emit_instruction(cc, E_OPCODE_INDEX_ASSIGN, E_ATTR_NONE);
       return 0;

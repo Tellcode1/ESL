@@ -200,6 +200,7 @@ fn main() {
 
   println("len(", l, ") = ", len(l));
 
+  print("[");
   for (let i = 0; i < len(l); i++)
   {
     print(l[i]);
@@ -208,20 +209,16 @@ fn main() {
       print(", ");
     }
   }
+  print("]");
   print("\n");
+
   for (let i = 0; i < len(l); i++)
   {
     l[i] *= 2;
+    l[i] *= 2;
   }
-  for (let i = 0; i < len(l); i++)
-  {
-    print(l[i]);
-    if (i != len(l) - 1)
-    {
-      print(", ");
-    }
-  }
-  print("\n");
+
+  println(l);
 }
 
 fn file_test()

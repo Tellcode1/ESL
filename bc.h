@@ -115,8 +115,8 @@ typedef enum e_opcode_bck {
 
   /**
    * Assign to a member of a struct/container.
-   * The assigned value and index will be popped.
-   * Base struct/container is kept.
+   * The base struct/container and index will be popped.
+   * assigned value is kept.
    * Usage(noattr): INDEX_ASSIGN [var], Stack is Top=Value, Top-1=Index, Top-2=Base struct/container
    */
   E_OPCODE_INDEX_ASSIGN,

@@ -1062,6 +1062,18 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
         return -1;
       }
 
+      if (E_GET_NODE(p, leftidx)->type == E_ASNODE_INDEX) {
+        E_GET_NODE(p, node)->type                     = E_ASNODE_INDEX_COMPOUND_OP;
+        E_GET_NODE(p, node)->val.index_compound.op    = op;
+        E_GET_NODE(p, node)->val.index_compound.base  = E_GET_NODE(p, leftidx)->val.index.base;
+        E_GET_NODE(p, node)->val.index_compound.index = E_GET_NODE(p, leftidx)->val.index.offset;
+        E_GET_NODE(p, node)->val.index_compound.value = right;
+
+        free(E_GET_NODE(p, leftidx)->span.file);
+
+        return node;
+      }
+
       E_GET_NODE(p, node)->type                     = E_ASNODE_BINARYOP;
       E_GET_NODE(p, node)->val.binaryop.op          = op;
       E_GET_NODE(p, node)->val.binaryop.left        = leftidx;

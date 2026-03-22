@@ -29,7 +29,8 @@ typedef enum e_asnodetype {
   E_ASNODE_VARIABLE_DECL,
   E_ASNODE_ASSIGN,
   E_ASNODE_INDEX,
-  E_ASNODE_INDEX_ASSIGN, // Assign to member
+  E_ASNODE_INDEX_ASSIGN,      // Assign to member
+  E_ASNODE_INDEX_COMPOUND_OP, // Assign to member, using a compound operator (unary/binary)
 
   E_ASNODE_CALL,
   E_ASNODE_INT,
@@ -140,6 +141,13 @@ typedef union e_asnode_val {
     int offset; // index: integer
     int value;  // any value.
   } index_assign;
+
+  struct {
+    int        base;  // list/structure
+    int        index; // index: integer
+    int        value; // any value.
+    e_operator op;
+  } index_compound;
 
   struct {
     int        right; // index of right

@@ -109,6 +109,13 @@ e_asnode_free(e_ast* p, int nodeID)
     case E_ASNODE_BOOL:
     case E_ASNODE_FLOAT:
     case E_ASNODE_MAP: break;
+
+    case E_ASNODE_INDEX_COMPOUND_OP: {
+      e_asnode_free(p, E_GET_NODE(p, nodeID)->val.index_compound.base);
+      e_asnode_free(p, E_GET_NODE(p, nodeID)->val.index_compound.index);
+      e_asnode_free(p, E_GET_NODE(p, nodeID)->val.index_compound.value);
+      break;
+    }
   }
 }
 #endif // E_AST_FREE_H
