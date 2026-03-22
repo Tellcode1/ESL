@@ -105,6 +105,14 @@ operate(e_var l, e_var r, e_opcode op)
     case E_OPCODE_GTE: return COERCE_BOOLEAN_BINOP(l, r, >=);
     case E_OPCODE_AND: return COERCE_BOOLEAN_BINOP(l, r, &&);
     case E_OPCODE_OR: return COERCE_BOOLEAN_BINOP(l, r, ||);
+    case E_OPCODE_NEG:
+      switch (r.type) {
+        case E_VARTYPE_INT: return (e_var){ .type = E_VARTYPE_INT, .refc = e_refc_init(), .val.i = -r.val.i };
+        case E_VARTYPE_CHAR: return (e_var){ .type = E_VARTYPE_CHAR, .refc = e_refc_init(), .val.c = (char)-(int)r.val.c };
+        case E_VARTYPE_FLOAT: return (e_var){ .type = E_VARTYPE_FLOAT, .refc = e_refc_init(), .val.f = -r.val.f };
+        default: break;
+      }
+      if (r.type == E_VARTYPE_INT) return (e_var){ .type = E_VARTYPE_INT, .refc = e_refc_init(), .val.i = -r.val.i };
     case E_OPCODE_BNOT: return (e_var){ .type = E_VARTYPE_INT, .refc = e_refc_init(), .val.i = ~to_int(r) };
     case E_OPCODE_BAND: return (e_var){ .type = E_VARTYPE_INT, .refc = e_refc_init(), .val.i = to_int(l) & to_int(r) };
     case E_OPCODE_BOR: return (e_var){ .type = E_VARTYPE_INT, .refc = e_refc_init(), .val.i = to_int(l) | to_int(r) };
@@ -427,7 +435,8 @@ e_exec(const e_exec_info* info)
       case E_OPCODE_LT:
       case E_OPCODE_LTE:
       case E_OPCODE_GT:
-      case E_OPCODE_GTE: {
+      case E_OPCODE_GTE:
+      case E_OPCODE_NEG: {
         // Since we compile left first, right next
         // right will be at the top of the stack and left will be below it
         e_var r = operate(stack.stack[stack.size - 2], stack.stack[stack.size - 1], opcode);

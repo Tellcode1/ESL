@@ -49,6 +49,7 @@ typedef enum e_opcode_bck {
   E_OPCODE_LTE,
   E_OPCODE_GT,
   E_OPCODE_GTE,
+  E_OPCODE_NEG, // Negate (-x)
 
   /**
    * Increment or Decrement the top of the stack (or optionally a variable).

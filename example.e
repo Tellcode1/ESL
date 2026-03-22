@@ -230,6 +230,10 @@ fn main() {
     sum += l[i];
   }
   println("Sum of all elements in the list is: ", sum);
+
+  let INT32_MIN = -2147483648;
+  let INT32_MAX = ~INT32_MIN & ~0;
+  println("INT32_MAX = ", INT32_MAX);
 }
 
 fn file_test()

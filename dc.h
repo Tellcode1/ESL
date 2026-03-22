@@ -56,6 +56,8 @@ e_print_instruction(e_opcode o, e_attr a, const u8** ip)
     case E_OPCODE_LTE: printf("lte\n"); break;
     case E_OPCODE_GT: printf("gt\n"); break;
     case E_OPCODE_GTE: printf("gte\n"); break;
+    case E_OPCODE_NEG: printf("neg\n"); break;
+
     case E_OPCODE_INC: {
       u32 to = e_read_u32((const u8**)&ip);
       printf("inc [%u]\n", to);

@@ -18,8 +18,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+/**
+ * Operators like SUB (-) can be used
+ * as unary operators and that would add confusion
+ * to the parser.
+ * Only supports binary operators.
+ * Unary operators must be handled seperately.
+ */
 static inline e_opcode
-e_operator_to_opcode(e_operator op)
+e_binary_operator_to_opcode(e_operator op)
 {
   switch (op) {
     case E_OPERATOR_ADD: return E_OPCODE_ADD;
@@ -257,7 +264,7 @@ compile_binary_op(struct e_compiler* cc, int node)
   int  left        = E_GET_NODE(cc->ast, node)->val.binaryop.left;
   int  right       = E_GET_NODE(cc->ast, node)->val.binaryop.right;
 
-  e_opcode opcode = e_operator_to_opcode(E_GET_NODE(cc->ast, node)->val.binaryop.op);
+  e_opcode opcode = e_binary_operator_to_opcode(E_GET_NODE(cc->ast, node)->val.binaryop.op);
   if (opcode < 0) {
     cerror(E_GET_NODE(cc->ast, node)->span, "Operator %u can not be used as a binary operator\n", E_GET_NODE(cc->ast, node)->val.binaryop.op);
     return -1;
@@ -296,6 +303,7 @@ compile_unary_op(struct e_compiler* cc, int node)
         case E_OPERATOR_BNOT: opcode = E_OPCODE_BNOT; break;
         case E_OPERATOR_INC: opcode = E_OPCODE_INC; break;
         case E_OPERATOR_DEC: opcode = E_OPCODE_DEC; break;
+        case E_OPERATOR_SUB: opcode = E_OPCODE_NEG; break;
         default: cerror(E_GET_NODE(cc->ast, node)->span, "Operator %u can not be used as a unary operator\n", E_GET_NODE(cc->ast, node)->val.unaryop.op); return -1;
       }
   // clang-format on
@@ -774,7 +782,7 @@ compile(struct e_compiler* cc, int node)
         e = compile(cc, value);
         if (e) return e;
 
-        e_opcode op = e_operator_to_opcode(E_GET_NODE(cc->ast, node)->val.index_compound.op);
+        e_opcode op = e_binary_operator_to_opcode(E_GET_NODE(cc->ast, node)->val.index_compound.op);
 
         e_emit_instruction(cc, op, E_ATTR_NONE);
       }

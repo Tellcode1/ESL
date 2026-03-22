@@ -351,9 +351,7 @@ e_ast_get_node(const e_ast* p, int idx)
 
 static inline bool
 e_ast_is_limiter_exempt(e_asnode_type t)
-{
-  return t == E_ASNODE_IF || t == E_ASNODE_WHILE || t == E_ASNODE_FOR || t == E_ASNODE_FUNCTION_DEFINITION || t == E_ASNODE_EXPRESSION_LIST;
-}
+{ return t == E_ASNODE_IF || t == E_ASNODE_WHILE || t == E_ASNODE_FOR || t == E_ASNODE_FUNCTION_DEFINITION || t == E_ASNODE_EXPRESSION_LIST; }
 
 int e_ast_parse(e_ast* p, int* root_nodeID);
 int e_ast_nud(e_ast* p, e_token* token);
