@@ -234,6 +234,8 @@ fn main() {
   let INT32_MIN = -2147483648;
   let INT32_MAX = ~INT32_MIN & ~0;
   println("INT32_MAX = ", INT32_MAX);
+
+  len(69);
 }
 
 fn file_test()

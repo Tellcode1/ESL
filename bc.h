@@ -62,6 +62,8 @@ typedef enum e_opcode_bck {
   /**
    * Call a function.
    * arguments will be popped from the stack on function return.
+   * Arguments are compiled in reverse order, so they can be popped linearly.
+   * (Compilation is: for (i64 i = nargs - 1; i >= 0; i--) compile(args[i]), popping in VM is for (u32 i = 0; i < nargs; i++) push(args[i]))
    * If the INLINE attr is used, the function will not push a stack frame.
    * Builtin methods never push a stack frame, so the inline attr is implied and not necessary.
    * If the COMPOUND and VARIABLE attr is used, the functions return value is assigned to the variable ID in 3rd operand.

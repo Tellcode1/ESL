@@ -1,0 +1,4 @@
+#ifndef E_TYPE_INFERENCE_H
+#define E_TYPE_INFERENCE_H
+
+#endif // E_TYPE_INFERENCE_H

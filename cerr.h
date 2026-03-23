@@ -5,14 +5,17 @@
 
 #include <stdarg.h>
 
+#if defined(__has_attribute) && __has_attribute(format)
+#  define _ATTR_FORMAT(...) __attribute__((format(__VA_ARGS__)))
+#endif
+
 typedef struct e_filespan {
   char* file;
   int   line;
   int   col;
 } e_filespan;
 
-static inline int
-_cerror(const char* file, size_t line, e_filespan span, const char* msg, ...)
+static inline _ATTR_FORMAT(printf, 4, 5) int _cerror(const char* file, size_t line, e_filespan span, const char* msg, ...)
 {
   va_list ap;
   va_start(ap, msg);

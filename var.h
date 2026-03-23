@@ -10,17 +10,23 @@ struct e_var;
 struct e_list;
 struct e_map;
 
-typedef enum e_vartype {
-  E_VARTYPE_VOID, // invalid / unset
-  E_VARTYPE_INT,
-  E_VARTYPE_BOOL,
-  E_VARTYPE_CHAR,
-  E_VARTYPE_FLOAT,
-  E_VARTYPE_STRING,
-  E_VARTYPE_LIST,
-  E_VARTYPE_MAP,
-  E_VARTYPE_ERROR, // use e_error_string to get string representation of the error.
-} e_vartype;
+/**
+ * Bitmask to allow functions to just check
+ * the masks. No variable can have more than one
+ * bit set though.
+ */
+typedef enum e_vartype_bits {
+  E_VARTYPE_VOID   = 1 << 0, // invalid / unset
+  E_VARTYPE_INT    = 1 << 1,
+  E_VARTYPE_BOOL   = 1 << 2,
+  E_VARTYPE_CHAR   = 1 << 3,
+  E_VARTYPE_FLOAT  = 1 << 4,
+  E_VARTYPE_STRING = 1 << 5,
+  E_VARTYPE_LIST   = 1 << 6,
+  E_VARTYPE_MAP    = 1 << 7,
+  E_VARTYPE_ERROR  = 1 << 8, // use e_error_string to get string representation of the error.
+} e_vartype_bits;
+typedef u32 e_vartype;
 
 typedef struct e_list {
   u64           size;
@@ -59,7 +65,9 @@ typedef struct e_var {
 int e_var_shallow_cpy(const e_var* var, e_var* dst);
 int e_var_deep_cpy(const e_var* var, e_var* dst);
 
-void e_var_print(const struct e_var* v, FILE* f);
+void   e_var_print(const struct e_var* v, FILE* f);
+void   e_var_to_string(const struct e_var* v, char* buffer, size_t buffer_size);
+size_t e_var_to_string_size(const struct e_var* v);
 
 int  e_list_init(e_var* vars, u64 nvars, struct e_list* list);
 void e_list_free(struct e_list* list);
@@ -157,6 +165,23 @@ e_var_equal(const e_var* a, const e_var* b)
   __builtin_unreachable();
 #endif
   return false;
+}
+
+static inline const char*
+e_var_type_to_string(e_vartype type)
+{
+  switch (type) {
+    case E_VARTYPE_VOID: return "void";
+    case E_VARTYPE_INT: return "int";
+    case E_VARTYPE_BOOL: return "bool";
+    case E_VARTYPE_CHAR: return "char";
+    case E_VARTYPE_FLOAT: return "float";
+    case E_VARTYPE_STRING: return "string";
+    case E_VARTYPE_LIST: return "list";
+    case E_VARTYPE_MAP: return "map";
+    case E_VARTYPE_ERROR: return "error";
+  }
+  return "unknown";
 }
 
 #endif // ESL_H

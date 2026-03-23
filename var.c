@@ -95,7 +95,7 @@ e_var_print(const struct e_var* v, FILE* f)
     case E_VARTYPE_VOID: fprintf(f, "void"); break;
     case E_VARTYPE_INT: fprintf(f, "%i", v->val.i); break;
     case E_VARTYPE_CHAR: fprintf(f, "%c", v->val.c); break;
-    case E_VARTYPE_BOOL: fprintf(f, "%s", v->val.b ? "true" : "false"); break;
+    case E_VARTYPE_BOOL: fprintf(f, "%s", (int)v->val.b ? "true" : "false"); break;
     case E_VARTYPE_FLOAT: fprintf(f, "%g", v->val.f); break;
     case E_VARTYPE_STRING: fprintf(f, "%s", v->val.s->s); break;
     case E_VARTYPE_LIST: {
@@ -113,4 +113,67 @@ e_var_print(const struct e_var* v, FILE* f)
       break;
     }
   }
+}
+
+void
+e_var_to_string(const struct e_var* v, char* buffer, size_t buffer_size)
+{
+  switch (v->type) {
+    case E_VARTYPE_VOID: strlcpy(buffer, "void", buffer_size); break;
+    case E_VARTYPE_INT: snprintf(buffer, buffer_size, "%i", v->val.i); break;
+    case E_VARTYPE_CHAR: snprintf(buffer, buffer_size, "%c", v->val.c); break;
+    case E_VARTYPE_BOOL: snprintf(buffer, buffer_size, "%s", (int)v->val.b ? "true" : "false"); break;
+    case E_VARTYPE_FLOAT: snprintf(buffer, buffer_size, "%g", v->val.f); break;
+    case E_VARTYPE_STRING: snprintf(buffer, buffer_size, "%s", v->val.s->s); break;
+    case E_VARTYPE_LIST: {
+      strlcpy(buffer, "[", buffer_size);
+
+      for (u32 i = 0; i < v->val.list->size; i++) {
+        size_t size = e_var_to_string_size(v);
+
+        char tmp[size + 1];
+        e_var_to_string(v, tmp, size + 1);
+        strlcat(buffer, tmp, buffer_size);
+
+        if (i < v->val.list->size - 1) { strlcat(buffer, ", ", buffer_size); }
+      }
+      strlcat(buffer, "]", buffer_size);
+
+      break;
+    }
+    case E_VARTYPE_MAP: break;
+    case E_VARTYPE_ERROR: {
+      snprintf(buffer, buffer_size, "%i", v->val.errcode);
+      break;
+    }
+  }
+}
+
+size_t
+e_var_to_string_size(const struct e_var* v)
+{
+  size_t total = 0;
+  switch (v->type) {
+    case E_VARTYPE_VOID: total += strlen("void"); break;
+    case E_VARTYPE_INT: total += snprintf(nullptr, 0, "%i", v->val.i); break;
+    case E_VARTYPE_CHAR: total += snprintf(nullptr, 0, "%c", v->val.c); break;
+    case E_VARTYPE_BOOL: return strlen((int)v->val.b ? "true" : "false"); break;
+    case E_VARTYPE_FLOAT: total += snprintf(nullptr, 0, "%g", v->val.f); break;
+    case E_VARTYPE_STRING: total += strlen(v->val.s->s); break;
+    case E_VARTYPE_LIST: {
+      total += 1;
+      for (u32 i = 0; i < v->val.list->size; i++) {
+        total += e_var_to_string_size(&v->val.list->vars[i]);
+        if (i < v->val.list->size - 1) { total += 2; } // ", "
+      }
+      total += 1;
+      break;
+    }
+    case E_VARTYPE_MAP: break;
+    case E_VARTYPE_ERROR: {
+      total += snprintf(nullptr, 0, "%i", v->val.errcode);
+      break;
+    }
+  }
+  return total;
 }

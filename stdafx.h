@@ -32,6 +32,10 @@ extern "C" {
 #  endif
 #endif
 
+#ifndef E_ARRLEN
+#  define E_ARRLEN(array) (sizeof(array) / sizeof(*array))
+#endif
+
 typedef uint8_t uchar;
 
 typedef uint8_t  uchar;

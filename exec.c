@@ -1,6 +1,7 @@
 #include "exec.h"
 
 #include "bc.h"
+#include "bfunc.h"
 #include "fn.h"
 #include "perr.h"
 #include "refcount.h"
@@ -204,65 +205,34 @@ len(e_var* var)
   return E_ENONEXISTENT;
 }
 
+static inline bool
+is_builtin_func(const char* name)
+{
+  for (size_t i = 0; i < E_ARRLEN(eb_funcs); i++) {
+    if (strcmp(eb_funcs[i].name, name) == 0) return true;
+  }
+  return false;
+}
+
+static inline const e_builtin_func*
+get_builtin_func_hashed(u32 hash)
+{
+  for (size_t i = 0; i < E_ARRLEN(eb_funcs); i++) {
+    if (e_hash_fnv(eb_funcs[i].name, strlen(eb_funcs[i].name)) == hash) return &eb_funcs[i];
+  }
+  return nullptr;
+}
+
 static e_var
 call(const e_exec_info* info, struct stack* stack, u32 hash, u32 nargs)
 {
   e_var return_value = { .type = E_VARTYPE_VOID };
 
   // builtins
-  if (hash == e_hash_fnv("println", strlen("println"))) {
-    for (int64_t j = nargs - 1; j >= 0; j--) e_var_print(&stack->stack[stack->size - j - 1], stdout);
-    fputc('\n', stdout);
-    goto pop_and_ret;
-  } else if (hash == e_hash_fnv("print", strlen("print"))) {
-    for (int64_t j = nargs - 1; j >= 0; j--) e_var_print(&stack->stack[stack->size - j - 1], stdout);
-    goto pop_and_ret;
-  } else if (hash == e_hash_fnv("int", strlen("int"))) {
-    int i = to_int(stack->stack[stack->size - 1]);
-
-    e_var v = {
-      .type  = E_VARTYPE_INT,
-      .refc  = e_refc_init(),
-      .val.i = i,
-    };
-    return_value = v;
-    goto pop_and_ret;
-  } else if (hash == e_hash_fnv("char", strlen("char"))) {
-    char c = to_char(stack->stack[stack->size - 1]);
-
-    e_var v = {
-      .type  = E_VARTYPE_CHAR,
-      .refc  = e_refc_init(),
-      .val.c = c,
-    };
-    return_value = v;
-    goto pop_and_ret;
-  } else if (hash == e_hash_fnv("bool", strlen("bool"))) {
-    bool b = to_bool(stack->stack[stack->size - 1]);
-
-    e_var v = {
-      .type  = E_VARTYPE_BOOL,
-      .refc  = e_refc_init(),
-      .val.b = b,
-    };
-    return_value = v;
-    goto pop_and_ret;
-  } else if (hash == e_hash_fnv("float", strlen("float"))) {
-    double f = to_float(stack->stack[stack->size - 1]);
-
-    e_var v = {
-      .type  = E_VARTYPE_FLOAT,
-      .refc  = e_refc_init(),
-      .val.f = f,
-    };
-    return_value = v;
-    goto pop_and_ret;
-  } else if (hash == e_hash_fnv("len", strlen("len"))) {
-    return_value = (e_var){
-      .type  = E_VARTYPE_INT,
-      .refc  = e_refc_init(),
-      .val.i = len(stack_top(stack)),
-    };
+  const e_builtin_func* builtin = get_builtin_func_hashed(hash);
+  if (builtin != nullptr) {
+    e_var* args  = &stack->stack[stack->size - nargs];
+    return_value = builtin->func(args, nargs);
     goto pop_and_ret;
   }
 

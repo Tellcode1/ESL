@@ -2,6 +2,7 @@
 
 #include "ast.h"
 #include "bc.h"
+#include "bfunc.h"
 #include "cerr.h"
 #include "fn.h"
 #include "label.h"
@@ -328,23 +329,54 @@ compile_unary_op(struct e_compiler* cc, int node)
   return 0;
 }
 
+static inline bool
+is_builtin_func(const char* name)
+{
+  for (size_t i = 0; i < E_ARRLEN(eb_funcs); i++) {
+    if (strcmp(eb_funcs[i].name, name) == 0) return true;
+  }
+  return false;
+}
+
+static inline const e_builtin_func*
+get_builtin_func(const char* name)
+{
+  for (size_t i = 0; i < E_ARRLEN(eb_funcs); i++) {
+    if (strcmp(eb_funcs[i].name, name) == 0) return &eb_funcs[i];
+  }
+  return nullptr;
+}
+
 static int
 compile_function_call(struct e_compiler* cc, int node)
 {
+  e_filespan  function_span = E_GET_NODE(cc->ast, node)->span;
+  const char* function_name = E_GET_NODE(cc->ast, node)->val.call.function;
+  u32         nargs         = E_GET_NODE(cc->ast, node)->val.call.nargs;
+  int*        args          = E_GET_NODE(cc->ast, node)->val.call.args;
+  u32         id            = e_hash_fnv(function_name, strlen(function_name));
+
   int e = 0;
-  for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->val.call.nargs; i++) {
-    e = compile(cc, E_GET_NODE(cc->ast, node)->val.call.args[i]);
+  for (u32 i = 0; i < nargs; i++) {
+    e = compile(cc, args[i]);
     if (e) return e;
   }
 
-  if (e) return e;
+  if (is_builtin_func(function_name)) {
+    /* Validate arguments */
+    const e_builtin_func* func = get_builtin_func(function_name);
 
-  const char* function = E_GET_NODE(cc->ast, node)->val.call.function;
-  u16         nargs    = E_GET_NODE(cc->ast, node)->val.call.nargs;
-  u32         id       = e_hash_fnv(function, strlen(function));
+    // for (u32 i = 0; i < nargs; i++)
+    // {
 
-  // Find the function, if it is user defined and check if the argument count matches
-  {
+    // }
+    if (nargs > func->max_args || nargs < func->min_args) {
+      cerror(function_span, "Builtin function '%s' expects between [%u-%u] arguments, but [%u] were given\n", func->name, func->min_args, func->max_args, nargs);
+      return -1;
+    }
+  }
+  // Find the function (user defined) and check if the argument count matches
+  else {
     e_function* func = nullptr;
     for (u32 i = 0; i < cc->functions_size; i++) {
       if (cc->functions[i].name_hash == id) {
@@ -354,7 +386,7 @@ compile_function_call(struct e_compiler* cc, int node)
     }
 
     if (func && func->nargs != nargs) {
-      cerror(E_GET_NODE(cc->ast, node)->span, "Function \"%s\" expects %u arguments (%u were given)\n", function, func->nargs, nargs);
+      cerror(E_GET_NODE(cc->ast, node)->span, "User defined function '%s' expects [%u] arguments, but [%u] were given\n", function_name, func->nargs, nargs);
       return -1;
     }
   }
