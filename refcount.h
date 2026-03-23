@@ -32,7 +32,7 @@ typedef struct e_refc {
 } e_refc;
 
 static inline e_refc*
-e_refc_init()
+e_refc_init(void)
 {
   e_refc* ref = (e_refc*)malloc(sizeof(e_refc));
   ref->ctr    = 1;

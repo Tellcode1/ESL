@@ -34,8 +34,9 @@
 
 typedef enum e_lval_type {
   E_LVAL_VAR,
-  E_LVAL_MEMBER, // struct member
-  E_LVAL_INDEX,  // indexed array
+  E_LVAL_MEMBER,  // struct member
+  E_LVAL_INDEX,   // indexed array
+  E_LVAL_UNKNOWN, // Error!
 } e_lval_type;
 
 typedef union e_lval_value {
@@ -78,7 +79,7 @@ e_make_value(const e_ast* ast, int node)
     default: printf("%i can not be represented as a value (it is %u)\n", node, E_GET_NODE(ast, node)->type); exit(-1);
   }
 
-  return (e_lval){};
+  return (e_lval){ .type = E_LVAL_UNKNOWN };
 }
 
 static inline void

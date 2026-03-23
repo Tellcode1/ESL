@@ -89,10 +89,6 @@ static int        compile_unary_op(struct e_compiler* cc, int node);
 static int        compile(struct e_compiler* cc, int node);
 
 static inline u32
-ec_get_pos(const e_compiler* cc)
-{ return cc->emitted; }
-
-static inline u32
 make_label_id(e_compiler* cc)
 { return cc->next_label++; }
 

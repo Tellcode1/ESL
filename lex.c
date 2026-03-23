@@ -156,6 +156,9 @@ _lexerror(const char* scriptfile, int script_line, int script_col, const char* t
 }
 #define lexerror(...) _lexerror(advertised_file, line, col, __FILE__, __LINE__, __VA_ARGS__)
 
+/**
+ * strndup is POSIX extension.
+ */
 static inline char*
 _strndup(const char* s, size_t n)
 {
@@ -202,7 +205,7 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
       int    i    = (int)strtol(s, &end1, 10);
       double f    = strtof(s, &end2);
 
-      bool is_float = end2 > end1 || end1 == NULL;
+      bool is_float = (bool)(end2 > end1 || end1 == NULL);
 
       // both of them errored out
       if (end1 == NULL && end2 == NULL) {

@@ -75,18 +75,6 @@ to_int(e_var v)
   }
 }
 
-static inline char
-to_char(e_var v)
-{
-  switch (v.type) {
-    case E_VARTYPE_INT: return (char)v.val.i;
-    case E_VARTYPE_FLOAT: return (char)v.val.f;
-    case E_VARTYPE_CHAR: return (char)v.val.c;
-    case E_VARTYPE_BOOL: return (char)v.val.b;
-    default: return 0;
-  }
-}
-
 static inline bool
 to_bool(e_var v)
 {
@@ -215,26 +203,6 @@ stack_top(struct stack* st)
 //     // if (id == s->stack[i].) { stack_push(&stack, &stack.stack[variables[i].offset]); }
 //   }
 // }
-
-static inline int
-len(e_var* var)
-{
-  if (var->type == E_VARTYPE_LIST) {
-    return (int)var->val.list->size;
-  } else if (var->type == E_VARTYPE_MAP) {
-    return (int)var->val.map->size;
-  }
-  return E_ENONEXISTENT;
-}
-
-static inline bool
-is_builtin_func(const char* name)
-{
-  for (size_t i = 0; i < E_ARRLEN(eb_funcs); i++) {
-    if (strcmp(eb_funcs[i].name, name) == 0) return true;
-  }
-  return false;
-}
 
 static inline const e_builtin_func*
 get_builtin_func_hashed(u32 hash)
@@ -482,7 +450,7 @@ e_exec(const e_exec_info* info)
 
       case E_OPCODE_JZ: {
         u32 target = e_read_u32(&ip); // always read the operand
-        if (!stack_top(&stack)->val.i) ip = info->code + target;
+        if (!to_bool(*stack_top(&stack))) ip = info->code + target;
 
         stack_pop(&stack); // remove condition
         break;
@@ -490,7 +458,7 @@ e_exec(const e_exec_info* info)
 
       case E_OPCODE_JNZ: {
         u32 target = e_read_u32(&ip); // always read the operand
-        if (stack_top(&stack)->val.i) ip = info->code + target;
+        if (to_bool(*stack_top(&stack))) ip = info->code + target;
 
         stack_pop(&stack); // remove condition
         break;

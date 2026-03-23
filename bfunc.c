@@ -53,30 +53,6 @@ to_int(e_var v)
   }
 }
 
-static inline char
-to_char(e_var v)
-{
-  switch (v.type) {
-    case E_VARTYPE_INT: return (char)v.val.i;
-    case E_VARTYPE_FLOAT: return (char)v.val.f;
-    case E_VARTYPE_CHAR: return (char)v.val.c;
-    case E_VARTYPE_BOOL: return (char)v.val.b;
-    default: return 0;
-  }
-}
-
-static inline bool
-to_bool(e_var v)
-{
-  switch (v.type) {
-    case E_VARTYPE_INT: return (bool)v.val.i;
-    case E_VARTYPE_FLOAT: return (bool)v.val.f;
-    case E_VARTYPE_CHAR: return (bool)v.val.c;
-    case E_VARTYPE_BOOL: return (bool)v.val.b;
-    default: return false;
-  }
-}
-
 e_var
 eb_print(e_var* args, u32 nargs)
 {
