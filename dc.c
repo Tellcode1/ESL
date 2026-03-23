@@ -46,11 +46,16 @@ main(int argc, char** argv)
     return -1;
   }
 
+  void* root_allocation;
+
   u32         nlits;
   e_var*      lits;
   u32         nfuncs;
   e_function* funcs;
-  e_file_load(f, &nlits, &lits, &nfuncs, &funcs);
+  if (e_file_load(f, &root_allocation, &nlits, &lits, &nfuncs, &funcs)) {
+    perror("Failed to open input file");
+    return -1;
+  }
 
   for (int i = 0; i < nfuncs; i++) {
     printf("%u(%u):\n", funcs[i].name_hash, funcs[i].nargs);
@@ -58,5 +63,7 @@ main(int argc, char** argv)
   }
 
   fclose(f);
+
+  free(root_allocation);
   return 0;
 }

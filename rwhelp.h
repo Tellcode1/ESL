@@ -28,8 +28,39 @@
 #include "bc.h"
 #include "cc.h"
 #include "fn.h"
+#include "perr.h"
 #include "refcount.h"
 #include "stdafx.h"
+
+#include <stdio.h>
+
+#define E_FILE_MAGIC 0xF5F6F7F8
+
+/**
+ * Compiled binary file structure is:
+ * MAGIC : u32
+ * Bytes_needed : u32 // << The number of bytes required to load the whole program
+ *
+ * nLiterals : u32
+ *
+ * Literals : e_var[] {
+ *    Type : e_vartype
+ *    value : e_varval
+ *  For strings:
+ *    Type : e_vartype
+ *    Len : u32
+ *    String : u8[Len]
+ * }
+ *
+ * nFunctions : u32
+ * Functions = e_function[] {
+ *   code_size : u32
+ *   nargs : u32
+ *   name_hash : u32
+ *   arg_slots = u32[nargs]
+ *   function_code : u8[code_size]
+ * }
+ */
 
 // clang-format off
 #define E_GEN_READ_FUNCTION(type) static inline type e_read_##type(const u8** _ip) { type v = *(type*)(*(_ip)); *(_ip) += sizeof(type); return v; }
@@ -60,13 +91,28 @@ e_emit_label(e_compiler* cc, u32 labelid)
   e_emit_u32(cc, labelid);
 }
 
-static inline void
-e_file_load(FILE* f, u32* nlits, e_var** lits, u32* nfunctions, e_function** functions)
+static inline int
+e_file_load(FILE* f, void** root_allocation, u32* nlits, e_var** lits, u32* nfunctions, e_function** functions)
 {
+  u32 magic = 0;
+  fread(&magic, sizeof(magic), 1, f);
+
+  if (magic != E_FILE_MAGIC) return -1;
+
+  u32 bytes_req = 0;
+  fread(&bytes_req, sizeof(bytes_req), 1, f);
+
+  *root_allocation = malloc(bytes_req);
+  if (*root_allocation == nullptr) return E_EMALLOC;
+
+  uchar* alloc = (uchar*)*root_allocation;
+
   fread(nlits, sizeof(*nlits), 1, f);
 
-  e_var* alits = (e_var*)malloc(sizeof(e_var) * (*nlits));
-  *lits        = alits;
+  e_var* alits = (e_var*)(alloc);
+  alloc += sizeof(e_var) * (*nlits);
+  *lits = alits;
+  if (*lits == nullptr) return -1;
 
   for (u32 i = 0; i < *nlits; i++) {
     fread(&alits[i].type, sizeof(e_vartype), 1, f);
@@ -76,9 +122,13 @@ e_file_load(FILE* f, u32* nlits, e_var** lits, u32* nfunctions, e_function** fun
       u32 len = 0;
       fread(&len, sizeof(len), 1, f);
 
-      lit->val.s       = (e_string*)malloc(sizeof(e_string));
+      lit->val.s = (e_string*)(alloc);
+      alloc += sizeof(e_string);
+
       lit->val.s->refc = e_refc_init();
-      lit->val.s->s    = (char*)malloc(len + 1);
+      lit->val.s->s    = (char*)(alloc);
+      alloc += len + 1;
+
       fread(lit->val.s->s, sizeof(char), len, f);
 
       lit->val.s->s[len] = 0;
@@ -88,25 +138,75 @@ e_file_load(FILE* f, u32* nlits, e_var** lits, u32* nfunctions, e_function** fun
   }
 
   fread(nfunctions, sizeof(*nfunctions), 1, f);
-  *functions = (e_function*)malloc(sizeof(e_function) * (*nfunctions));
+
+  *functions = (e_function*)(alloc);
+  alloc += sizeof(e_function) * (*nfunctions);
+  if (*functions == nullptr) return -1;
+
   for (u32 i = 0; i < *nfunctions; i++) {
     e_function func;
     fread(&func.code_size, sizeof(func.code_size), 1, f);
     fread(&func.nargs, sizeof(func.nargs), 1, f);
     fread(&func.name_hash, sizeof(func.name_hash), 1, f);
 
-    func.arg_slots = (u32*)malloc(sizeof(u32) * func.nargs);
+    func.arg_slots = (u32*)(alloc);
+    alloc += sizeof(u32) * func.nargs;
+    if (func.arg_slots == nullptr) return -1;
+
     fread(func.arg_slots, sizeof(*func.arg_slots), func.nargs, f);
 
-    func.code = (u8*)malloc(func.code_size);
+    func.code = (u8*)(alloc);
+    alloc += func.code_size;
+    if (func.code == nullptr) return -1;
+
     fread(func.code, 1, func.code_size, f);
     (*functions)[i] = func;
   }
+
+  return 0;
+}
+
+static inline u32
+e_file_bytes_required(const e_compilation_result* r)
+{
+  u32 size = 0;
+
+  // literals array
+  size += sizeof(e_var) * r->nliterals;
+
+  for (u32 i = 0; i < r->nliterals; i++) {
+    const e_var* lit = &r->literals[i];
+
+    if (lit->type == E_VARTYPE_STRING) {
+      u32 len = strlen(lit->val.s->s);
+
+      size += sizeof(e_string); // struct
+      size += len + 1;          // nnull
+    }
+  }
+
+  // functions array
+  size += sizeof(e_function) * r->nfunctions;
+
+  for (u32 i = 0; i < r->nfunctions; i++) {
+    const e_function* fn = &r->functions[i];
+
+    size += sizeof(u32) * fn->nargs; // arg_slots
+    size += fn->code_size;           // code
+  }
+
+  return size;
 }
 
 static inline void
-e_file_write(e_compilation_result* r, FILE* f)
+e_file_write(const e_compilation_result* r, FILE* f)
 {
+  u32 magic = E_FILE_MAGIC;
+  fwrite(&magic, sizeof(magic), 1, f);
+
+  u32 bytes_req = e_file_bytes_required(r);
+  fwrite(&bytes_req, sizeof(bytes_req), 1, f);
+
   fwrite(&r->nliterals, sizeof(r->nliterals), 1, f);
   for (u32 i = 0; i < r->nliterals; i++) {
     const e_var* lit = &r->literals[i];

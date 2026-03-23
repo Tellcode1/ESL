@@ -1,6 +1,7 @@
 #ifndef E_STACK_H
 #define E_STACK_H
 
+#include "perr.h"
 #include "stdafx.h"
 #include "var.h"
 
@@ -38,16 +39,17 @@ e_stack_init(u32 capacity, u32 frame_capacity, u32 variable_capacity, e_stack* s
   stack->capacity = capacity;
   stack->size     = 0;
   stack->stack    = (e_var*)malloc(sizeof(e_var) * capacity);
-  if (stack->stack == nullptr) return -1;
+  if (stack->stack == nullptr) return E_EMALLOC;
 
   stack->depth          = 0;
   stack->frame_capacity = frame_capacity;
   stack->frames         = (e_stack_frame*)malloc(sizeof(e_stack_frame) * frame_capacity);
-  if (stack->frames == nullptr) return -1;
+  if (stack->frames == nullptr) return E_EMALLOC;
 
   stack->variable_capacity = variable_capacity;
   stack->nvariables        = 0;
   stack->variables         = (e_var_offset*)malloc(sizeof(e_var_offset) * variable_capacity);
+  if (stack->variables == nullptr) return E_EMALLOC;
 
   return 0;
 }
@@ -67,7 +69,7 @@ e_stack_push_frame(e_stack* stack)
   if (stack->depth >= stack->frame_capacity) {
     stack->frame_capacity *= 2;
     stack->frames = (e_stack_frame*)realloc(stack->frames, stack->frame_capacity * sizeof(e_stack_frame));
-    if (stack->frames == nullptr) return -1;
+    if (stack->frames == nullptr) return E_EMALLOC;
   }
 
   stack->frames[stack->depth++] = (e_stack_frame){
@@ -99,7 +101,7 @@ e_stack_push(e_stack* stack, e_var v)
     if (stack->size >= stack->capacity) {
       u32    new_cap   = stack->capacity * 2;
       e_var* new_stack = (e_var*)realloc(stack->stack, new_cap * sizeof(e_var));
-      if (new_stack == nullptr) return -1;
+      if (new_stack == nullptr) return E_EMALLOC;
 
       stack->capacity = new_cap;
       stack->stack    = new_stack;

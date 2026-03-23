@@ -27,6 +27,7 @@
 #include "bc.h"
 #include "bfunc.h"
 #include "fn.h"
+#include "perr.h"
 #include "refcount.h"
 #include "rwhelp.h"
 #include "stack.h"
@@ -38,6 +39,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define PASTE(x, y) x##y
+
+// clang-format off
+#define TRY(expr)                                                                                                                                                             \
+  do {                                                                                                                                                                        \
+    int PASTE(__e__,__LINE__) = 0; if ((PASTE(__e__,__LINE__) = (expr))) { return PASTE(__e__,__LINE__)_; }                                                                                                                                       \
+  } while (0)
+  #define TRY_V(expr)                                                                                                                                                             \
+  do {                                                                                                                                                                        \
+    int PASTE(__e__,__LINE__) = 0; if ((PASTE(__e__,__LINE__) = (expr))) { return (e_var){.type = E_VARTYPE_ERROR, .val.errcode = PASTE(__e__,__LINE__)}; }                                                                                                                                       \
+  } while (0)
+// clang-format on
 
 #define BINOP(l, r, op)                                                                                                                                                       \
   (l.type == E_VARTYPE_FLOAT || r.type == E_VARTYPE_FLOAT) ? (e_var){ .type = E_VARTYPE_FLOAT, .val.f = (double)l.val.f op(double) r.val.f } : (e_var)                        \
@@ -132,7 +146,7 @@ operate(e_var l, e_var r, e_opcode op)
 // {
 //   for (int i = 0; i < s->size; i++)
 //   {
-//     // if (id == s->stack[i].) { e_stack_push(info->stack, info->stack.stack[variables[i].offset]); }
+//     // if (id == s->stack[i].) {TRY_V( e_stack_push(info->stack, info->stack.stack[variables[i].offset]); )}
 //   }
 // }
 
@@ -162,7 +176,7 @@ call(const e_exec_info* info, u32 hash, u32 nargs)
   for (u32 f = 0; f < info->nfuncs; f++) {
     if (info->funcs[f].name_hash != hash) continue;
 
-    e_stack_push_frame(info->stack);
+    TRY_V(e_stack_push_frame(info->stack));
 
     e_exec_info fi = {
       .code          = info->funcs[f].code,
@@ -180,7 +194,7 @@ call(const e_exec_info* info, u32 hash, u32 nargs)
     };
     return_value = e_exec(&fi);
 
-    e_stack_pop_frame(info->stack);
+    TRY_V(e_stack_pop_frame(info->stack));
 
     goto pop_and_ret;
   }
@@ -193,7 +207,8 @@ call(const e_exec_info* info, u32 hash, u32 nargs)
   }
 
   fprintf(stderr, "Function %u not defined\n", hash);
-  exit(-1);
+
+  return (e_var){ .type = E_VARTYPE_ERROR, .val.errcode = E_EUNDEFINED };
 
 pop_and_ret:
   for (u32 i = 0; i < nargs; i++) e_stack_pop(info->stack);
@@ -245,7 +260,10 @@ e_exec(const e_exec_info* info)
       v.val.map->refc = e_refc_init();
     }
 
-    *e_stack_push_variable(info->slots[i], info->stack) = v;
+    e_var* slot = e_stack_push_variable(info->slots[i], info->stack);
+    if (!slot) return (e_var){ .type = E_VARTYPE_ERROR, .val.errcode = E_EUNKNOWN };
+
+    *slot = v;
   }
 
   e_var retval = { .type = E_VARTYPE_VOID };
@@ -270,9 +288,10 @@ e_exec(const e_exec_info* info)
         u32 hash       = e_read_u32(&ip);
 
         e_var r = call(info, hash, func_nargs);
+        if (r.type == E_VARTYPE_ERROR) { return r; }
 
         /* Push the return value only after popping the arguments. */
-        if (r.type != E_VARTYPE_VOID) { e_stack_push(info->stack, r); }
+        if (r.type != E_VARTYPE_VOID) { TRY_V(e_stack_push(info->stack, r)); }
         break;
       }
 
@@ -283,7 +302,7 @@ e_exec(const e_exec_info* info)
         e_var v;
         e_var_deep_cpy(&info->literals[id], &v); // Deep copy the literal.
 
-        e_stack_push(info->stack, v);
+        TRY_V(e_stack_push(info->stack, v));
 
         break;
       }
@@ -307,7 +326,7 @@ e_exec(const e_exec_info* info)
         for (u32 i = 0; i < nelems; i++) { e_var_release(&stack[stack_size - nelems + i]); }
         info->stack->size -= nelems;
 
-        e_stack_push(info->stack, new_list);
+        TRY_V(e_stack_push(info->stack, new_list));
 
         break;
       }
@@ -338,7 +357,7 @@ e_exec(const e_exec_info* info)
         e_stack_pop(info->stack);
 
         /* No need to acquire r. */
-        e_stack_push(info->stack, r);
+        TRY_V(e_stack_push(info->stack, r));
         break;
       }
 
@@ -370,7 +389,7 @@ e_exec(const e_exec_info* info)
 
         e_stack_pop(info->stack); // remove R
 
-        e_stack_push(info->stack, r);
+        TRY_V(e_stack_push(info->stack, r));
 
         break;
       }
@@ -419,7 +438,7 @@ e_exec(const e_exec_info* info)
         e_var_shallow_cpy(slot, &v);
         e_var_acquire(&v);
 
-        e_stack_push(info->stack, v);
+        TRY_V(e_stack_push(info->stack, v));
         break;
       }
 
@@ -435,7 +454,7 @@ e_exec(const e_exec_info* info)
 
         if (list && idx >= 0 && (u64)idx < list->size) {
           e_var_acquire(&list->vars[idx]);
-          e_stack_push(info->stack, list->vars[idx]);
+          TRY_V(e_stack_push(info->stack, list->vars[idx]));
         }
         break;
       }
@@ -497,10 +516,10 @@ e_exec(const e_exec_info* info)
         goto _RETURN;
       }
 
-      case E_OPCODE_PUSH_VARIABLES: e_stack_push_frame(info->stack); break;
+      case E_OPCODE_PUSH_VARIABLES: TRY_V(e_stack_push_frame(info->stack)); break;
 
       case E_OPCODE_POP_VARIABLES: {
-        e_stack_pop_frame(info->stack);
+        TRY_V(e_stack_pop_frame(info->stack));
         break;
       }
 

@@ -124,17 +124,14 @@ main(int argc, char* argv[])
     return -1;
   }
 
-  e_var*      lits   = nullptr;
-  u8*         ins    = nullptr;
-  e_function* funcs  = nullptr;
-  u32         nlits  = 0;
-  u32         nins   = 0;
-  u32         nfuncs = 0;
-  e_file_load(f, &nlits, &lits, &nfuncs, &funcs);
-  // printf("nlits=%u nins=%u\n", nlits, nins);
-
-  // Don't let exec free a literal!
-  // for (u32 i = 0; i < nlits; i++) { e_var_acquire(&lits[i]); }
+  void*       root_allocation = nullptr;
+  e_var*      lits            = nullptr;
+  u8*         ins             = nullptr;
+  e_function* funcs           = nullptr;
+  u32         nlits           = 0;
+  u32         nins            = 0;
+  u32         nfuncs          = 0;
+  if (e_file_load(f, &root_allocation, &nlits, &lits, &nfuncs, &funcs)) { fprintf(stderr, "eexec: Failed to open input file\n"); }
 
   e_extern_function hello = {
     .hash  = e_hash_fnv("say_hello_from_c", strlen("say_hello_from_c")),
@@ -195,13 +192,16 @@ main(int argc, char* argv[])
   fclose(f);
   e_stack_free(&stack);
 
-  for (u32 i = 0; i < nlits; i++) { e_var_release(&lits[i]); }
-  free(lits);
-  for (u32 i = 0; i < nfuncs; i++) {
-    free(funcs[i].arg_slots);
-    free(funcs[i].code);
+  for (u32 i = 0; i < nlits; i++) {
+    if (lits[i].type == E_VARTYPE_STRING) {
+      e_refc_free(lits[i].val.s->refc);
+    } else if (lits[i].type == E_VARTYPE_LIST) {
+      e_refc_free(lits[i].val.list->refc);
+    } else if (lits[i].type == E_VARTYPE_MAP) {
+      e_refc_free(lits[i].val.map->refc);
+    }
   }
-  free(funcs);
+  free(root_allocation);
 
   int e = 0;
   if (v.type == E_VARTYPE_INT) { e = v.val.i; }

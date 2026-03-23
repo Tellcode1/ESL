@@ -32,8 +32,9 @@ typedef enum e_ecode {
   E_EILLINS      = -3, // Illegal instruction
   E_EOUTOFRANGE  = -4, // JMP to hell / Structure index too big
   E_ENONEXISTENT = -5, // Non existent variable / structure.
-  E_EUNKNOWN     = -5,
-  E_EPANIC       = -6,
+  E_EUNDEFINED   = -5, // Undefined function
+  E_EUNKNOWN     = -6,
+  E_EPANIC       = -7,
 } e_ecode;
 
 #endif // E_PROGRAM_ERROR_H
