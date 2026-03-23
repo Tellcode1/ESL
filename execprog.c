@@ -171,6 +171,10 @@ main(int argc, char* argv[])
       break;
     }
   }
+
+  e_stack stack;
+  if (e_stack_init(512, 16, 32, &stack)) return -1;
+
   e_exec_info info = {
     .code          = ins,
     .args          = nullptr,
@@ -181,20 +185,15 @@ main(int argc, char* argv[])
     .nargs         = 0,
     .nliterals     = nlits,
     .nfuncs        = nfuncs,
+    .stack         = &stack,
     .nextern_funcs = 5,
-    .extern_funcs =
-        (e_extern_function[]){
-            hello,
-            reg_file_open,
-            reg_file_close,
-            reg_file_read,
-            reg_file_size,
-        },
+    .extern_funcs  = (e_extern_function[]){ hello, reg_file_open, reg_file_close, reg_file_read, reg_file_size },
   };
 
   e_var v = e_exec(&info);
 
   fclose(f);
+  e_stack_free(&stack);
 
   for (u32 i = 0; i < nlits; i++) { e_var_release(&lits[i]); }
   free(lits);

@@ -72,6 +72,14 @@ typedef int16_t  i16;
 typedef int32_t  i32;
 typedef int64_t  i64;
 
+// static inline void*
+// pootis(const char* file, size_t line, size_t size)
+// {
+//   printf("[%s:%zu] %zu bytes allocated\n", file, line, size);
+//   return malloc(size);
+// }
+// #define malloc(size) pootis(__FILE__, __LINE__, size)
+
 static inline char*
 read_file(const char* path, u64* size)
 {

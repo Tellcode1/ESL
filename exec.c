@@ -27,9 +27,9 @@
 #include "bc.h"
 #include "bfunc.h"
 #include "fn.h"
-#include "perr.h"
 #include "refcount.h"
 #include "rwhelp.h"
+#include "stack.h"
 #include "stdafx.h"
 #include "var.h"
 
@@ -38,11 +38,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-struct pair {
-  size_t offset_index;
-  u32    id;
-};
 
 #define BINOP(l, r, op)                                                                                                                                                       \
   (l.type == E_VARTYPE_FLOAT || r.type == E_VARTYPE_FLOAT) ? (e_var){ .type = E_VARTYPE_FLOAT, .val.f = (double)l.val.f op(double) r.val.f } : (e_var)                        \
@@ -132,96 +127,33 @@ operate(e_var l, e_var r, e_opcode op)
   }
 }
 
-typedef struct stack_frame {
-  size_t variable_offset;
-  size_t stack_size;
-} stack_frame;
-
-struct stack {
-  stack_frame frames[64];
-  size_t      depth;
-  size_t      size;
-  size_t      capacity;
-  e_var*      stack;
-};
-
-static inline int
-stack_init(size_t init_capacity, struct stack* st)
-{
-  st->size     = 0;
-  st->depth    = 0;
-  st->capacity = init_capacity;
-  st->stack    = malloc(sizeof(e_var) * init_capacity);
-  if (st->stack == nullptr) return -1;
-
-  return 0;
-}
-
-static inline void
-stack_free(struct stack* st)
-{ free(st->stack); }
-
-static inline void
-stack_free_variables(struct stack* st)
-{
-  for (size_t i = 0; i < st->size; i++) { e_var_release(&st->stack[i]); }
-}
-
-static inline void
-stack_push(struct stack* st, e_var v)
-{
-  if (st->size >= st->capacity) {
-    size_t new_cap   = MAX(st->capacity * 2, 1);
-    e_var* new_stack = (e_var*)realloc(st->stack, sizeof(e_var) * new_cap);
-
-    if (!new_stack) return;
-
-    st->stack    = new_stack;
-    st->capacity = new_cap;
-  }
-
-  st->stack[st->size] = v;
-  st->size++;
-}
-
-static inline void
-stack_pop(struct stack* st)
-{
-  e_var_release(&st->stack[st->size - 1]);
-  st->size--;
-}
-
-static inline e_var*
-stack_top(struct stack* st)
-{ return &st->stack[st->size - 1]; }
-
 // static inline e_var*
 // stack_find_rev(const struct stack* s, u16 id)
 // {
 //   for (int i = 0; i < s->size; i++)
 //   {
-//     // if (id == s->stack[i].) { stack_push(&stack, &stack.stack[variables[i].offset]); }
+//     // if (id == s->stack[i].) { e_stack_push(info->stack, info->stack.stack[variables[i].offset]); }
 //   }
 // }
 
 static inline const e_builtin_func*
 get_builtin_func_hashed(u32 hash)
 {
-  for (size_t i = 0; i < E_ARRLEN(eb_funcs); i++) {
+  for (u32 i = 0; i < E_ARRLEN(eb_funcs); i++) {
     if (e_hash_fnv(eb_funcs[i].name, strlen(eb_funcs[i].name)) == hash) return &eb_funcs[i];
   }
   return nullptr;
 }
 
 static e_var
-call(const e_exec_info* info, struct stack* stack, u32 hash, u32 nargs)
+call(const e_exec_info* info, u32 hash, u32 nargs)
 {
   e_var return_value = { .type = E_VARTYPE_VOID };
 
   // builtins
   const e_builtin_func* builtin = get_builtin_func_hashed(hash);
   if (builtin != nullptr) {
-    e_var* args  = &stack->stack[stack->size - nargs];
+    e_var* args  = &info->stack->stack[info->stack->size - nargs];
     return_value = builtin->func(args, nargs);
     goto pop_and_ret;
   }
@@ -229,9 +161,12 @@ call(const e_exec_info* info, struct stack* stack, u32 hash, u32 nargs)
   // user defined
   for (u32 f = 0; f < info->nfuncs; f++) {
     if (info->funcs[f].name_hash != hash) continue;
+
+    e_stack_push_frame(info->stack);
+
     e_exec_info fi = {
       .code          = info->funcs[f].code,
-      .args          = &stack->stack[stack->size - info->funcs[f].nargs],
+      .args          = &info->stack->stack[info->stack->size - info->funcs[f].nargs],
       .slots         = info->funcs[f].arg_slots,
       .literals      = info->literals,
       .funcs         = info->funcs,
@@ -241,15 +176,19 @@ call(const e_exec_info* info, struct stack* stack, u32 hash, u32 nargs)
       .nliterals     = info->nliterals,
       .nfuncs        = info->nfuncs,
       .nextern_funcs = info->nextern_funcs,
+      .stack         = info->stack,
     };
     return_value = e_exec(&fi);
+
+    e_stack_pop_frame(info->stack);
+
     goto pop_and_ret;
   }
 
   // extern
   for (u32 i = 0; i < info->nextern_funcs; i++) {
     if (info->extern_funcs[i].hash != hash) continue;
-    if (info->extern_funcs[i].func) return_value = info->extern_funcs[i].func(&stack->stack[stack->size - nargs]);
+    if (info->extern_funcs[i].func) return_value = info->extern_funcs[i].func(&info->stack->stack[info->stack->size - nargs]);
     goto pop_and_ret;
   }
 
@@ -257,12 +196,12 @@ call(const e_exec_info* info, struct stack* stack, u32 hash, u32 nargs)
   exit(-1);
 
 pop_and_ret:
-  for (size_t i = 0; i < nargs; i++) stack_pop(stack);
+  for (u32 i = 0; i < nargs; i++) e_stack_pop(info->stack);
   return return_value;
 }
 
-u32
-get_variable_slot(struct pair* variables, u32 nvariables, u32 hash)
+static inline u32
+get_variable_slot(e_var_offset* variables, u32 nvariables, u32 hash)
 {
   for (u32 i = 0; i < nvariables; i++) {
     if (variables[i].id == hash) { return i; }
@@ -271,10 +210,20 @@ get_variable_slot(struct pair* variables, u32 nvariables, u32 hash)
   return -1;
 }
 
-static inline void
-assign(u32 slot, struct stack* stack, struct pair* variables, e_var value)
+static inline e_var*
+get_variable_from_id(e_stack* stack, u32 hash)
 {
-  e_var* variable_slot = &stack->stack[variables[slot].offset_index];
+  for (u32 i = 0; i < stack->nvariables; i++) {
+    u32 idx = stack->nvariables - i - 1;
+    if (hash == stack->variables[idx].id) return &stack->stack[stack->variables[idx].offset_index];
+  }
+  return nullptr;
+}
+
+static inline void
+assign(u32 slot, e_var* stack, e_var_offset* variables, e_var value)
+{
+  e_var* variable_slot = &stack[variables[slot].offset_index];
   e_var_release(variable_slot); // free old value in slot
 
   *variable_slot = value; // move ownership from stack top to slot
@@ -283,32 +232,7 @@ assign(u32 slot, struct stack* stack, struct pair* variables, e_var value)
 e_var
 e_exec(const e_exec_info* info)
 {
-  struct stack stack;
-
-  int e = stack_init(16, &stack);
-  if (e) return (e_var){ .type = E_VARTYPE_INT, .val.i = -1 };
-
-  size_t       cvariables = 4;
-  size_t       nvariables = 0;
-  struct pair* variables  = (struct pair*)calloc(cvariables, sizeof(struct pair));
-
-  for (size_t i = 0; i < info->nargs; i++) {
-    if (nvariables >= cvariables) {
-      size_t       new_c         = cvariables * 2;
-      struct pair* new_variables = (struct pair*)realloc(variables, new_c * sizeof(struct pair));
-      if (!new_variables) exit(-1);
-
-      // memset new region to 0
-      memset(new_variables + nvariables, 0, (new_c - nvariables) * sizeof(struct pair));
-
-      variables  = new_variables;
-      cvariables = new_c;
-    }
-
-    variables[nvariables].id           = info->slots[i];
-    variables[nvariables].offset_index = i;
-    nvariables++;
-
+  for (u32 i = 0; i < info->nargs; i++) {
     e_var v;
     e_var_shallow_cpy(&info->args[i], &v);
 
@@ -321,10 +245,10 @@ e_exec(const e_exec_info* info)
       v.val.map->refc = e_refc_init();
     }
 
-    stack_push(&stack, v);
+    *e_stack_push_variable(info->slots[i], info->stack) = v;
   }
 
-  e_ecode retcode = E_OK;
+  e_var retval = { .type = E_VARTYPE_VOID };
 
   const u8* ip  = info->code;
   const u8* end = info->code + info->code_size;
@@ -345,10 +269,10 @@ e_exec(const e_exec_info* info)
         u16 func_nargs = e_read_u16(&ip);
         u32 hash       = e_read_u32(&ip);
 
-        e_var r = call(info, &stack, hash, func_nargs);
+        e_var r = call(info, hash, func_nargs);
 
         /* Push the return value only after popping the arguments. */
-        if (r.type != E_VARTYPE_VOID) { stack_push(&stack, r); }
+        if (r.type != E_VARTYPE_VOID) { e_stack_push(info->stack, r); }
         break;
       }
 
@@ -359,7 +283,7 @@ e_exec(const e_exec_info* info)
         e_var v;
         e_var_deep_cpy(&info->literals[id], &v); // Deep copy the literal.
 
-        stack_push(&stack, v);
+        e_stack_push(info->stack, v);
 
         break;
       }
@@ -373,14 +297,17 @@ e_exec(const e_exec_info* info)
           .val.list = calloc(1, sizeof(e_list)),
         };
 
-        e_var* elems = &stack.stack[stack.size - nelems];
+        e_var* stack      = info->stack->stack;
+        size_t stack_size = info->stack->size;
+
+        e_var* elems = &stack[stack_size - nelems];
         e_list_init(elems, nelems, new_list.val.list); // acquires the elements.
 
         // Release variables from the stack.
-        for (u32 i = 0; i < nelems; i++) { e_var_release(&stack.stack[stack.size - nelems + i]); }
-        stack.size -= nelems;
+        for (u32 i = 0; i < nelems; i++) { e_var_release(&stack[stack_size - nelems + i]); }
+        info->stack->size -= nelems;
 
-        stack_push(&stack, new_list);
+        e_stack_push(info->stack, new_list);
 
         break;
       }
@@ -405,20 +332,20 @@ e_exec(const e_exec_info* info)
       case E_OPCODE_NEG: {
         // Since we compile left first, right next
         // right will be at the top of the stack and left will be below it
-        e_var r = operate(stack.stack[stack.size - 2], stack.stack[stack.size - 1], opcode);
+        e_var r = operate(info->stack->stack[info->stack->size - 2], info->stack->stack[info->stack->size - 1], opcode);
 
-        stack_pop(&stack); // remove L & R
-        stack_pop(&stack);
+        e_stack_pop(info->stack); // remove L & R
+        e_stack_pop(info->stack);
 
         /* No need to acquire r. */
-        stack_push(&stack, r);
+        e_stack_push(info->stack, r);
         break;
       }
 
       case E_OPCODE_INC:
       case E_OPCODE_DEC: {
         u32    id = (u32)-1;
-        e_var* v  = stack_top(&stack);
+        e_var* v  = e_stack_top(info->stack);
 
         if (attrs & E_ATTR_COMPOUND) { id = e_read_u32(&ip); }
 
@@ -429,8 +356,8 @@ e_exec(const e_exec_info* info)
         }
 
         if (attrs & E_ATTR_COMPOUND) {
-          assign(get_variable_slot(variables, nvariables, id), &stack, variables, *v);
-          stack.size--; // Variable slot owns v now!
+          assign(get_variable_slot(info->stack->variables, info->stack->nvariables, id), info->stack->stack, info->stack->variables, *v);
+          info->stack->size--; // Variable slot owns v now!
         }
 
         break;
@@ -439,28 +366,28 @@ e_exec(const e_exec_info* info)
       case E_OPCODE_NOT:
       case E_OPCODE_BNOT: {
         // Provide an empty variable for the LHS
-        e_var r = operate((e_var){ 0 }, *stack_top(&stack), opcode);
+        e_var r = operate((e_var){ 0 }, *e_stack_top(info->stack), opcode);
 
-        stack_pop(&stack); // remove R
+        e_stack_pop(info->stack); // remove R
 
-        stack_push(&stack, r);
+        e_stack_push(info->stack, r);
 
         break;
       }
 
       case E_OPCODE_JZ: {
         u32 target = e_read_u32(&ip); // always read the operand
-        if (!to_bool(*stack_top(&stack))) ip = info->code + target;
+        if (!to_bool(*e_stack_top(info->stack))) ip = info->code + target;
 
-        stack_pop(&stack); // remove condition
+        e_stack_pop(info->stack); // remove condition
         break;
       }
 
       case E_OPCODE_JNZ: {
         u32 target = e_read_u32(&ip); // always read the operand
-        if (to_bool(*stack_top(&stack))) ip = info->code + target;
+        if (to_bool(*e_stack_top(info->stack))) ip = info->code + target;
 
-        stack_pop(&stack); // remove condition
+        e_stack_pop(info->stack); // remove condition
         break;
       }
 
@@ -472,79 +399,65 @@ e_exec(const e_exec_info* info)
         // case E_OPCODE_JNE: ip = inss + e_read_u32(&ip); break;
 
       case E_OPCODE_INIT: {
-        if (nvariables >= cvariables) {
-          size_t       new_c         = cvariables * 2;
-          struct pair* new_variables = (struct pair*)realloc(variables, new_c * sizeof(struct pair));
-          if (!new_variables) exit(-1);
+        e_var* old_top = e_stack_top(info->stack);
 
-          // memset new region to 0
-          memset(new_variables + nvariables, 0, (new_c - nvariables) * sizeof(struct pair));
+        e_var* v = e_stack_push_variable(e_read_u32(&ip), info->stack);
 
-          variables  = new_variables;
-          cvariables = new_c;
-        }
-
-        u32 id = e_read_u32(&ip);
-
-        variables[nvariables].offset_index = stack.size;
-        variables[nvariables].id           = id;
-        nvariables++;
         if (attrs & E_ATTR_COMPOUND) {
-          e_var v = stack.stack[stack.size - 1];
-          e_var_shallow_cpy(&stack.stack[stack.size - 1], &v);
-          e_var_acquire(&v);
-          stack_push(&stack, v);
-        } else {
-          stack_push(&stack, (e_var){ .type = E_VARTYPE_VOID });
+          e_var_acquire(old_top);
+          e_var_shallow_cpy(old_top, v);
         }
         break;
       }
 
       case E_OPCODE_LOAD: {
         u32 id = e_read_u32(&ip);
-        for (size_t i = 0; i < nvariables; i++) {
-          size_t idx = nvariables - i - 1;
-          if (id == variables[idx].id) {
-            e_var v;
-            e_var_shallow_cpy(&stack.stack[variables[idx].offset_index], &v);
-            e_var_acquire(&v);
-            stack_push(&stack, v);
-            break;
-          }
-        }
+
+        e_var* slot = get_variable_from_id(info->stack, id);
+
+        e_var v;
+        e_var_shallow_cpy(slot, &v);
+        e_var_acquire(&v);
+
+        e_stack_push(info->stack, v);
         break;
       }
 
       case E_OPCODE_INDEX: {
-        int     idx  = to_int(stack.stack[stack.size - 1]);
-        e_list* list = stack.stack[stack.size - 2].type == E_VARTYPE_LIST ? stack.stack[stack.size - 2].val.list : NULL;
+        e_var* stack      = info->stack->stack;
+        size_t stack_size = info->stack->size;
 
-        stack_pop(&stack); // pop index
-        stack_pop(&stack); // pop base
+        int     idx  = to_int(stack[stack_size - 1]);
+        e_list* list = stack[stack_size - 2].type == E_VARTYPE_LIST ? stack[stack_size - 2].val.list : NULL;
+
+        e_stack_pop(info->stack); // pop index
+        e_stack_pop(info->stack); // pop base
 
         if (list && idx >= 0 && (u64)idx < list->size) {
           e_var_acquire(&list->vars[idx]);
-          stack_push(&stack, list->vars[idx]);
+          e_stack_push(info->stack, list->vars[idx]);
         }
         break;
       }
 
       case E_OPCODE_INDEX_ASSIGN: {
-        u32     idx  = stack.stack[stack.size - 2].val.i;
-        e_list* list = stack.stack[stack.size - 3].type == E_VARTYPE_LIST ? stack.stack[stack.size - 3].val.list : NULL;
+        e_var* stack      = info->stack->stack;
+        u32    stack_size = info->stack->size;
+
+        u32     idx  = stack[stack_size - 2].val.i;
+        e_list* list = stack[stack_size - 3].type == E_VARTYPE_LIST ? stack[stack_size - 3].val.list : NULL;
 
         // Copy value and acquire it temporarily
-        e_var value = stack.stack[stack.size - 1];
+        e_var value = stack[stack_size - 1];
         e_var_acquire(&value);
 
-        stack_pop(&stack); // pop value
-        stack_pop(&stack); // pop index
-        stack_pop(&stack); // pop base
+        e_stack_pop(info->stack); // pop value
+        e_stack_pop(info->stack); // pop index
+        e_stack_pop(info->stack); // pop base
 
         if (!list || idx >= list->size) {
           e_var_release(&value);
           fprintf(stderr, "List has size %zu, but index is %zu\n", list->size, (size_t)idx);
-          retcode = E_EOUTOFRANGE;
           goto _RETURN;
         }
 
@@ -556,70 +469,38 @@ e_exec(const e_exec_info* info)
       }
 
       case E_OPCODE_ASSIGN: {
-        u32 id = e_read_u32(&ip);
-        for (u32 i = 0; i < nvariables; i++) {
-          if (id == variables[i].id) {
-            e_var* slot = &stack.stack[variables[i].offset_index];
-            e_var_release(slot); // free old value in slot
+        u32    id   = e_read_u32(&ip);
+        e_var* slot = get_variable_from_id(info->stack, id);
 
-            /**
-             * Copy it. We need the variable on the stack to support.
-             * chained assignments
-             * let x = 16;
-             * let y = 32;
-             * let z = 64;
-             * x = y = z = 68;
-             *             ^ value needs to be on the stack!
-             */
-            e_var_shallow_cpy(stack_top(&stack), slot);
+        e_var_release(slot); // free old value in slot
 
-            e_var_acquire(slot);
+        /**
+         * Copy it. We need the variable on the stack to support.
+         * chained assignments
+         * let x = 16;
+         * let y = 32;
+         * let z = 64;
+         * x = y = z = 68;
+         *             ^ value needs to be on the stack!
+         */
+        e_var_shallow_cpy(e_stack_top(info->stack), slot);
 
-            break;
-          }
-        }
+        e_var_acquire(slot);
+
         break;
       }
 
       case E_OPCODE_RETURN: {
         u8 has_return_value = e_read_u8(&ip);
 
-        if (has_return_value) {
-          e_var r;
-          e_var_deep_cpy(&stack.stack[stack.size - 1], &r);
-          // now safe to release the stack slot
-          // YASS NO LEAKS!!!!
-          for (size_t i = 0; i < stack.size; i++) { e_var_release(&stack.stack[i]); }
-
-          stack_free(&stack);
-          free(variables);
-
-          return r;
-        } else {
-          goto _RETURN;
-        }
-        break;
+        if (has_return_value) { e_var_deep_cpy(e_stack_top(info->stack), &retval); }
+        goto _RETURN;
       }
 
-      case E_OPCODE_PUSH_VARIABLES:
-        stack.frames[stack.depth++] = (stack_frame){
-          .stack_size      = stack.size,
-          .variable_offset = nvariables,
-        };
-
-        if (stack.depth >= (sizeof(stack.frames) / sizeof(stack.frames[0]))) {
-          _UNREACHABLE();
-          fprintf(stderr, "Stack frame depth exceeded %zu\n", sizeof(stack.frames) / sizeof(stack.frames[0]));
-          retcode = E_EOUTOFRANGE;
-          goto _RETURN;
-        }
-        break;
+      case E_OPCODE_PUSH_VARIABLES: e_stack_push_frame(info->stack); break;
 
       case E_OPCODE_POP_VARIABLES: {
-        const stack_frame* frame = &stack.frames[--stack.depth];
-        for (size_t i = frame->stack_size; i < stack.size; i++) e_var_release(&stack.stack[i]);
-        stack.size = frame->stack_size;
-        nvariables = frame->variable_offset;
+        e_stack_pop_frame(info->stack);
         break;
       }
 
@@ -627,24 +508,15 @@ e_exec(const e_exec_info* info)
       default: printf("Unknown instruction\n"); exit(-1);
 
       // Non fatal return
-      case E_OPCODE_HALT: retcode = E_OK; goto _RETURN;
+      case E_OPCODE_HALT: goto _RETURN;
 
       case E_OPCODE_COUNT: printf("Illegal instruction"); exit(-1);
     }
   }
 
 _RETURN:
-  // Don't free the arguments!
-  stack_free_variables(&stack);
-  stack_free(&stack);
-  free(variables);
-
-  if (retcode == E_OK) {
-    return (e_var){ .type = E_VARTYPE_VOID };
-  } else {
-    return (e_var){
-      .type  = E_VARTYPE_INT,
-      .val.i = retcode,
-    };
-  }
+  /**
+   * Everything is externally managed. Don't need to free anything.
+   */
+  return retval;
 }
