@@ -1,12 +1,18 @@
+#include "refcount.h"
 #include "var.h"
+
+#include <string.h>
 
 int
 e_list_init(e_var* vars, u64 nvars, struct e_list* list)
 {
   if (!list) return -1;
 
+  memset(list, 0, sizeof(*list));
+
   u64 capacity = MAX(8, nvars);
 
+  list->refc     = e_refc_init();
   list->size     = nvars;
   list->capacity = capacity;
   list->vars     = (e_var*)malloc(sizeof(e_var) * capacity);

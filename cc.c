@@ -76,16 +76,18 @@ static inline int
 lower_node_to_literal(const e_ast* p, int node, e_var* o)
 {
   switch (E_GET_NODE(p, node)->type) {
-    case E_ASNODE_INT: *o = (e_var){ .type = E_VARTYPE_INT, .refc = e_refc_init(), .val.i = E_GET_NODE(p, node)->val.i }; return 0;
-    case E_ASNODE_FLOAT: *o = (e_var){ .type = E_VARTYPE_FLOAT, .refc = e_refc_init(), .val.f = E_GET_NODE(p, node)->val.f }; return 0;
-    case E_ASNODE_CHAR: *o = (e_var){ .type = E_VARTYPE_CHAR, .refc = e_refc_init(), .val.c = E_GET_NODE(p, node)->val.c }; return 0;
-    case E_ASNODE_BOOL: *o = (e_var){ .type = E_VARTYPE_BOOL, .refc = e_refc_init(), .val.b = E_GET_NODE(p, node)->val.b }; return 0;
+    case E_ASNODE_INT: *o = (e_var){ .type = E_VARTYPE_INT, .val.i = E_GET_NODE(p, node)->val.i }; return 0;
+    case E_ASNODE_FLOAT: *o = (e_var){ .type = E_VARTYPE_FLOAT, .val.f = E_GET_NODE(p, node)->val.f }; return 0;
+    case E_ASNODE_CHAR: *o = (e_var){ .type = E_VARTYPE_CHAR, .val.c = E_GET_NODE(p, node)->val.c }; return 0;
+    case E_ASNODE_BOOL: *o = (e_var){ .type = E_VARTYPE_BOOL, .val.b = E_GET_NODE(p, node)->val.b }; return 0;
     case E_ASNODE_STRING: {
       struct e_string* s = malloc(sizeof(e_string));
       if (!s) return -1;
 
-      s->s = strdup(E_GET_NODE(p, node)->val.s);
-      *o   = (e_var){ .type = E_VARTYPE_STRING, .refc = e_refc_init(), .val.s = s };
+      s->s    = strdup(E_GET_NODE(p, node)->val.s);
+      s->refc = e_refc_init();
+
+      *o = (e_var){ .type = E_VARTYPE_STRING, .val.s = s };
       return 0;
     }
 

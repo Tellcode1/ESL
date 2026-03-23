@@ -64,28 +64,28 @@ e_var
 eb_cast_int(e_var* args, u32 nargs)
 {
   (void)nargs;
-  return (e_var){ .type = E_VARTYPE_INT, .refc = e_refc_init(), .val.i = to_int(args[0]) };
+  return (e_var){ .type = E_VARTYPE_INT, .val.i = to_int(args[0]) };
 }
 
 e_var
 eb_cast_char(e_var* args, u32 nargs)
 {
   (void)nargs;
-  return (e_var){ .type = E_VARTYPE_CHAR, .refc = e_refc_init(), .val.c = (char)to_int(args[0]) };
+  return (e_var){ .type = E_VARTYPE_CHAR, .val.c = (char)to_int(args[0]) };
 }
 
 e_var
 eb_cast_bool(e_var* args, u32 nargs)
 {
   (void)nargs;
-  return (e_var){ .type = E_VARTYPE_BOOL, .refc = e_refc_init(), .val.b = (bool)to_int(args[0]) };
+  return (e_var){ .type = E_VARTYPE_BOOL, .val.b = (bool)to_int(args[0]) };
 }
 
 e_var
 eb_cast_float(e_var* args, u32 nargs)
 {
   (void)nargs;
-  return (e_var){ .type = E_VARTYPE_FLOAT, .refc = e_refc_init(), .val.f = to_float(args[0]) };
+  return (e_var){ .type = E_VARTYPE_FLOAT, .val.f = to_float(args[0]) };
 }
 
 e_var
@@ -101,9 +101,10 @@ eb_cast_string(e_var* args, u32 nargs)
 
   struct e_string* estring = malloc(sizeof(struct e_string));
 
-  estring->s = s;
+  estring->s    = s;
+  estring->refc = e_refc_init();
 
-  return (e_var){ .type = E_VARTYPE_STRING, .refc = e_refc_init(), .val.s = estring };
+  return (e_var){ .type = E_VARTYPE_STRING, .val.s = estring };
 }
 
 e_var
@@ -111,7 +112,6 @@ eb_cast_list(e_var* args, u32 nargs)
 {
   e_var new_list = {
     .type     = E_VARTYPE_LIST,
-    .refc     = e_refc_init(),
     .val.list = calloc(1, sizeof(e_list)),
   };
 

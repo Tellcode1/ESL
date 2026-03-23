@@ -22,7 +22,6 @@ file_open(e_var* args)
 {
   e_var file_handle = {
     .type = E_VARTYPE_INT,
-    .refc = e_refc_init(),
   };
 
   FILE* f = fopen(args[0].val.s->s, args[1].val.s->s);
@@ -60,11 +59,11 @@ file_read(e_var* args)
 
   struct e_string* es = malloc(sizeof(struct e_string));
 
-  es->s = str;
+  es->s    = str;
+  es->refc = e_refc_init();
 
   return (e_var){
     .type  = E_VARTYPE_STRING,
-    .refc  = e_refc_init(),
     .val.s = es,
   };
 }
@@ -85,7 +84,6 @@ file_size(e_var* args)
 
   return (e_var){
     .type  = E_VARTYPE_INT,
-    .refc  = e_refc_init(),
     .val.i = (int)size,
   };
 }

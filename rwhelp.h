@@ -48,13 +48,13 @@ e_file_load(FILE* f, u32* nlits, e_var** lits, u32* nfunctions, e_function** fun
     fread(&alits[i].type, sizeof(e_vartype), 1, f);
 
     e_var* lit = &alits[i];
-    lit->refc  = e_refc_init();
     if (alits[i].type == E_VARTYPE_STRING) {
       u32 len = 0;
       fread(&len, sizeof(len), 1, f);
 
-      lit->val.s    = (e_string*)malloc(sizeof(e_string));
-      lit->val.s->s = (char*)malloc(len + 1);
+      lit->val.s       = (e_string*)malloc(sizeof(e_string));
+      lit->val.s->refc = e_refc_init();
+      lit->val.s->s    = (char*)malloc(len + 1);
       fread(lit->val.s->s, sizeof(char), len, f);
 
       lit->val.s->s[len] = 0;

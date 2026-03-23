@@ -29,12 +29,14 @@ typedef enum e_vartype_bits {
 typedef u32 e_vartype;
 
 typedef struct e_list {
+  e_refc*       refc; // Reference counter: e_var_acquire(), e_var_release()
   u64           size;
   u64           capacity;
   struct e_var* vars;
 } e_list;
 
 typedef struct e_map {
+  e_refc*       refc; // Reference counter: e_var_acquire(), e_var_release()
   u64           size;
   u64           capacity;
   struct e_var* keys;
@@ -42,7 +44,8 @@ typedef struct e_map {
 } e_map;
 
 typedef struct e_string {
-  char* s;
+  e_refc* refc; // Reference counter: e_var_acquire(), e_var_release()
+  char*   s;
 } e_string;
 
 typedef union e_varval {
@@ -58,7 +61,6 @@ typedef union e_varval {
 
 typedef struct e_var {
   e_vartype type;
-  e_refc*   refc; // Reference counter: e_var_acquire(), e_var_release()
   e_varval  val;
 } e_var;
 
@@ -81,17 +83,31 @@ void e_var_free(e_var* var);
 static inline i32
 e_var_acquire(e_var* v)
 {
-  if (v->refc == nullptr) return -1;
-  return e_refc_acquire(v->refc);
+  e_refc* refc = nullptr;
+  switch (v->type) {
+    case E_VARTYPE_MAP: refc = v->val.map->refc; break;
+    case E_VARTYPE_LIST: refc = v->val.list->refc; break;
+    case E_VARTYPE_STRING: refc = v->val.s->refc; break;
+  }
+
+  if (refc == nullptr) return -1;
+  return e_refc_acquire(refc);
 }
 
 static inline void
 e_var_release(e_var* v)
 {
-  if (v->refc == nullptr) return;
+  e_refc* refc = nullptr;
+  switch (v->type) {
+    case E_VARTYPE_MAP: refc = v->val.map->refc; break;
+    case E_VARTYPE_LIST: refc = v->val.list->refc; break;
+    case E_VARTYPE_STRING: refc = v->val.s->refc; break;
+  }
 
-  e_refc_release(v->refc);
-  if (v->refc->ctr <= 0) e_var_free(v);
+  if (refc == nullptr) return;
+
+  e_refc_release(refc);
+  if (refc->ctr <= 0) e_var_free(v);
 }
 
 static inline u32

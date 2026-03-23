@@ -80,24 +80,22 @@ is_float(e_var v)
 { return v.type == E_VARTYPE_FLOAT; }
 
 #define COERCE_BINOP(l, r, op)                                                                                                                                                \
-  (is_float(l) || is_float(r)) ? (e_var){ .type = E_VARTYPE_FLOAT, .refc = e_refc_init(), .val.f = to_float(l) op to_float(r) } : (e_var)                                     \
-  { .type = E_VARTYPE_INT, .refc = e_refc_init(), .val.i = to_int(l) op to_int(r) }
+  (is_float(l) || is_float(r)) ? (e_var){ .type = E_VARTYPE_FLOAT, .val.f = to_float(l) op to_float(r) } : (e_var) { .type = E_VARTYPE_INT, .val.i = to_int(l) op to_int(r) }
 
 #define COERCE_BOOLEAN_BINOP(l, r, op)                                                                                                                                        \
-  (is_float(l) || is_float(r)) ? (e_var){ .type = E_VARTYPE_BOOL, .refc = e_refc_init(), .val.b = to_float(l) op to_float(r) } : (e_var)                                      \
-  { .type = E_VARTYPE_BOOL, .refc = e_refc_init(), .val.b = to_int(l) op to_int(r) }
+  (is_float(l) || is_float(r)) ? (e_var){ .type = E_VARTYPE_BOOL, .val.b = to_float(l) op to_float(r) } : (e_var) { .type = E_VARTYPE_BOOL, .val.b = to_int(l) op to_int(r) }
 
 static inline e_var
 operate(e_var l, e_var r, e_opcode op)
 {
-  if (op == E_OPCODE_NOT) return (e_var){ .type = E_VARTYPE_BOOL, .refc = e_refc_init(), .val.b = (bool)!to_int(r) };
+  if (op == E_OPCODE_NOT) return (e_var){ .type = E_VARTYPE_BOOL, .val.b = (bool)!to_int(r) };
 
   switch (op) {
     case E_OPCODE_ADD: return COERCE_BINOP(l, r, +);
     case E_OPCODE_SUB: return COERCE_BINOP(l, r, -);
     case E_OPCODE_MUL: return COERCE_BINOP(l, r, *);
     case E_OPCODE_DIV: return COERCE_BINOP(l, r, /);
-    case E_OPCODE_MOD: return (e_var){ .type = E_VARTYPE_INT, .refc = e_refc_init(), .val.i = to_int(l) % to_int(r) };
+    case E_OPCODE_MOD: return (e_var){ .type = E_VARTYPE_INT, .val.i = to_int(l) % to_int(r) };
     case E_OPCODE_EQL: return COERCE_BOOLEAN_BINOP(l, r, ==);
     case E_OPCODE_NEQ: return COERCE_BOOLEAN_BINOP(l, r, !=);
     case E_OPCODE_LT: return COERCE_BOOLEAN_BINOP(l, r, <);
@@ -108,16 +106,16 @@ operate(e_var l, e_var r, e_opcode op)
     case E_OPCODE_OR: return COERCE_BOOLEAN_BINOP(l, r, ||);
     case E_OPCODE_NEG:
       switch (r.type) {
-        case E_VARTYPE_INT: return (e_var){ .type = E_VARTYPE_INT, .refc = e_refc_init(), .val.i = -r.val.i };
-        case E_VARTYPE_CHAR: return (e_var){ .type = E_VARTYPE_CHAR, .refc = e_refc_init(), .val.c = (char)-(int)r.val.c };
-        case E_VARTYPE_FLOAT: return (e_var){ .type = E_VARTYPE_FLOAT, .refc = e_refc_init(), .val.f = -r.val.f };
+        case E_VARTYPE_INT: return (e_var){ .type = E_VARTYPE_INT, .val.i = -r.val.i };
+        case E_VARTYPE_CHAR: return (e_var){ .type = E_VARTYPE_CHAR, .val.c = (char)-(int)r.val.c };
+        case E_VARTYPE_FLOAT: return (e_var){ .type = E_VARTYPE_FLOAT, .val.f = -r.val.f };
         default: break;
       }
-      if (r.type == E_VARTYPE_INT) return (e_var){ .type = E_VARTYPE_INT, .refc = e_refc_init(), .val.i = -r.val.i };
-    case E_OPCODE_BNOT: return (e_var){ .type = E_VARTYPE_INT, .refc = e_refc_init(), .val.i = ~to_int(r) };
-    case E_OPCODE_BAND: return (e_var){ .type = E_VARTYPE_INT, .refc = e_refc_init(), .val.i = to_int(l) & to_int(r) };
-    case E_OPCODE_BOR: return (e_var){ .type = E_VARTYPE_INT, .refc = e_refc_init(), .val.i = to_int(l) | to_int(r) };
-    case E_OPCODE_XOR: return (e_var){ .type = E_VARTYPE_INT, .refc = e_refc_init(), .val.i = to_int(l) ^ to_int(r) };
+      if (r.type == E_VARTYPE_INT) return (e_var){ .type = E_VARTYPE_INT, .val.i = -r.val.i };
+    case E_OPCODE_BNOT: return (e_var){ .type = E_VARTYPE_INT, .val.i = ~to_int(r) };
+    case E_OPCODE_BAND: return (e_var){ .type = E_VARTYPE_INT, .val.i = to_int(l) & to_int(r) };
+    case E_OPCODE_BOR: return (e_var){ .type = E_VARTYPE_INT, .val.i = to_int(l) | to_int(r) };
+    case E_OPCODE_XOR: return (e_var){ .type = E_VARTYPE_INT, .val.i = to_int(l) ^ to_int(r) };
     default: return (e_var){ 0 };
   }
 }
@@ -296,7 +294,7 @@ e_exec(const e_exec_info* info)
   struct stack stack;
 
   int e = stack_init(16, &stack);
-  if (e) return (e_var){ .type = E_VARTYPE_INT, .refc = e_refc_init(), .val.i = -1 };
+  if (e) return (e_var){ .type = E_VARTYPE_INT, .val.i = -1 };
 
   size_t       cvariables = 4;
   size_t       nvariables = 0;
@@ -323,7 +321,13 @@ e_exec(const e_exec_info* info)
     e_var_shallow_cpy(&info->args[i], &v);
 
     // make new refc
-    v.refc = e_refc_init();
+    if (v.type == E_VARTYPE_LIST) {
+      v.val.list->refc = e_refc_init();
+    } else if (v.type == E_VARTYPE_STRING) {
+      v.val.s->refc = e_refc_init();
+    } else if (v.type == E_VARTYPE_MAP) {
+      v.val.map->refc = e_refc_init();
+    }
 
     stack_push(&stack, v);
   }
@@ -372,8 +376,8 @@ e_exec(const e_exec_info* info)
         u32 nelems = e_read_u32(&ip);
 
         e_var new_list = {
-          .type     = E_VARTYPE_LIST,
-          .refc     = e_refc_init(),
+          .type = E_VARTYPE_LIST,
+          // e_list_init initializes refc too
           .val.list = calloc(1, sizeof(e_list)),
         };
 
@@ -499,7 +503,7 @@ e_exec(const e_exec_info* info)
           e_var_acquire(&v);
           stack_push(&stack, v);
         } else {
-          stack_push(&stack, (e_var){ .refc = e_refc_init() });
+          stack_push(&stack, (e_var){ .type = E_VARTYPE_VOID });
         }
         break;
       }
@@ -639,15 +643,15 @@ e_exec(const e_exec_info* info)
 
 _RETURN:
   // Don't free the arguments!
-  for (size_t i = 0; i < stack.size; i++) { e_var_release(&stack.stack[i]); }
-  free(variables);
+  stack_free_variables(&stack);
   stack_free(&stack);
+  free(variables);
+
   if (retcode == E_OK) {
     return (e_var){ .type = E_VARTYPE_VOID };
   } else {
     return (e_var){
       .type  = E_VARTYPE_INT,
-      .refc  = e_refc_init(),
       .val.i = retcode,
     };
   }
