@@ -32,6 +32,7 @@ typedef enum e_token_type {
 
   E_TOKEN_TYPE_SEMICOLON,
   E_TOKEN_TYPE_COLON,
+  E_TOKEN_TYPE_DOUBLE_COLON,
   E_TOKEN_TYPE_COMMA,
   E_TOKEN_TYPE_DOT,
   E_TOKEN_TYPE_OPENBRACE,
@@ -47,8 +48,9 @@ typedef enum e_token_type {
   E_TOKEN_TYPE_FLOAT,
   E_TOKEN_TYPE_STRING,
 
-  E_TOKEN_TYPE_FN,  // fn keyword for functions, no value
-  E_TOKEN_TYPE_LET, // let keyword for variable declerations, no value.
+  E_TOKEN_TYPE_FN,      // fn keyword for functions, no value
+  E_TOKEN_TYPE_LOCALFN, // local function
+  E_TOKEN_TYPE_LET,     // let keyword for variable declerations, no value.
   E_TOKEN_TYPE_IF,
   E_TOKEN_TYPE_ELSE,
   E_TOKEN_TYPE_WHILE,
@@ -162,8 +164,17 @@ e_token_type_to_string(e_token_type e)
     case E_TOKEN_TYPE_LTE: return "LTE";
     case E_TOKEN_TYPE_GT: return "GT";
     case E_TOKEN_TYPE_GTE: return "GTE";
-    default: return "UNKNOWN";
+    case E_TOKEN_TYPE_DOT: return "DOT";
+    case E_TOKEN_TYPE_OPENBRACKET: return "OPENBRACKET";
+    case E_TOKEN_TYPE_CLOSEBRACKET: return "CLOSEBRACKET";
+    case E_TOKEN_TYPE_LOCALFN: return "LOCALFN";
+    case E_TOKEN_TYPE_NAMESPACE: return "NAMESPACE";
+    case E_TOKEN_TYPE_BAND: return "BAND";
+    case E_TOKEN_TYPE_BOR: return "BOR";
+    case E_TOKEN_TYPE_XOR: return "XOR";
+    case E_TOKEN_TYPE_DOUBLE_COLON: return "DOUBLE_COLON";
   }
+  return "UNKNOWN";
 }
 
 #endif // E_LEX_H

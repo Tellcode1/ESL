@@ -59,6 +59,11 @@ typedef enum e_ast_nodetype {
   // x.y
   E_AST_NODE_MEMBER_ACCESS,
 
+  E_AST_NODE_NAMESPACE_DECL,
+
+  // x::y
+  E_AST_NODE_NAMESPACE_ACCESS,
+
   E_AST_NODE_CALL,
   E_AST_NODE_INT,
   E_AST_NODE_CHAR,
@@ -258,6 +263,15 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
+
+    char* name;  // Namespace name
+    int*  stmts; // All statements in namespace
+    u32   nstmts;
+  } namespace_decl;
+
+  struct {
+    e_ast_node_type type;
+    e_filespan      span;
     int             left;
     int             value;
   } member_assign;
@@ -335,6 +349,12 @@ e_ast_peek(const struct e_ast* prsr)
   if (prsr->head >= prsr->ntoks) return NULL;
   return &prsr->toks[prsr->head];
 }
+static inline e_token*
+e_ast_prev(const struct e_ast* prsr)
+{
+  if (prsr->head >= prsr->ntoks || prsr->head == 0) return NULL;
+  return &prsr->toks[prsr->head - 1];
+}
 
 static inline bool
 e_getbp(e_token_type type, int* left, int* right)
@@ -400,11 +420,16 @@ e_getbp(e_token_type type, int* left, int* right)
       *right = 65;
       break;
 
-      // member access
-      // case K_OP_DOT:
-      //   *left  = 70;
-      //   *right = 69;
-      //   break;
+    // member access
+    case E_TOKEN_TYPE_DOT:
+      *left  = 70;
+      *right = 69;
+      break;
+
+    case E_TOKEN_TYPE_DOUBLE_COLON:
+      *left  = 75;
+      *right = 74;
+      break;
 
     case E_TOKEN_TYPE_OPENPAREN:
       *left  = 90;

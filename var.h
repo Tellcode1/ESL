@@ -88,6 +88,7 @@ typedef union e_varval {
   e_refdobj* s;
   e_refdobj* list;
   e_refdobj* map;
+  e_refdobj* func; /* localfn */
 } e_varval;
 
 typedef struct e_var {

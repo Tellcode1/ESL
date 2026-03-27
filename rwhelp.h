@@ -102,7 +102,7 @@ e_emit_label(e_compiler* cc, u32 labelid)
 }
 
 static inline int
-e_file_load(FILE* f, void** root_allocation, u32* nlits, e_var** lits, u32* nfunctions, e_function** functions)
+e_file_load(FILE* f, void** root_allocation, u32* ninstructions, u8** instructions, u32* nlits, e_var** lits, u32* nfunctions, e_function** functions)
 {
   u32 magic = 0;
   fread(&magic, sizeof(magic), 1, f);
@@ -174,6 +174,10 @@ e_file_load(FILE* f, void** root_allocation, u32* nlits, e_var** lits, u32* nfun
     (*functions)[i] = func;
   }
 
+  fread(ninstructions, sizeof(*ninstructions), 1, f);
+  *instructions = (u8*)malloc(*ninstructions);
+  fread(*instructions, sizeof(u8), *ninstructions, f);
+
   return 0;
 }
 
@@ -205,6 +209,8 @@ e_file_bytes_required(const e_compilation_result* r)
     size += sizeof(u32) * fn->nargs; // arg_slots
     size += fn->code_size;           // code
   }
+
+  size += r->ninstructions;
 
   return size;
 }
@@ -240,6 +246,9 @@ e_file_write(const e_compilation_result* r, FILE* f)
     fwrite(fn->arg_slots, sizeof(*fn->arg_slots), fn->nargs, f);
     fwrite(fn->code, 1, fn->code_size, f);
   }
+
+  fwrite(&r->ninstructions, sizeof(r->ninstructions), 1, f);
+  fwrite(r->instructions, sizeof(u8), r->ninstructions, f);
 }
 
 static inline void
@@ -252,6 +261,7 @@ e_compilation_result_free(e_compilation_result* r)
   free(r->functions);
   for (u32 i = 0; i < r->nliterals; i++) { e_var_free(&r->literals[i]); }
   free(r->literals);
+  free(r->instructions);
 }
 
 #endif // E_BYTECODE_STREAM_READ_WRITE_HELP_H

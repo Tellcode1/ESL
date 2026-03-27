@@ -313,7 +313,7 @@ e_exec(const e_exec_info* info)
         e_refdobj* obj = e_refdobj_pool_acquire(&ge_pool);
 
         // Convert the object
-        e_list* list = (e_list*)obj->data;
+        e_list* list = E_OBJ_AS_LIST(obj);
 
         e_var new_list = {
           .type = E_VARTYPE_LIST,

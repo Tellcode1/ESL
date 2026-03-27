@@ -140,6 +140,11 @@ e_ast_node_free(e_ast* p, int nodeID)
       e_ast_node_free(p, E_GET_NODE(p, nodeID)->index_compound.value);
       break;
     }
+    case E_AST_NODE_MEMBER_ACCESS: {
+      e_ast_node_free(p, E_GET_NODE(p, nodeID)->member_access.left);
+      free(E_GET_NODE(p, nodeID)->member_access.right);
+      break;
+    }
   }
 }
 #endif // E_AST_FREE_H

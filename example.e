@@ -53,6 +53,16 @@ fn divide_by_2(v)
   return v / 2;
 }
 
+namespace gaming
+{
+  namespace another_one {
+    fn fart() {
+      return 67;
+    }
+  };
+  let hidden_var = 0;
+};
+
 fn main() {
   println("Im gaming rn");
   println(32);
@@ -235,7 +245,16 @@ fn main() {
   let INT32_MAX = ~INT32_MIN & ~0;
   println("INT32_MAX = ", INT32_MAX);
 
-  len(69);
+  let i = (-500);
+  while (i < 500)
+  {
+    i += 1;
+  }
+  println("Should be 500: ", i);
+
+  println(gaming::another_one::fart());
+  gaming::hidden_var = 66;
+  println(gaming::hidden_var);
 }
 
 fn file_test()

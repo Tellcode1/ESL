@@ -351,6 +351,11 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
         is_compound = false;
         advance(s, line, col);
         advance(s, line, col);
+      } else if (s[0] == ':' && s[1] == ':') {
+        type        = E_TOKEN_TYPE_DOUBLE_COLON;
+        is_compound = false;
+        advance(s, line, col);
+        advance(s, line, col);
       } else {
         switch (*s) {
           case '+': type = E_TOKEN_TYPE_PLUS; break;

@@ -144,7 +144,7 @@ typedef enum e_opcode_bck {
    * Assign to a member of a struct/container.
    * The base struct/container and index will be popped.
    * assigned value is kept.
-   * Usage(noattr): INDEX_ASSIGN [var], Stack is Top=Value, Top-1=Index, Top-2=Base struct/container
+   * Usage(noattr): INDEX_ASSIGN [var ID : u32], Stack is Top=Value, Top-1=Index, Top-2=Base struct/container
    */
   E_OPCODE_INDEX_ASSIGN,
 
@@ -169,6 +169,23 @@ typedef enum e_opcode_bck {
    * Usage(noattr): MK_LIST [num_elems:u32]
    */
   E_OPCODE_MK_LIST,
+
+  /**
+   * Pack key value pairs into a map.
+   * The map is pushed to the stack.
+   * npairs is allowed to be 0.
+   * All key value pairs are released from the stack.
+   * Key/Value pairs are pushed in forward order:
+   * for (pair) {
+   *   compile(pair.key)
+   *   compile(pair.value)
+   * }
+   * And is popped in reverse order (value first, key next).
+   * Order of KV pairs does not matter in maps, as they
+   * do not have any particular order.
+   * Usage(noattr): MK_MAP [npairs]
+   */
+  E_OPCODE_MK_MAP,
 
   /**
    * Index into an list, string or structure.
@@ -258,6 +275,8 @@ typedef enum e_attr_bits {
 } e_attr_bits;
 typedef u8 e_attr;
 
+static const u8 __e_opcode_must_have_less_than_256_entries__[E_OPCODE_COUNT <= 256 ? 1 : -1] = { 0 };
+
 static inline e_ins
 e_pack_ins(e_opcode opcode, e_attr tags)
 {
@@ -279,5 +298,26 @@ e_unpack_ins(e_ins ins, e_opcode* opcode, e_attr* tags)
   *opcode        = (e_opcode)(ins & 0xFF);
   *tags          = (e_attr)((ins >> bits) & 0xFF);
 }
+
+typedef struct e_ins_packed {
+  u8 attrs;
+  u8 opcode;
+  union {
+    u32  init;
+    u32  load;
+    u32  halt;
+    u32  jmp, jz, jnz, je, jne;
+    u32  assign;
+    u32  mk_list, mk_map;
+    u32  index_assign;
+    u32  label;
+    u16  literal;
+    bool has_return_value;
+    struct {
+      u16 nargs;
+      u32 function_id;
+    } call;
+  } v;
+} e_ins_packed;
 
 #endif // E_IR_H

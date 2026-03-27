@@ -130,62 +130,43 @@ main(int argc, char* argv[])
   u32         nlits           = 0;
   u32         nins            = 0;
   u32         nfuncs          = 0;
-  if (e_file_load(f, &root_allocation, &nlits, &lits, &nfuncs, &funcs)) { fprintf(stderr, "eexec: Failed to open input file\n"); }
+  if (e_file_load(f, &root_allocation, &nins, &ins, &nlits, &lits, &nfuncs, &funcs)) { fprintf(stderr, "eexec: Failed to open input file\n"); }
 
-  e_extern_function hello = {
-    .hash  = e_hash_fnv("say_hello_from_c", strlen("say_hello_from_c")),
-    .nargs = 0,
-    .func  = say_hello_from_c,
-  };
-
-  e_extern_function reg_file_open = {
-    .hash  = e_hash_fnv("file_open", strlen("file_open")),
-    .nargs = 0,
-    .func  = file_open,
-  };
-  e_extern_function reg_file_close = {
-    .hash  = e_hash_fnv("file_close", strlen("file_close")),
-    .nargs = 0,
-    .func  = file_close,
-  };
-  e_extern_function reg_file_read = {
-    .hash  = e_hash_fnv("file_read", strlen("file_read")),
-    .nargs = 0,
-    .func  = file_read,
-  };
-  e_extern_function reg_file_size = {
-    .hash  = e_hash_fnv("file_size", strlen("file_size")),
-    .nargs = 0,
-    .func  = file_size,
-  };
-
-  const u32 main_func = e_hash_fnv("main", strlen("main"));
-  for (u32 i = 0; i < nfuncs; i++) {
-    if (funcs[i].name_hash == main_func) {
-      ins  = funcs[i].code;
-      nins = funcs[i].code_size;
-      break;
-    }
+#define include_fn(name)                                                                                                                                                      \
+  (e_extern_function){                                                                                                                                                        \
+    .hash  = e_hash_fnv(#name, strlen(#name)),                                                                                                                                \
+    .nargs = 0,                                                                                                                                                               \
+    .func  = name,                                                                                                                                                            \
+  }
+#define include_fn_as(name, as)                                                                                                                                               \
+  (e_extern_function){                                                                                                                                                        \
+    .hash  = e_hash_fnv(as, strlen(as)),                                                                                                                                      \
+    .nargs = 0,                                                                                                                                                               \
+    .func  = name,                                                                                                                                                            \
   }
 
-  e_stack stack;
-  if (e_stack_init(512, 16, 32, &stack)) return -1;
+  e_extern_function externals[] = {
+    include_fn(file_open), include_fn(file_close), include_fn(file_read), include_fn(file_size), include_fn(say_hello_from_c),
+  };
 
-  if (e_refdobj_pool_init(16, &ge_pool)) return -1;
+  e_stack stack;
+  if (e_stack_init(256, 8, 32, &stack)) return -1;
+
+  if (e_refdobj_pool_init(8, &ge_pool)) return -1;
 
   e_exec_info info = {
-    .code          = ins,
     .args          = nullptr,
     .slots         = nullptr,
     .literals      = lits,
     .funcs         = funcs,
+    .code          = ins,
     .code_size     = nins,
     .nargs         = 0,
     .nliterals     = nlits,
     .nfuncs        = nfuncs,
     .stack         = &stack,
-    .nextern_funcs = 5,
-    .extern_funcs  = (e_extern_function[]){ hello, reg_file_open, reg_file_close, reg_file_read, reg_file_size },
+    .nextern_funcs = sizeof(externals) / sizeof(e_extern_function),
+    .extern_funcs  = externals,
   };
 
   e_var v = e_exec(&info);

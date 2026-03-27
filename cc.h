@@ -59,9 +59,16 @@ typedef struct ecc_callframe {
   u32  restore_sp; // The stack pointer to return to when the scope exits.
 } ecc_callframe;
 
+typedef struct ecc_namespace_stack {
+  char** namespaces;
+  u32    nnamespaces;
+  u32    capacity;
+} ecc_namespace_stack;
+
 typedef struct e_compiler {
-  struct e_ast*      ast;
-  ecc_loop_location* loop;
+  struct e_ast*        ast;
+  ecc_loop_location*   loop;
+  ecc_namespace_stack* ns;
 
   e_var* literals;
   u16*   literal_hashes;
@@ -82,8 +89,10 @@ typedef struct e_compiler {
 typedef struct e_compilation_result {
   u32         nliterals;
   u32         nfunctions;
+  u32         ninstructions;
   e_var*      literals;
   e_function* functions;
+  u8*         instructions;
 } e_compilation_result;
 
 int e_compile(struct e_ast* ast, int root_node, e_compilation_result* result);

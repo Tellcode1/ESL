@@ -32,7 +32,6 @@
 #include "label.h"
 #include "lval.h"
 #include "pool.h"
-#include "refcount.h"
 #include "rwhelp.h"
 #include "stdafx.h"
 #include "var.h"
@@ -136,6 +135,46 @@ lower_node_to_literal(const e_ast* p, int node, e_var* o)
   return 1;
 }
 
+static void
+ns_push(e_compiler* cc, const char* name)
+{
+  if (cc->ns->nnamespaces >= cc->ns->capacity) {
+    u32    new_cnamespaces = cc->ns->capacity * 2;
+    char** new_namespaces  = realloc(cc->ns->namespaces, new_cnamespaces * sizeof(char*));
+
+    cc->ns->namespaces = new_namespaces;
+    cc->ns->capacity   = new_cnamespaces;
+  }
+
+  cc->ns->namespaces[cc->ns->nnamespaces++] = strdup(name);
+}
+
+static void
+ns_pop(e_compiler* cc)
+{ free(cc->ns->namespaces[--cc->ns->nnamespaces]); }
+
+/** */
+static char*
+mk_name(const e_compiler* cc, const char* name)
+{
+  size_t len = strlen(name) + 1;
+
+  for (u32 i = 0; i < cc->ns->nnamespaces; i++) {
+    len += strlen(cc->ns->namespaces[i]) + 2; // ::
+  }
+
+  char* out = malloc(len);
+  out[0]    = '\0';
+
+  for (u32 i = 0; i < cc->ns->nnamespaces; i++) {
+    strcat(out, cc->ns->namespaces[i]);
+    strcat(out, "::");
+  }
+
+  strcat(out, name);
+  return out;
+}
+
 static inline int
 compile_literal_variable(e_compiler* cc, e_var v)
 {
@@ -213,7 +252,11 @@ static int
 compile_function_definition(struct e_compiler* cc, int node)
 {
   const char* function_name = E_GET_NODE(cc->ast, node)->func.name;
-  u32         hash          = e_hash_fnv(function_name, strlen(function_name));
+  char*       full          = mk_name(cc, function_name);
+
+  const u32 hash = e_hash_fnv(full, strlen(full));
+
+  free(full);
 
   /* Ensure it doesn't already exist */
   for (u32 i = 0; i < cc->functions_size; i++) {
@@ -233,6 +276,7 @@ compile_function_definition(struct e_compiler* cc, int node)
     .literal_hashes     = cc->literal_hashes,
     .nliterals          = cc->nliterals,
     .cliterals          = cc->cliterals,
+    .ns                 = cc->ns,
     .emit               = (u8*)malloc(init_code_capacity),
     .emitted            = 0,
     .code_capacity      = init_code_capacity,
@@ -252,6 +296,7 @@ compile_function_definition(struct e_compiler* cc, int node)
   cc->nliterals          = copy.nliterals;
   cc->cliterals          = copy.cliterals;
   cc->functions          = copy.functions;
+  cc->ns                 = copy.ns;
   cc->functions_size     = copy.functions_size;
   cc->functions_capacity = copy.functions_capacity;
 
@@ -262,17 +307,16 @@ compile_function_definition(struct e_compiler* cc, int node)
     arg_slots = (u32*)malloc(sizeof(u32) * nargs);
     for (u32 i = 0; i < nargs; i++) {
       const char* arg_name = E_GET_NODE(cc->ast, node)->func.args[i];
-      arg_slots[i]         = e_hash_fnv(arg_name, strlen(arg_name));
+
+      arg_slots[i] = e_hash_fnv(arg_name, strlen(arg_name));
     }
   }
-
-  const char* name = E_GET_NODE(cc->ast, node)->func.name;
 
   e_function f = {
     .code      = copy.emit,
     .code_size = copy.emitted,
     .arg_slots = arg_slots,
-    .name_hash = (u32)e_hash_fnv(name, strlen(name)),
+    .name_hash = hash,
     .nargs     = nargs,
   };
 
@@ -385,11 +429,16 @@ get_builtin_func(const char* name)
 static int
 compile_function_call(struct e_compiler* cc, int node)
 {
-  e_filespan  function_span = E_GET_NODE(cc->ast, node)->common.span;
+  e_filespan function_span = E_GET_NODE(cc->ast, node)->common.span;
+  u32        nargs         = E_GET_NODE(cc->ast, node)->call.nargs;
+  int*       args          = E_GET_NODE(cc->ast, node)->call.args;
+
   const char* function_name = E_GET_NODE(cc->ast, node)->call.function;
-  u32         nargs         = E_GET_NODE(cc->ast, node)->call.nargs;
-  int*        args          = E_GET_NODE(cc->ast, node)->call.args;
-  u32         id            = e_hash_fnv(function_name, strlen(function_name));
+
+  char* full = mk_name(cc, function_name);
+  // printf("%s\n", full);
+  u32 hash = e_hash_fnv(full, strlen(full));
+  free(full);
 
   int e = 0;
   for (u32 i = 0; i < nargs; i++) {
@@ -414,7 +463,7 @@ compile_function_call(struct e_compiler* cc, int node)
   else {
     e_function* func = nullptr;
     for (u32 i = 0; i < cc->functions_size; i++) {
-      if (cc->functions[i].name_hash == id) {
+      if (cc->functions[i].name_hash == hash) {
         func = &cc->functions[i];
         break;
       }
@@ -428,7 +477,7 @@ compile_function_call(struct e_compiler* cc, int node)
 
   e_emit_instruction(cc, E_OPCODE_CALL, E_ATTR_NONE);    // 2 bytes
   e_emit_u16(cc, E_GET_NODE(cc->ast, node)->call.nargs); // 2 bytes, number of arguments
-  e_emit_u32(cc, id);                                    // 4 bytes, function ID
+  e_emit_u32(cc, hash);                                  // 4 bytes, function ID
 
   return 0;
 }
@@ -703,6 +752,24 @@ compile(struct e_compiler* cc, int node)
         int e = compile(cc, root->root.stmts[i]);
         if (e) { return e; }
       }
+
+      // TODO: Add checking for main
+      const u32 main_id = e_hash_fnv("main", strlen("main"));
+
+      bool found = false;
+      for (u32 i = 0; i < cc->functions_size; i++) {
+        if (cc->functions[i].name_hash == main_id) {
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) { cerror(root->common.span, "main not defined\n"); }
+
+      e_emit_instruction(cc, E_OPCODE_CALL, E_ATTR_NONE);
+      e_emit_u16(cc, 0); // no arguments to main
+      e_emit_u32(cc, main_id);
+
       return 0;
     }
 
@@ -712,6 +779,26 @@ compile(struct e_compiler* cc, int node)
         e = compile(cc, E_GET_NODE(cc->ast, node)->stmts.stmts[i]);
         if (e) return e;
       }
+      return 0;
+    }
+
+    case E_AST_NODE_NAMESPACE_DECL: {
+      const char* name = E_GET_NODE(cc->ast, node)->namespace_decl.name;
+
+      ns_push(cc, name);
+
+      int* stmts  = E_GET_NODE(cc->ast, node)->namespace_decl.stmts;
+      u32  nstmts = E_GET_NODE(cc->ast, node)->namespace_decl.nstmts;
+
+      for (u32 i = 0; i < nstmts; i++) {
+        int e = compile(cc, stmts[i]);
+        if (e) {
+          ns_pop(cc);
+          return e;
+        }
+      }
+
+      ns_pop(cc);
       return 0;
     }
 
@@ -789,9 +876,13 @@ compile(struct e_compiler* cc, int node)
     }
 
     case E_AST_NODE_VARIABLE_DECL: {
-      const char* name        = E_GET_NODE(cc->ast, node)->let.name;
-      u32         id          = e_hash_fnv(name, strlen(name));
-      int         initializer = E_GET_NODE(cc->ast, node)->let.initializer;
+      const char* name = E_GET_NODE(cc->ast, node)->let.name;
+      char*       full = mk_name(cc, name);
+
+      u32 hash        = e_hash_fnv(full, strlen(full));
+      int initializer = E_GET_NODE(cc->ast, node)->let.initializer;
+
+      free(full);
 
       int    e     = 0;
       e_attr attrs = E_ATTR_NONE;
@@ -802,7 +893,8 @@ compile(struct e_compiler* cc, int node)
       if (e) return e;
 
       e_emit_instruction(cc, E_OPCODE_INIT, attrs);
-      e_emit_u32(cc, id);
+      e_emit_u32(cc, hash);
+
       return 0;
     }
 
@@ -905,6 +997,8 @@ compile(struct e_compiler* cc, int node)
     case E_AST_NODE_FUNCTION_DEFINITION: {
       return compile_function_definition(cc, node);
     }
+
+    case E_AST_NODE_NAMESPACE_ACCESS: break;
   }
 
   return -1;
@@ -925,9 +1019,16 @@ e_compile_function(e_compiler* cc, int node)
 int
 e_compile(struct e_ast* ast, int root_node, e_compilation_result* result)
 {
-  const u32 init_code_capacity     = 256;
-  const u32 init_literal_capacity  = 64;
-  const u32 init_function_capacity = 64;
+  const u32 init_code_capacity       = 256;
+  const u32 init_literal_capacity    = 64;
+  const u32 init_function_capacity   = 64;
+  const u32 init_namespaces_capacity = 8;
+
+  ecc_namespace_stack ns = {
+    .namespaces  = malloc(sizeof(char*) * init_namespaces_capacity),
+    .nnamespaces = 0,
+    .capacity    = init_namespaces_capacity,
+  };
 
   e_compiler cc = {
     .ast                = ast,
@@ -935,10 +1036,11 @@ e_compile(struct e_ast* ast, int root_node, e_compilation_result* result)
     .literals           = (e_var*)malloc(sizeof(e_var) * init_literal_capacity),
     .literal_hashes     = (u16*)malloc(sizeof(u16) * init_literal_capacity),
     .nliterals          = 0,
+    .ns                 = &ns,
     .cliterals          = init_literal_capacity,
-    .code_capacity      = init_code_capacity,
-    .emit               = nullptr,
+    .emit               = (u8*)malloc(init_code_capacity),
     .emitted            = 0,
+    .code_capacity      = init_code_capacity,
     .functions_capacity = init_function_capacity,
     .functions_size     = 0,
     .functions          = malloc(sizeof(e_function) * init_function_capacity),
@@ -952,10 +1054,12 @@ e_compile(struct e_ast* ast, int root_node, e_compilation_result* result)
   for (size_t i = 0; i < cc.functions_size; i++) { e_resolve_labels(cc.functions[i].code, cc.functions[i].code_size); } // resolve all function labels
 
   if (result) {
-    result->literals   = cc.literals;
-    result->nliterals  = cc.nliterals;
-    result->functions  = cc.functions;
-    result->nfunctions = cc.functions_size;
+    result->literals      = cc.literals;
+    result->nliterals     = cc.nliterals;
+    result->functions     = cc.functions;
+    result->nfunctions    = cc.functions_size;
+    result->ninstructions = cc.emitted;
+    result->instructions  = cc.emit;
   }
 
   free(cc.literal_hashes);

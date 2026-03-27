@@ -123,8 +123,14 @@ e_print_instruction(e_opcode o, e_attr a, const u8** ip)
       printf("mklist [%u]\n", nelems);
       break;
     }
+    case E_OPCODE_MK_MAP: {
+      u32 nelems = e_read_u32(ip);
+      printf("mkmap [%u]\n", nelems);
+      break;
+    }
     case E_OPCODE_INDEX: printf("index\n"); break;
     case E_OPCODE_INDEX_ASSIGN: printf("idx_assign\n"); break;
+    case E_OPCODE_MEMBER_ACCESS: printf("member_access\n"); break;
   }
 }
 

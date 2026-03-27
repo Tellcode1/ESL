@@ -38,10 +38,12 @@ e_instruction_operand_size(e_attr attrs, e_opcode op)
     case E_OPCODE_DEC:
       if ((attrs & E_ATTR_COMPOUND) != 0) return 4; // variable ID
       return 0;
-    case E_OPCODE_LOAD:               // variable ID
-    case E_OPCODE_ASSIGN:             // variable ID
+    case E_OPCODE_LOAD:   // variable ID
+    case E_OPCODE_ASSIGN: // variable ID
+    case E_OPCODE_MK_LIST:
+    case E_OPCODE_MK_MAP:
     case E_OPCODE_INIT: return 4;     // u32 id
-    case E_OPCODE_CALL: return 4 + 2; // u32 id + u16 nargs
+    case E_OPCODE_CALL: return 2 + 4; // u32 id + u16 nargs
     case E_OPCODE_HALT:               // exit code
     case E_OPCODE_JMP:
     case E_OPCODE_JZ:

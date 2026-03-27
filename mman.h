@@ -22,51 +22,54 @@
  * SOFTWARE.
  */
 
-#include "dc.h"
+#ifndef E_MEMORY_MANAGER_H
+#define E_MEMORY_MANAGER_H
 
-#include "fn.h"
-#include "rwhelp.h"
+/**
+ * A general memory manager.
+ * Memory can be allocated using nmalloc and must be freed using nfree.
+ *
+ * Memory is allocated internally using malloc, in pages of size E_PAGE_SIZE
+ * This page is divided into 'frames'.
+ * Frames are further divided, finally, into blocks.
+ * On allocation, the memory manager only responds with blocks (which
+ * have no defined size).
+ */
+
 #include "stdafx.h"
 
-#include <stdio.h>
+/**
+ * Size of a sblock minus metadata.
+ * Addressable memory.
+ */
+#define E_SBLOCK_SIZE (64 - sizeof(u32))
+#define E_PAGE_SIZE 4096
 
-int
-main(int argc, char** argv)
-{
-  if (argc != 2) {
-    fprintf(stderr, "edc: [input_binary]\n");
-    return -1;
-  }
+struct emm_sblock;
+struct emm_block;
+struct emm_page;
 
-  const char* bin_file = argv[1];
+/**
+ * Branches.
+ * The pool (heap) allocates a branch when it doesn't
+ * doesn't see any free nodes.
+ */
+typedef struct emm_sblock {
+  /* Index in parent page */
+  u32 index;
+  u8  data[E_SBLOCK_SIZE];
+} emm_sblock;
 
-  FILE* f = fopen(bin_file, "rb");
-  if (!f) {
-    perror("edc: Failed to open input file");
-    return -1;
-  }
+/**
+ * Pool of referenced objects.
+ * Root.
+ */
+typedef struct emm_page {
+  emm_sblock sblocks[E_PAGE_SIZE / sizeof(emm_sblock)];
+} emm_page;
 
-  void* root_allocation;
+typedef struct emm_block {
+  size_t size;
+} emm_block;
 
-  u32         nlits;
-  e_var*      lits;
-  u32         nfuncs;
-  u32         nins;
-  u8*         ins;
-  e_function* funcs;
-  if (e_file_load(f, &root_allocation, &nins, &ins, &nlits, &lits, &nfuncs, &funcs)) {
-    perror("Failed to open input file");
-    return -1;
-  }
-
-  e_print_instruction_stream((const u8*)ins, nins, 0);
-  for (int i = 0; i < nfuncs; i++) {
-    printf("%u(%u):\n", funcs[i].name_hash, funcs[i].nargs);
-    e_print_instruction_stream((const u8*)funcs[i].code, funcs[i].code_size, 4);
-  }
-
-  fclose(f);
-
-  free(root_allocation);
-  return 0;
-}
+#endif // E_MEMORY_MANAGER_H
