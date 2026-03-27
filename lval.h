@@ -60,15 +60,15 @@ static inline bool
 e_can_make_value(const e_ast* ast, int node)
 {
   if (ast == nullptr || node < 0) return false;
-  return E_GET_NODE(ast, node)->type == E_ASNODE_VARIABLE;
+  return E_GET_NODE(ast, node)->type == E_AST_NODE_VARIABLE;
 }
 
 static inline e_lval
 e_make_value(const e_ast* ast, int node)
 {
   switch (E_GET_NODE(ast, node)->type) {
-    case E_ASNODE_VARIABLE: {
-      const char* name = E_GET_NODE(ast, node)->val.ident;
+    case E_AST_NODE_VARIABLE: {
+      const char* name = E_GET_NODE(ast, node)->ident.ident;
 
       e_lval l;
       l.type       = E_LVAL_VAR;

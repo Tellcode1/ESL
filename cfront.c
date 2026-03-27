@@ -28,6 +28,7 @@
 #include "astfree.h"
 #include "cc.h"
 #include "lex.h"
+#include "pool.h"
 #include "rwhelp.h"
 
 #include <assert.h>
@@ -49,6 +50,8 @@ main(int argc, char* argv[])
   e_compilation_result compiled = { 0 };
   FILE*                f        = NULL;
   char*                contents = NULL;
+
+  if (e_refdobj_pool_init(16, &ge_pool)) return -1;
 
   const char* out = NULL;
   for (int i = 0; i < argc; i++) {
@@ -90,7 +93,7 @@ main(int argc, char* argv[])
 
   if (tokenizer_only) {
     for (u32 i = 0; i < ntoks; i++) {
-      printf("%s", e_tokentype_to_string(tokens[i].type));
+      printf("%s", e_token_type_to_string(tokens[i].type));
       if (i != ntoks - 1) { fputs(" ", stdout); }
     }
     fputc('\n', stdout);
@@ -131,10 +134,12 @@ main(int argc, char* argv[])
 
   e_compilation_result_free(&compiled);
 
-  e_asnode_free(&ast, root);
+  e_ast_node_free(&ast, root);
   e_ast_free(&ast);
 
   e_freetoks(tokens, ntoks);
+
+  e_refdobj_pool_free(&ge_pool);
 
   free(contents);
 
@@ -145,6 +150,7 @@ err:
   e_freetoks(tokens, ntoks);
   e_ast_free(&ast);
   e_compilation_result_free(&compiled);
+  e_refdobj_pool_free(&ge_pool);
   if (f) fclose(f);
 
   return -1;

@@ -24,7 +24,7 @@
 
 #include "exec.h"
 #include "fn.h"
-#include "refcount.h"
+#include "pool.h"
 #include "rwhelp.h"
 #include "var.h"
 
@@ -48,7 +48,7 @@ file_open(e_var* args)
     .type = E_VARTYPE_INT,
   };
 
-  FILE* f = fopen(args[0].val.s->s, args[1].val.s->s);
+  FILE* f = fopen(E_VAR_AS_STRING(&args[0])->s, E_VAR_AS_STRING(&args[1])->s);
   memcpy(&file_handle.val, &f, sizeof(f));
 
   return file_handle;
@@ -81,10 +81,9 @@ file_read(e_var* args)
 
   str[size] = 0;
 
-  struct e_string* es = malloc(sizeof(struct e_string));
+  struct e_refdobj* es = e_refdobj_pool_acquire(&ge_pool);
 
-  es->s    = str;
-  es->refc = e_refc_init();
+  E_OBJ_AS_STRING(es)->s = str;
 
   return (e_var){
     .type  = E_VARTYPE_STRING,
@@ -172,6 +171,8 @@ main(int argc, char* argv[])
   e_stack stack;
   if (e_stack_init(512, 16, 32, &stack)) return -1;
 
+  if (e_refdobj_pool_init(16, &ge_pool)) return -1;
+
   e_exec_info info = {
     .code          = ins,
     .args          = nullptr,
@@ -192,15 +193,9 @@ main(int argc, char* argv[])
   fclose(f);
   e_stack_free(&stack);
 
-  for (u32 i = 0; i < nlits; i++) {
-    if (lits[i].type == E_VARTYPE_STRING) {
-      e_refc_free(lits[i].val.s->refc);
-    } else if (lits[i].type == E_VARTYPE_LIST) {
-      e_refc_free(lits[i].val.list->refc);
-    } else if (lits[i].type == E_VARTYPE_MAP) {
-      e_refc_free(lits[i].val.map->refc);
-    }
-  }
+  e_refdobj_pool_free(&ge_pool);
+
+  /* No need to free anything else */
   free(root_allocation);
 
   int e = 0;

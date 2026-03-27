@@ -24,6 +24,7 @@
 
 #include "bfunc.h"
 
+#include "pool.h"
 #include "refcount.h"
 #include "var.h"
 
@@ -99,12 +100,11 @@ eb_cast_string(e_var* args, u32 nargs)
 
   e_var_to_string(&args[0], s, len + 1);
 
-  struct e_string* estring = malloc(sizeof(struct e_string));
+  e_refdobj* obj = e_refdobj_pool_acquire(&ge_pool);
 
-  estring->s    = s;
-  estring->refc = e_refc_init();
+  E_OBJ_AS_STRING(obj)->s = s;
 
-  return (e_var){ .type = E_VARTYPE_STRING, .val.s = estring };
+  return (e_var){ .type = E_VARTYPE_STRING, .val.s = obj };
 }
 
 e_var
@@ -112,10 +112,10 @@ eb_cast_list(e_var* args, u32 nargs)
 {
   e_var new_list = {
     .type     = E_VARTYPE_LIST,
-    .val.list = calloc(1, sizeof(e_list)),
+    .val.list = e_refdobj_pool_acquire(&ge_pool),
   };
 
-  e_list_init(args, nargs, new_list.val.list); // acquires the elements. Stack frees them later.
+  e_list_init(args, nargs, E_OBJ_AS_LIST(new_list.val.list)); // acquires the elements. Stack frees them later.
 
   return new_list;
 }

@@ -60,6 +60,18 @@ extern "C" {
 #  define E_ARRLEN(array) (sizeof(array) / sizeof(*array))
 #endif
 
+#ifndef E_ARR_ALLOC
+#  define E_ARR_ALLOC(elem_type, n) ((elem_type*)calloc(sizeof(elem_type), (n)))
+#endif
+
+#ifndef E_ARR_REALLOC
+#  define E_ARR_REALLOC(arr, elem_type, n) ((elem_type*)realloc(arr, sizeof(*arr) * (n)))
+#endif
+
+#ifndef E_ARR_FREE
+#  define E_ARR_FREE(arr) (free((void*)arr))
+#endif
+
 typedef uint8_t uchar;
 
 typedef uint8_t  uchar;
@@ -73,12 +85,12 @@ typedef int32_t  i32;
 typedef int64_t  i64;
 
 // static inline void*
-// pootis(const char* file, size_t line, size_t size)
+// allocator_callback(const char* file, size_t line, size_t size)
 // {
 //   printf("[%s:%zu] %zu bytes allocated\n", file, line, size);
 //   return malloc(size);
 // }
-// #define malloc(size) pootis(__FILE__, __LINE__, size)
+// #define malloc(size) allocator_callback(__FILE__, __LINE__, size)
 
 static inline char*
 read_file(const char* path, u64* size)

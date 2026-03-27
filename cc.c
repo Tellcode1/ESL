@@ -31,6 +31,7 @@
 #include "fn.h"
 #include "label.h"
 #include "lval.h"
+#include "pool.h"
 #include "refcount.h"
 #include "rwhelp.h"
 #include "stdafx.h"
@@ -96,22 +97,21 @@ static inline int
 lower_node_to_literal(const e_ast* p, int node, e_var* o)
 {
   switch (E_GET_NODE(p, node)->type) {
-    case E_ASNODE_INT: *o = (e_var){ .type = E_VARTYPE_INT, .val.i = E_GET_NODE(p, node)->val.i }; return 0;
-    case E_ASNODE_FLOAT: *o = (e_var){ .type = E_VARTYPE_FLOAT, .val.f = E_GET_NODE(p, node)->val.f }; return 0;
-    case E_ASNODE_CHAR: *o = (e_var){ .type = E_VARTYPE_CHAR, .val.c = E_GET_NODE(p, node)->val.c }; return 0;
-    case E_ASNODE_BOOL: *o = (e_var){ .type = E_VARTYPE_BOOL, .val.b = E_GET_NODE(p, node)->val.b }; return 0;
-    case E_ASNODE_STRING: {
-      struct e_string* s = malloc(sizeof(e_string));
-      if (!s) return -1;
+    case E_AST_NODE_INT: *o = (e_var){ .type = E_VARTYPE_INT, .val.i = E_GET_NODE(p, node)->i.i }; return 0;
+    case E_AST_NODE_FLOAT: *o = (e_var){ .type = E_VARTYPE_FLOAT, .val.f = E_GET_NODE(p, node)->f.f }; return 0;
+    case E_AST_NODE_CHAR: *o = (e_var){ .type = E_VARTYPE_CHAR, .val.c = E_GET_NODE(p, node)->c.c }; return 0;
+    case E_AST_NODE_BOOL: *o = (e_var){ .type = E_VARTYPE_BOOL, .val.b = E_GET_NODE(p, node)->b.b }; return 0;
+    case E_AST_NODE_STRING: {
+      e_refdobj* obj = e_refdobj_pool_acquire(&ge_pool);
+      if (!obj) return -1;
 
-      s->s    = strdup(E_GET_NODE(p, node)->val.s);
-      s->refc = e_refc_init();
+      E_OBJ_AS_STRING(obj)->s = strdup(E_GET_NODE(p, node)->s.s);
 
-      *o = (e_var){ .type = E_VARTYPE_STRING, .val.s = s };
+      *o = (e_var){ .type = E_VARTYPE_STRING, .val.s = obj };
       return 0;
     }
 
-    case E_ASNODE_LIST: {
+    case E_AST_NODE_LIST: {
       // u32 nelems = E_GET_NODE(p, node)->val.list.nelems;
 
       // o->type     = E_VARTYPE_LIST;
@@ -120,7 +120,7 @@ lower_node_to_literal(const e_ast* p, int node, e_var* o)
       // e_var* vars_tmp = (e_var*)malloc(sizeof(e_var) * nelems);
       // for (u32 i = 0; i < nelems; i++) {
       //   int elem_node = E_GET_NODE(p, node)->val.list.elems[i];
-      //   if (lower_node_to_literal(p, elem_node, &vars_tmp[i])) { cerror(E_GET_NODE(p, elem_node)->span, "Failed to compile literal for list"); }
+      //   if (lower_node_to_literal(p, elem_node, &vars_tmp[i])) { cerror(E_GET_NODE(p, elem_node)->common.span, "Failed to compile literal for list"); }
       // }
 
       // e_list_init(vars_tmp, nelems, o->val.list);
@@ -129,7 +129,7 @@ lower_node_to_literal(const e_ast* p, int node, e_var* o)
       // return 0;
     }
 
-    case E_ASNODE_MAP: /* TODO: Implement */ abort(); break;
+    case E_AST_NODE_MAP: /* TODO: Implement */ abort(); break;
 
     default: return 1;
   }
@@ -137,7 +137,7 @@ lower_node_to_literal(const e_ast* p, int node, e_var* o)
 }
 
 static inline int
-compile_literal(e_compiler* cc, int node)
+compile_literal_variable(e_compiler* cc, e_var v)
 {
   if (cc->nliterals >= cc->cliterals) {
     size_t new_c              = cc->cliterals * 2;
@@ -157,9 +157,6 @@ compile_literal(e_compiler* cc, int node)
   bool found = false;
   u16  id    = cc->nliterals;
 
-  e_var v = { 0 };
-  if (lower_node_to_literal(cc->ast, node, &v)) return -1;
-
   /* Search for the literal in our table. */
   u16 hash = (u16)e_var_hash(&v);
   for (u32 i = 0; i < cc->nliterals; i++) {
@@ -178,7 +175,11 @@ compile_literal(e_compiler* cc, int node)
     cc->literal_hashes[id] = e_var_hash(&v);
     cc->nliterals++;
   } else {
-    e_var_free(&v); // free discarded variable
+    // e_var_free(pool, &v); // free discarded variable
+    if (v.type == E_VARTYPE_STRING) {
+      free(E_VAR_AS_STRING(&v)->s);
+      e_refdobj_pool_return(&ge_pool, v.val.s);
+    }
 
     /**
      * Since the variables all have the same lifetime, using the refcounter
@@ -199,17 +200,26 @@ compile_literal(e_compiler* cc, int node)
   return 0;
 }
 
+static inline int
+compile_literal(e_compiler* cc, int node)
+{
+  e_var v = { 0 };
+  if (lower_node_to_literal(cc->ast, node, &v)) return -1;
+
+  return compile_literal_variable(cc, v);
+}
+
 static int
 compile_function_definition(struct e_compiler* cc, int node)
 {
-  const char* function_name = E_GET_NODE(cc->ast, node)->val.func.name;
+  const char* function_name = E_GET_NODE(cc->ast, node)->func.name;
   u32         hash          = e_hash_fnv(function_name, strlen(function_name));
 
   /* Ensure it doesn't already exist */
   for (u32 i = 0; i < cc->functions_size; i++) {
     if (cc->functions[i].name_hash == hash) {
       _UNREACHABLE();
-      cerror(E_GET_NODE(cc->ast, node)->span, "Multiple definitions of function \"%s\"\n", function_name);
+      cerror(E_GET_NODE(cc->ast, node)->common.span, "Multiple definitions of function \"%s\"\n", function_name);
       return -1;
     }
   }
@@ -245,15 +255,18 @@ compile_function_definition(struct e_compiler* cc, int node)
   cc->functions_size     = copy.functions_size;
   cc->functions_capacity = copy.functions_capacity;
 
-  u32 nargs = E_GET_NODE(cc->ast, node)->val.func.nargs;
+  u32 nargs = E_GET_NODE(cc->ast, node)->func.nargs;
 
-  u32* arg_slots = (u32*)malloc(sizeof(u32) * nargs);
-  for (u32 i = 0; i < nargs; i++) {
-    const char* arg_name = E_GET_NODE(cc->ast, node)->val.func.args[i];
-    arg_slots[i]         = e_hash_fnv(arg_name, strlen(arg_name));
+  u32* arg_slots = nullptr;
+  if (nargs > 0) {
+    arg_slots = (u32*)malloc(sizeof(u32) * nargs);
+    for (u32 i = 0; i < nargs; i++) {
+      const char* arg_name = E_GET_NODE(cc->ast, node)->func.args[i];
+      arg_slots[i]         = e_hash_fnv(arg_name, strlen(arg_name));
+    }
   }
 
-  const char* name = E_GET_NODE(cc->ast, node)->val.func.name;
+  const char* name = E_GET_NODE(cc->ast, node)->func.name;
 
   e_function f = {
     .code      = copy.emit,
@@ -283,13 +296,13 @@ compile_binary_op(struct e_compiler* cc, int node)
 {
   int e = 0;
 
-  bool is_compound = E_GET_NODE(cc->ast, node)->val.binaryop.is_compound;
-  int  left        = E_GET_NODE(cc->ast, node)->val.binaryop.left;
-  int  right       = E_GET_NODE(cc->ast, node)->val.binaryop.right;
+  bool is_compound = E_GET_NODE(cc->ast, node)->binaryop.is_compound;
+  int  left        = E_GET_NODE(cc->ast, node)->binaryop.left;
+  int  right       = E_GET_NODE(cc->ast, node)->binaryop.right;
 
-  e_opcode opcode = e_binary_operator_to_opcode(E_GET_NODE(cc->ast, node)->val.binaryop.op);
+  e_opcode opcode = e_binary_operator_to_opcode(E_GET_NODE(cc->ast, node)->binaryop.op);
   if (opcode < 0) {
-    cerror(E_GET_NODE(cc->ast, node)->span, "Operator %u can not be used as a binary operator\n", E_GET_NODE(cc->ast, node)->val.binaryop.op);
+    cerror(E_GET_NODE(cc->ast, node)->common.span, "Operator %u can not be used as a binary operator\n", E_GET_NODE(cc->ast, node)->binaryop.op);
     return -1;
   }
 
@@ -314,31 +327,31 @@ compile_binary_op(struct e_compiler* cc, int node)
 static int
 compile_unary_op(struct e_compiler* cc, int node)
 {
-  int e = compile(cc, E_GET_NODE(cc->ast, node)->val.unaryop.right);
+  int e = compile(cc, E_GET_NODE(cc->ast, node)->unaryop.right);
   if (e) return e;
 
   e_opcode opcode = -1;
 
   // clang-format off
-      switch (E_GET_NODE(cc->ast, node)->val.unaryop.op)
+      switch (E_GET_NODE(cc->ast, node)->unaryop.op)
       {
         case E_OPERATOR_NOT: opcode = E_OPCODE_NOT; break;
         case E_OPERATOR_BNOT: opcode = E_OPCODE_BNOT; break;
         case E_OPERATOR_INC: opcode = E_OPCODE_INC; break;
         case E_OPERATOR_DEC: opcode = E_OPCODE_DEC; break;
         case E_OPERATOR_SUB: opcode = E_OPCODE_NEG; break;
-        default: cerror(E_GET_NODE(cc->ast, node)->span, "Operator %u can not be used as a unary operator\n", E_GET_NODE(cc->ast, node)->val.unaryop.op); return -1;
+        default: cerror(E_GET_NODE(cc->ast, node)->common.span, "Operator %u can not be used as a unary operator\n", E_GET_NODE(cc->ast, node)->unaryop.op); return -1;
       }
   // clang-format on
 
   e_attr attrs = E_ATTR_NONE;
-  if (E_GET_NODE(cc->ast, node)->val.unaryop.is_compound) { attrs |= E_ATTR_COMPOUND; }
+  if (E_GET_NODE(cc->ast, node)->unaryop.is_compound) { attrs |= E_ATTR_COMPOUND; }
 
   e_emit_instruction(cc, opcode, attrs);
 
-  if (E_GET_NODE(cc->ast, node)->val.unaryop.is_compound) {
-    int        right_node = E_GET_NODE(cc->ast, node)->val.unaryop.right;
-    e_filespan span       = E_GET_NODE(cc->ast, right_node)->span;
+  if (E_GET_NODE(cc->ast, node)->unaryop.is_compound) {
+    int        right_node = E_GET_NODE(cc->ast, node)->unaryop.right;
+    e_filespan span       = E_GET_NODE(cc->ast, right_node)->common.span;
 
     if (!e_can_make_value(cc->ast, right_node)) {
       cerror(span, "Can not lower right to lvalue. Are you sure it's a modifiable variable?\n");
@@ -372,10 +385,10 @@ get_builtin_func(const char* name)
 static int
 compile_function_call(struct e_compiler* cc, int node)
 {
-  e_filespan  function_span = E_GET_NODE(cc->ast, node)->span;
-  const char* function_name = E_GET_NODE(cc->ast, node)->val.call.function;
-  u32         nargs         = E_GET_NODE(cc->ast, node)->val.call.nargs;
-  int*        args          = E_GET_NODE(cc->ast, node)->val.call.args;
+  e_filespan  function_span = E_GET_NODE(cc->ast, node)->common.span;
+  const char* function_name = E_GET_NODE(cc->ast, node)->call.function;
+  u32         nargs         = E_GET_NODE(cc->ast, node)->call.nargs;
+  int*        args          = E_GET_NODE(cc->ast, node)->call.args;
   u32         id            = e_hash_fnv(function_name, strlen(function_name));
 
   int e = 0;
@@ -408,14 +421,14 @@ compile_function_call(struct e_compiler* cc, int node)
     }
 
     if (func && func->nargs != nargs) {
-      cerror(E_GET_NODE(cc->ast, node)->span, "User defined function '%s' expects [%u] arguments, but [%u] were given\n", function_name, func->nargs, nargs);
+      cerror(E_GET_NODE(cc->ast, node)->common.span, "User defined function '%s' expects [%u] arguments, but [%u] were given\n", function_name, func->nargs, nargs);
       return -1;
     }
   }
 
-  e_emit_instruction(cc, E_OPCODE_CALL, E_ATTR_NONE);        // 2 bytes
-  e_emit_u16(cc, E_GET_NODE(cc->ast, node)->val.call.nargs); // 2 bytes, number of arguments
-  e_emit_u32(cc, id);                                        // 4 bytes, function ID
+  e_emit_instruction(cc, E_OPCODE_CALL, E_ATTR_NONE);    // 2 bytes
+  e_emit_u16(cc, E_GET_NODE(cc->ast, node)->call.nargs); // 2 bytes, number of arguments
+  e_emit_u32(cc, id);                                    // 4 bytes, function ID
 
   return 0;
 }
@@ -437,7 +450,7 @@ compile_if_statement(struct e_compiler* cc, int node)
   e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES, E_ATTR_NONE);
 
   // condition
-  int e = compile(cc, E_GET_NODE(cc->ast, node)->val.if_stmt.condition);
+  int e = compile(cc, E_GET_NODE(cc->ast, node)->if_stmt.condition);
   if (e) return e;
 
   // condition failed :<
@@ -446,8 +459,8 @@ compile_if_statement(struct e_compiler* cc, int node)
   e_emit_u32(cc, next_in_chain_label);
 
   // BODY OF ROOT IF STATEMENT
-  for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->val.if_stmt.nstmts; i++) {
-    e = compile(cc, E_GET_NODE(cc->ast, node)->val.if_stmt.body[i]);
+  for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->if_stmt.nstmts; i++) {
+    e = compile(cc, E_GET_NODE(cc->ast, node)->if_stmt.body[i]);
     if (e) return e;
   }
 
@@ -457,13 +470,13 @@ compile_if_statement(struct e_compiler* cc, int node)
   e_emit_u32(cc, end_label);
 
   // ELSE IFS
-  for (u32 else_if = 0; else_if < E_GET_NODE(cc->ast, node)->val.if_stmt.nelse_ifs; else_if++) {
+  for (u32 else_if = 0; else_if < E_GET_NODE(cc->ast, node)->if_stmt.nelse_ifs; else_if++) {
     // Emit the next in chain label for instructions to jump to.
     e_emit_label(cc, next_in_chain_label);
     next_in_chain_label = make_label_id(cc);
 
     // dont worry about it dont worry about it dont worry about it dont worry about it
-    struct e_if_stmt* if_stmt = &E_GET_NODE(cc->ast, node)->val.if_stmt.else_ifs[else_if];
+    struct e_if_stmt* if_stmt = &E_GET_NODE(cc->ast, node)->if_stmt.else_ifs[else_if];
 
     // CONDITION
     e = compile(cc, if_stmt->condition);
@@ -487,8 +500,8 @@ compile_if_statement(struct e_compiler* cc, int node)
   /* Emit the final next in chain label for the else statement. */
   e_emit_label(cc, next_in_chain_label); // BAM!
   /* ELSE BODY */
-  for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->val.if_stmt.nelse_stmts; i++) {
-    e = compile(cc, E_GET_NODE(cc->ast, node)->val.if_stmt.else_body[i]);
+  for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->if_stmt.nelse_stmts; i++) {
+    e = compile(cc, E_GET_NODE(cc->ast, node)->if_stmt.else_body[i]);
     if (e) return e;
 
     /* No need to jump! we're already at the end :> */
@@ -530,7 +543,7 @@ compile_while_statement(struct e_compiler* cc, int node)
   //
 
   /* CONDITION */
-  int e = compile(cc, E_GET_NODE(cc->ast, node)->val.while_stmt.condition);
+  int e = compile(cc, E_GET_NODE(cc->ast, node)->while_stmt.condition);
   if (e) return e;
 
   // Break out of loop if condition is false.
@@ -538,8 +551,8 @@ compile_while_statement(struct e_compiler* cc, int node)
   e_emit_u32(cc, end_label);
 
   // WHILE BODY
-  for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->val.while_stmt.nstmts; i++) {
-    e = compile(cc, E_GET_NODE(cc->ast, node)->val.while_stmt.stmts[i]);
+  for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->while_stmt.nstmts; i++) {
+    e = compile(cc, E_GET_NODE(cc->ast, node)->while_stmt.stmts[i]);
     if (e) return e;
   }
 
@@ -598,9 +611,9 @@ compile_for_statement(struct e_compiler* cc, int node)
   cc->loop                = &loop;
 
   // INITIALIZERS
-  initializers = E_GET_NODE(cc->ast, node)->val.for_stmt.initializers;
+  initializers = E_GET_NODE(cc->ast, node)->for_stmt.initializers;
   if (initializers >= 0 && compile(cc, initializers) < 0) {
-    cerror(E_GET_NODE(cc->ast, initializers)->span, "Failed to compile initializers [for statement]");
+    cerror(E_GET_NODE(cc->ast, initializers)->common.span, "Failed to compile initializers [for statement]");
     goto err;
   }
 
@@ -608,15 +621,15 @@ compile_for_statement(struct e_compiler* cc, int node)
   e_emit_label(cc, top_label);
 
   // CONDITION
-  condition = E_GET_NODE(cc->ast, node)->val.for_stmt.condition;
+  condition = E_GET_NODE(cc->ast, node)->for_stmt.condition;
   if (condition < 0) {
     // Can't use condition's span!
-    cerror(E_GET_NODE(cc->ast, initializers)->span, "Empty for statement conditions are not currently supported [for statement]\n");
+    cerror(E_GET_NODE(cc->ast, initializers)->common.span, "Empty for statement conditions are not currently supported [for statement]\n");
     goto err;
   }
 
   if (condition >= 0 && compile(cc, condition) < 0) {
-    cerror(E_GET_NODE(cc->ast, condition)->span, "Failed to compile condition [for statement]");
+    cerror(E_GET_NODE(cc->ast, condition)->common.span, "Failed to compile condition [for statement]");
     goto err;
   }
 
@@ -625,11 +638,11 @@ compile_for_statement(struct e_compiler* cc, int node)
   e_emit_u32(cc, end_label);
 
   // BODY
-  u32 nstmts = E_GET_NODE(cc->ast, node)->val.for_stmt.nstmts;
+  u32 nstmts = E_GET_NODE(cc->ast, node)->for_stmt.nstmts;
   for (u32 i = 0; i < nstmts; i++) {
-    int stmt = E_GET_NODE(cc->ast, node)->val.for_stmt.stmts[i];
+    int stmt = E_GET_NODE(cc->ast, node)->for_stmt.stmts[i];
     if (compile(cc, stmt) < 0) {
-      cerror(E_GET_NODE(cc->ast, stmt)->span, "Failed to compile statement in body [for statement]");
+      cerror(E_GET_NODE(cc->ast, stmt)->common.span, "Failed to compile statement in body [for statement]");
       goto err;
     }
   }
@@ -638,9 +651,9 @@ compile_for_statement(struct e_compiler* cc, int node)
   e_emit_label(cc, iterator_label);
 
   // ITERATORS
-  iterators = E_GET_NODE(cc->ast, node)->val.for_stmt.iterators;
+  iterators = E_GET_NODE(cc->ast, node)->for_stmt.iterators;
   if (iterators >= 0 && compile(cc, iterators) < 0) {
-    cerror(E_GET_NODE(cc->ast, iterators)->span, "Failed to compile iterators [for statement]");
+    cerror(E_GET_NODE(cc->ast, iterators)->common.span, "Failed to compile iterators [for statement]");
     goto err;
   }
 
@@ -663,74 +676,92 @@ err:
 }
 
 static int
+e_compile_member_access(e_compiler* cc, int node)
+{
+  int   left  = E_GET_NODE(cc->ast, node)->member_access.left;
+  char* right = E_GET_NODE(cc->ast, node)->member_access.right;
+
+  compile(cc, left);
+
+  e_emit_instruction(cc, E_OPCODE_MEMBER_ACCESS, E_ATTR_NONE);
+  e_emit_u32(cc, e_hash_fnv(right, strlen(right)));
+
+  return 0;
+}
+
+static int
 compile(struct e_compiler* cc, int node)
 {
   if (node < 0) return -1;
 
   switch (E_GET_NODE(cc->ast, node)->type) {
-    case E_ASNODE_NOP: return 0;
+    case E_AST_NODE_NOP: return 0;
 
-    case E_ASNODE_ROOT: {
-      e_asnode* root = E_GET_NODE(cc->ast, node);
-      for (u32 i = 0; i < root->val.root.nstmts; i++) {
-        int e = compile(cc, root->val.root.stmts[i]);
+    case E_AST_NODE_ROOT: {
+      e_ast_node* root = E_GET_NODE(cc->ast, node);
+      for (u32 i = 0; i < root->root.nstmts; i++) {
+        int e = compile(cc, root->root.stmts[i]);
         if (e) { return e; }
       }
       return 0;
     }
 
-    case E_ASNODE_EXPRESSION_LIST: {
+    case E_AST_NODE_EXPRESSION_LIST: {
       int e = 0;
-      for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->val.stmts.nstmts; i++) {
-        e = compile(cc, E_GET_NODE(cc->ast, node)->val.stmts.stmts[i]);
+      for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->stmts.nstmts; i++) {
+        e = compile(cc, E_GET_NODE(cc->ast, node)->stmts.stmts[i]);
         if (e) return e;
       }
       return 0;
     }
 
-    case E_ASNODE_INDEX: {
-      int e = compile(cc, E_GET_NODE(cc->ast, node)->val.index.base);
+    case E_AST_NODE_INDEX: {
+      int e = compile(cc, E_GET_NODE(cc->ast, node)->index.base);
       if (e < 0) return e;
 
-      e = compile(cc, E_GET_NODE(cc->ast, node)->val.index.offset);
+      e = compile(cc, E_GET_NODE(cc->ast, node)->index.offset);
       if (e < 0) return e;
 
       e_emit_instruction(cc, E_OPCODE_INDEX, E_ATTR_NONE);
       return 0;
     }
 
-    case E_ASNODE_BINARYOP: {
+    case E_AST_NODE_BINARYOP: {
       return compile_binary_op(cc, node);
     }
 
-    case E_ASNODE_IF: {
+    case E_AST_NODE_IF: {
       return compile_if_statement(cc, node);
     }
 
-    case E_ASNODE_UNARYOP: {
+    case E_AST_NODE_UNARYOP: {
       return compile_unary_op(cc, node);
     }
 
-    case E_ASNODE_WHILE: {
+    case E_AST_NODE_WHILE: {
       return compile_while_statement(cc, node);
     }
 
-    case E_ASNODE_FOR: {
+    case E_AST_NODE_FOR: {
       return compile_for_statement(cc, node);
     }
 
-    case E_ASNODE_BREAK: {
+    case E_AST_NODE_MEMBER_ACCESS: {
+      return e_compile_member_access(cc, node);
+    }
+
+    case E_AST_NODE_BREAK: {
       if (!cc->loop) {
-        cerror(E_GET_NODE(cc->ast, node)->span, "break used outside loop\n");
+        cerror(E_GET_NODE(cc->ast, node)->common.span, "break used outside loop\n");
         return -1;
       }
       e_emit_instruction(cc, E_OPCODE_JMP, E_ATTR_NONE);
       e_emit_u32(cc, cc->loop->break_label);
       return 0;
     }
-    case E_ASNODE_CONTINUE: {
+    case E_AST_NODE_CONTINUE: {
       if (!cc->loop) {
-        cerror(E_GET_NODE(cc->ast, node)->span, "continue used outside loop\n");
+        cerror(E_GET_NODE(cc->ast, node)->common.span, "continue used outside loop\n");
         return -1;
       }
       e_emit_instruction(cc, E_OPCODE_JMP, E_ATTR_NONE);
@@ -738,10 +769,10 @@ compile(struct e_compiler* cc, int node)
       break;
     }
 
-    case E_ASNODE_RETURN: {
-      if (E_GET_NODE(cc->ast, node)->val.ret.has_return_value) {
+    case E_AST_NODE_RETURN: {
+      if (E_GET_NODE(cc->ast, node)->ret.has_return_value) {
         /* Compile the return value */
-        compile(cc, E_GET_NODE(cc->ast, node)->val.ret.expr_id);
+        compile(cc, E_GET_NODE(cc->ast, node)->ret.expr_id);
 
         e_emit_instruction(cc, E_OPCODE_RETURN, E_ATTR_NONE);
         e_emit_u8(cc, true); // Specify that we're returning a value
@@ -752,15 +783,15 @@ compile(struct e_compiler* cc, int node)
       return 0;
     }
 
-    case E_ASNODE_VARIABLE: {
+    case E_AST_NODE_VARIABLE: {
       e_emit_lvalue_load(cc, e_make_value(cc->ast, node));
       return 0;
     }
 
-    case E_ASNODE_VARIABLE_DECL: {
-      const char* name        = E_GET_NODE(cc->ast, node)->val.let.name;
+    case E_AST_NODE_VARIABLE_DECL: {
+      const char* name        = E_GET_NODE(cc->ast, node)->let.name;
       u32         id          = e_hash_fnv(name, strlen(name));
-      int         initializer = E_GET_NODE(cc->ast, node)->val.let.initializer;
+      int         initializer = E_GET_NODE(cc->ast, node)->let.initializer;
 
       int    e     = 0;
       e_attr attrs = E_ATTR_NONE;
@@ -775,12 +806,12 @@ compile(struct e_compiler* cc, int node)
       return 0;
     }
 
-    case E_ASNODE_ASSIGN: {
-      int right = E_GET_NODE(cc->ast, node)->val.assign.right;
-      int left  = E_GET_NODE(cc->ast, node)->val.assign.left;
+    case E_AST_NODE_ASSIGN: {
+      int right = E_GET_NODE(cc->ast, node)->assign.right;
+      int left  = E_GET_NODE(cc->ast, node)->assign.left;
 
       if (!e_can_make_value(cc->ast, left)) {
-        e_filespan left_span = E_GET_NODE(cc->ast, left)->span;
+        e_filespan left_span = E_GET_NODE(cc->ast, left)->common.span;
         cerror(left_span, "Can not assign to left: Failed to lower to lvalue\n");
         return -1;
       }
@@ -795,10 +826,10 @@ compile(struct e_compiler* cc, int node)
       return 0;
     }
 
-    case E_ASNODE_INDEX_ASSIGN: {
-      int base  = E_GET_NODE(cc->ast, node)->val.index_assign.base;
-      int index = E_GET_NODE(cc->ast, node)->val.index_assign.offset;
-      int value = E_GET_NODE(cc->ast, node)->val.index_assign.value;
+    case E_AST_NODE_INDEX_ASSIGN: {
+      int base  = E_GET_NODE(cc->ast, node)->index_assign.base;
+      int index = E_GET_NODE(cc->ast, node)->index_assign.offset;
+      int value = E_GET_NODE(cc->ast, node)->index_assign.value;
 
       int e = compile(cc, base);
       if (e) return e;
@@ -813,10 +844,10 @@ compile(struct e_compiler* cc, int node)
       return 0;
     }
 
-    case E_ASNODE_INDEX_COMPOUND_OP: {
-      int base  = E_GET_NODE(cc->ast, node)->val.index_compound.base;
-      int index = E_GET_NODE(cc->ast, node)->val.index_compound.index;
-      int value = E_GET_NODE(cc->ast, node)->val.index_compound.value;
+    case E_AST_NODE_INDEX_COMPOUND_OP: {
+      int base  = E_GET_NODE(cc->ast, node)->index_compound.base;
+      int index = E_GET_NODE(cc->ast, node)->index_compound.index;
+      int value = E_GET_NODE(cc->ast, node)->index_compound.value;
 
       int e = compile(cc, base);
       if (e) return e;
@@ -836,7 +867,7 @@ compile(struct e_compiler* cc, int node)
         e = compile(cc, value);
         if (e) return e;
 
-        e_opcode op = e_binary_operator_to_opcode(E_GET_NODE(cc->ast, node)->val.index_compound.op);
+        e_opcode op = e_binary_operator_to_opcode(E_GET_NODE(cc->ast, node)->index_compound.op);
 
         e_emit_instruction(cc, op, E_ATTR_NONE);
       }
@@ -845,23 +876,23 @@ compile(struct e_compiler* cc, int node)
       return 0;
     }
 
-    case E_ASNODE_CALL: {
+    case E_AST_NODE_CALL: {
       return compile_function_call(cc, node);
     }
 
-    case E_ASNODE_INT:
-    case E_ASNODE_CHAR:
-    case E_ASNODE_BOOL:
-    case E_ASNODE_STRING:
-    case E_ASNODE_FLOAT:
-    case E_ASNODE_MAP: {
+    case E_AST_NODE_INT:
+    case E_AST_NODE_CHAR:
+    case E_AST_NODE_BOOL:
+    case E_AST_NODE_STRING:
+    case E_AST_NODE_FLOAT:
+    case E_AST_NODE_MAP: {
       return compile_literal(cc, node);
     }
 
-    case E_ASNODE_LIST: {
-      u32 nelems = E_GET_NODE(cc->ast, node)->val.list.nelems;
+    case E_AST_NODE_LIST: {
+      u32 nelems = E_GET_NODE(cc->ast, node)->list.nelems;
       for (u32 i = 0; i < nelems; i++) {
-        int elem_node = E_GET_NODE(cc->ast, node)->val.list.elems[i];
+        int elem_node = E_GET_NODE(cc->ast, node)->list.elems[i];
         compile(cc, elem_node);
       }
 
@@ -871,7 +902,7 @@ compile(struct e_compiler* cc, int node)
       return 0;
     }
 
-    case E_ASNODE_FUNCTION_DEFINITION: {
+    case E_AST_NODE_FUNCTION_DEFINITION: {
       return compile_function_definition(cc, node);
     }
   }
@@ -882,8 +913,8 @@ compile(struct e_compiler* cc, int node)
 int
 e_compile_function(e_compiler* cc, int node)
 {
-  u32  nstmts = E_GET_NODE(cc->ast, node)->val.func.nstmts;
-  int* stmts  = E_GET_NODE(cc->ast, node)->val.func.stmts;
+  u32  nstmts = E_GET_NODE(cc->ast, node)->func.nstmts;
+  int* stmts  = E_GET_NODE(cc->ast, node)->func.stmts;
   for (u32 i = 0; i < nstmts; i++) {
     int e = compile(cc, stmts[i]);
     if (e) return e;

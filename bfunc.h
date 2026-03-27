@@ -84,9 +84,9 @@ eb_len(e_var* args, u32 nargs)
 
   int len = 0;
   if (args[0].type == E_VARTYPE_STRING) {
-    len = (int)strlen(args[0].val.s->s);
+    len = (int)strlen(E_VAR_AS_STRING(&args[0])->s);
   } else if (args[0].type == E_VARTYPE_LIST) {
-    len = (int)args[0].val.list->size;
+    len = (int)E_VAR_AS_LIST(&args[0])->size;
   }
   return (e_var){ .type = E_VARTYPE_INT, .val = { .i = len } };
 }

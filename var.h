@@ -25,21 +25,31 @@
 #ifndef ESL_VAR_H
 #define ESL_VAR_H
 
+#include "pool.h"
 #include "refcount.h"
 #include "stdafx.h"
 
 #include <string.h>
 
+#define E_OBJ_AS_STRING(obj) ((e_string*)((obj)->data))
+#define E_OBJ_AS_LIST(obj) ((e_list*)((obj)->data))
+#define E_OBJ_AS_MAP(obj) ((e_map*)((obj)->data))
+
+#define E_VAR_AS_STRING(var) ((e_string*)((var)->val.s->data))
+#define E_VAR_AS_LIST(var) ((e_list*)((var)->val.list->data))
+#define E_VAR_AS_MAP(var) ((e_map*)((var)->val.map->data))
+
 struct e_var;
 struct e_list;
 struct e_map;
+struct e_refdobj_pool;
 
 /**
  * Bitmask to allow functions to just check
  * the masks. No variable can have more than one
  * bit set though.
  */
-typedef enum e_vartype_bits {
+typedef enum e_vartype {
   E_VARTYPE_VOID   = 1 << 0, // invalid / unset
   E_VARTYPE_INT    = 1 << 1,
   E_VARTYPE_BOOL   = 1 << 2,
@@ -49,38 +59,35 @@ typedef enum e_vartype_bits {
   E_VARTYPE_LIST   = 1 << 6,
   E_VARTYPE_MAP    = 1 << 7,
   E_VARTYPE_ERROR  = 1 << 8, // use e_error_string to get string representation of the error.
-} e_vartype_bits;
-typedef u32 e_vartype;
+} e_vartype;
+// typedef u32 e_vartype;
 
 typedef struct e_list {
-  e_refc*       refc; // Reference counter: e_var_acquire(), e_var_release()
-  u64           size;
-  u64           capacity;
   struct e_var* vars;
+  u32           size;
+  u32           capacity;
 } e_list;
 
 typedef struct e_map {
-  e_refc*       refc; // Reference counter: e_var_acquire(), e_var_release()
-  u64           size;
-  u64           capacity;
   struct e_var* keys;
   struct e_var* vals;
+  u64           size;
+  u64           capacity;
 } e_map;
 
 typedef struct e_string {
-  e_refc* refc; // Reference counter: e_var_acquire(), e_var_release()
-  char*   s;
+  char* s;
 } e_string;
 
 typedef union e_varval {
-  int              i;
-  char             c;
-  bool             b;
-  int              errcode;
-  double           f;
-  struct e_string* s;
-  struct e_list*   list;
-  struct e_map*    map;
+  int        i;
+  char       c;
+  bool       b;
+  int        errcode;
+  double     f;
+  e_refdobj* s;
+  e_refdobj* list;
+  e_refdobj* map;
 } e_varval;
 
 typedef struct e_var {
@@ -109,9 +116,10 @@ e_var_acquire(e_var* v)
 {
   e_refc* refc = nullptr;
   switch (v->type) {
-    case E_VARTYPE_MAP: refc = v->val.map->refc; break;
-    case E_VARTYPE_LIST: refc = v->val.list->refc; break;
-    case E_VARTYPE_STRING: refc = v->val.s->refc; break;
+    case E_VARTYPE_MAP: refc = &v->val.map->refc; break;
+    case E_VARTYPE_LIST: refc = &v->val.list->refc; break;
+    case E_VARTYPE_STRING: refc = &v->val.s->refc; break;
+    default: refc = nullptr; break;
   }
 
   if (refc == nullptr) return -1;
@@ -123,9 +131,10 @@ e_var_release(e_var* v)
 {
   e_refc* refc = nullptr;
   switch (v->type) {
-    case E_VARTYPE_MAP: refc = v->val.map->refc; break;
-    case E_VARTYPE_LIST: refc = v->val.list->refc; break;
-    case E_VARTYPE_STRING: refc = v->val.s->refc; break;
+    case E_VARTYPE_MAP: refc = &v->val.map->refc; break;
+    case E_VARTYPE_LIST: refc = &v->val.list->refc; break;
+    case E_VARTYPE_STRING: refc = &v->val.s->refc; break;
+    default: refc = nullptr; break;
   }
 
   if (refc == nullptr) return;
@@ -169,11 +178,11 @@ e_var_hash(const e_var* var)
     case E_VARTYPE_BOOL: return e_hash_fnv(&var->val.b, sizeof(bool));
     case E_VARTYPE_CHAR: return e_hash_fnv(&var->val.c, sizeof(char));
     case E_VARTYPE_FLOAT: return e_hash_fnv(&var->val.f, sizeof(var->val.f));
-    case E_VARTYPE_STRING: return e_hash_fnv(var->val.s->s, strlen(var->val.s->s));
-    case E_VARTYPE_LIST: return e_combine_hash((const void**)var->val.list->vars, var->val.list->size, sizeof(e_var));
+    case E_VARTYPE_STRING: return e_hash_fnv(E_VAR_AS_STRING(var)->s, strlen(E_VAR_AS_STRING(var)->s));
+    case E_VARTYPE_LIST: return e_combine_hash((const void**)E_VAR_AS_LIST(var)->vars, E_VAR_AS_LIST(var)->size, sizeof(e_var));
     case E_VARTYPE_MAP:
-      return e_combine_hash((const void**)var->val.map->keys, var->val.map->size, sizeof(e_var))
-          + 13 * e_combine_hash((const void**)var->val.map->vals, var->val.map->size, sizeof(e_var));
+      return e_combine_hash((const void**)(E_VAR_AS_MAP(var)->keys), (E_VAR_AS_MAP(var)->size), sizeof(e_var))
+          + 13 * e_combine_hash((const void**)(E_VAR_AS_MAP(var)->vals), (E_VAR_AS_MAP(var)->size), sizeof(e_var));
     default: return e_hash_fnv(&var->val, sizeof(var->val));
   }
 }
@@ -190,11 +199,11 @@ e_var_equal(const e_var* a, const e_var* b)
     case E_VARTYPE_BOOL: return a->val.b == b->val.b;
     case E_VARTYPE_CHAR: return a->val.c == b->val.c;
     case E_VARTYPE_FLOAT: return a->val.f == b->val.f;
-    case E_VARTYPE_STRING: return strcmp(a->val.s->s, b->val.s->s) == 0;
+    case E_VARTYPE_STRING: return strcmp(E_VAR_AS_STRING(a)->s, E_VAR_AS_STRING(b)->s) == 0;
     case E_VARTYPE_LIST:
-      if (a->val.list->size != b->val.list->size) return false;
-      for (size_t i = 0; i < a->val.list->size; i++) {
-        if (!e_var_equal(&a->val.list->vars[i], &b->val.list->vars[i])) return false;
+      if (E_VAR_AS_LIST(a)->size != E_VAR_AS_LIST(b)->size) return false;
+      for (size_t i = 0; i < E_VAR_AS_LIST(a)->size; i++) {
+        if (!e_var_equal(&E_VAR_AS_LIST(a)->vars[i], &E_VAR_AS_LIST(b)->vars[i])) return false;
       }
       return true;
     case E_VARTYPE_MAP:

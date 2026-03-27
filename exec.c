@@ -28,7 +28,7 @@
 #include "bfunc.h"
 #include "fn.h"
 #include "perr.h"
-#include "refcount.h"
+#include "pool.h"
 #include "rwhelp.h"
 #include "stack.h"
 #include "stdafx.h"
@@ -232,13 +232,13 @@ get_variable_from_id(e_stack* stack, u32 hash)
     u32 idx = stack->nvariables - i - 1;
     if (hash == stack->variables[idx].id) return &stack->stack[stack->variables[idx].offset_index];
   }
-  return nullptr;
+  return NULL;
 }
 
 static inline void
-assign(u32 slot, e_var* stack, e_var_offset* variables, e_var value)
+assign(const e_exec_info* info, u32 slot, e_var value)
 {
-  e_var* variable_slot = &stack[variables[slot].offset_index];
+  e_var* variable_slot = &info->stack->stack[info->stack->variables[slot].offset_index];
   e_var_release(variable_slot); // free old value in slot
 
   *variable_slot = value; // move ownership from stack top to slot
@@ -251,13 +251,13 @@ e_exec(const e_exec_info* info)
     e_var v;
     e_var_shallow_cpy(&info->args[i], &v);
 
-    // make new refc
+    // make new object
     if (v.type == E_VARTYPE_LIST) {
-      v.val.list->refc = e_refc_init();
+      v.val.list = e_refdobj_pool_acquire(&ge_pool);
     } else if (v.type == E_VARTYPE_STRING) {
-      v.val.s->refc = e_refc_init();
+      v.val.s = e_refdobj_pool_acquire(&ge_pool);
     } else if (v.type == E_VARTYPE_MAP) {
-      v.val.map->refc = e_refc_init();
+      v.val.map = e_refdobj_pool_acquire(&ge_pool);
     }
 
     e_var* slot = e_stack_push_variable(info->slots[i], info->stack);
@@ -310,17 +310,22 @@ e_exec(const e_exec_info* info)
       case E_OPCODE_MK_LIST: {
         u32 nelems = e_read_u32(&ip);
 
+        e_refdobj* obj = e_refdobj_pool_acquire(&ge_pool);
+
+        // Convert the object
+        e_list* list = (e_list*)obj->data;
+
         e_var new_list = {
           .type = E_VARTYPE_LIST,
           // e_list_init initializes refc too
-          .val.list = calloc(1, sizeof(e_list)),
+          .val.list = obj,
         };
 
         e_var* stack      = info->stack->stack;
         size_t stack_size = info->stack->size;
 
         e_var* elems = &stack[stack_size - nelems];
-        e_list_init(elems, nelems, new_list.val.list); // acquires the elements.
+        e_list_init(elems, nelems, list); // acquires the elements.
 
         // Release variables from the stack.
         for (u32 i = 0; i < nelems; i++) { e_var_release(&stack[stack_size - nelems + i]); }
@@ -375,7 +380,7 @@ e_exec(const e_exec_info* info)
         }
 
         if (attrs & E_ATTR_COMPOUND) {
-          assign(get_variable_slot(info->stack->variables, info->stack->nvariables, id), info->stack->stack, info->stack->variables, *v);
+          assign(info, get_variable_slot(info->stack->variables, info->stack->nvariables, id), *v);
           info->stack->size--; // Variable slot owns v now!
         }
 
@@ -447,7 +452,7 @@ e_exec(const e_exec_info* info)
         size_t stack_size = info->stack->size;
 
         int     idx  = to_int(stack[stack_size - 1]);
-        e_list* list = stack[stack_size - 2].type == E_VARTYPE_LIST ? stack[stack_size - 2].val.list : NULL;
+        e_list* list = stack[stack_size - 2].type == E_VARTYPE_LIST ? E_VAR_AS_LIST(&stack[stack_size - 2]) : NULL;
 
         e_stack_pop(info->stack); // pop index
         e_stack_pop(info->stack); // pop base
@@ -464,7 +469,7 @@ e_exec(const e_exec_info* info)
         u32    stack_size = info->stack->size;
 
         u32     idx  = stack[stack_size - 2].val.i;
-        e_list* list = stack[stack_size - 3].type == E_VARTYPE_LIST ? stack[stack_size - 3].val.list : NULL;
+        e_list* list = stack[stack_size - 3].type == E_VARTYPE_LIST ? E_VAR_AS_LIST(&stack[stack_size - 3]) : NULL;
 
         // Copy value and acquire it temporarily
         e_var value = stack[stack_size - 1];
@@ -476,7 +481,7 @@ e_exec(const e_exec_info* info)
 
         if (!list || idx >= list->size) {
           e_var_release(&value);
-          fprintf(stderr, "List has size %zu, but index is %zu\n", list->size, (size_t)idx);
+          fprintf(stderr, "List has size %u, but index is %u\n", list->size, idx);
           goto _RETURN;
         }
 

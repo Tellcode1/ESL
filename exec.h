@@ -26,6 +26,7 @@
 #define E_VM_H
 
 #include "fn.h"
+#include "pool.h"
 #include "stack.h"
 #include "stdafx.h"
 #include "var.h"

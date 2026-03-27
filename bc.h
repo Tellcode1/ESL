@@ -232,6 +232,12 @@ typedef enum e_opcode_bck {
   E_OPCODE_POP_VARIABLES,
 
   /**
+   * Access a member by name from a variable.
+   * Usage(noattr) MEMBER_ACCESS, Stack is Top=MemberName, Top-1 = Namespace/Struct
+   */
+  E_OPCODE_MEMBER_ACCESS,
+
+  /**
    * Exit the program with the code specified in 1st operand.
    * Usage: HALT [exit code : u32]
    */

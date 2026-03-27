@@ -214,10 +214,10 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
       }
 
       if (is_float) {
-        e_token tk = { .type = E_TOKENTYPE_FLOAT, .val.f = f, .span = SPAN };
+        e_token tk = { .type = E_TOKEN_TYPE_FLOAT, .val.f = f, .span = SPAN };
         tklist_append(&toks, &tk);
       } else {
-        e_token tk = { .type = E_TOKENTYPE_INT, .val.i = i, .span = SPAN };
+        e_token tk = { .type = E_TOKEN_TYPE_INT, .val.i = i, .span = SPAN };
         tklist_append(&toks, &tk);
       }
 
@@ -231,29 +231,31 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
       e_token tk = { 0 };
       /* TODO: Refactor. */
       if (strncmp(snap, "fn", len) == 0) {
-        tk = (e_token){ .type = E_TOKENTYPE_FN, .span = SPAN };
+        tk = (e_token){ .type = E_TOKEN_TYPE_FN, .span = SPAN };
       } else if (len == strlen("let") && strncmp(snap, "let", len) == 0) {
-        tk = (e_token){ .type = E_TOKENTYPE_LET, .span = SPAN };
+        tk = (e_token){ .type = E_TOKEN_TYPE_LET, .span = SPAN };
       } else if (len == strlen("true") && strncmp(snap, "true", len) == 0) {
-        tk = (e_token){ .type = E_TOKENTYPE_BOOL, .val.b = true, .span = SPAN };
+        tk = (e_token){ .type = E_TOKEN_TYPE_BOOL, .val.b = true, .span = SPAN };
       } else if (len == strlen("false") && strncmp(snap, "false", len) == 0) {
-        tk = (e_token){ .type = E_TOKENTYPE_BOOL, .val.b = false, .span = SPAN };
+        tk = (e_token){ .type = E_TOKEN_TYPE_BOOL, .val.b = false, .span = SPAN };
       } else if (len == strlen("if") && strncmp(snap, "if", len) == 0) {
-        tk = (e_token){ .type = E_TOKENTYPE_IF, .span = SPAN };
+        tk = (e_token){ .type = E_TOKEN_TYPE_IF, .span = SPAN };
       } else if (len == strlen("else") && strncmp(snap, "else", len) == 0) {
-        tk = (e_token){ .type = E_TOKENTYPE_ELSE, .span = SPAN };
+        tk = (e_token){ .type = E_TOKEN_TYPE_ELSE, .span = SPAN };
       } else if (len == strlen("while") && strncmp(snap, "while", len) == 0) {
-        tk = (e_token){ .type = E_TOKENTYPE_WHILE, .span = SPAN };
+        tk = (e_token){ .type = E_TOKEN_TYPE_WHILE, .span = SPAN };
       } else if (len == strlen("for") && strncmp(snap, "for", len) == 0) {
-        tk = (e_token){ .type = E_TOKENTYPE_FOR, .span = SPAN };
+        tk = (e_token){ .type = E_TOKEN_TYPE_FOR, .span = SPAN };
       } else if (len == strlen("break") && strncmp(snap, "break", len) == 0) {
-        tk = (e_token){ .type = E_TOKENTYPE_BREAK, .span = SPAN };
+        tk = (e_token){ .type = E_TOKEN_TYPE_BREAK, .span = SPAN };
       } else if (len == strlen("continue") && strncmp(snap, "continue", len) == 0) {
-        tk = (e_token){ .type = E_TOKENTYPE_CONTINUE, .span = SPAN };
+        tk = (e_token){ .type = E_TOKEN_TYPE_CONTINUE, .span = SPAN };
       } else if (len == strlen("return") && strncmp(snap, "return", len) == 0) {
-        tk = (e_token){ .type = E_TOKENTYPE_RETURN, .span = SPAN };
+        tk = (e_token){ .type = E_TOKEN_TYPE_RETURN, .span = SPAN };
+      } else if (len == strlen("namespace") && strncmp(snap, "namespace", len) == 0) {
+        tk = (e_token){ .type = E_TOKEN_TYPE_NAMESPACE, .span = SPAN };
       } else {
-        tk = (e_token){ .type = E_TOKENTYPE_IDENT, .val.ident = _strndup(snap, len), .span = SPAN };
+        tk = (e_token){ .type = E_TOKEN_TYPE_IDENT, .val.ident = _strndup(snap, len), .span = SPAN };
       }
       tklist_append(&toks, &tk);
     } else if (*s == '"') {
@@ -272,7 +274,7 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
 
       char* parsed = parse_backslash_sequences(snap, len);
 
-      e_token tk = (e_token){ .type = E_TOKENTYPE_STRING, .val.s = parsed, .span = SPAN };
+      e_token tk = (e_token){ .type = E_TOKEN_TYPE_STRING, .val.s = parsed, .span = SPAN };
       tklist_append(&toks, &tk);
 
       advance(s, line, col);
@@ -304,76 +306,77 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
 
       advance(s, line, col);
 
-      e_token tk = (e_token){ .type = E_TOKENTYPE_CHAR, .val.c = ch, .span = SPAN };
+      e_token tk = (e_token){ .type = E_TOKEN_TYPE_CHAR, .val.c = ch, .span = SPAN };
       tklist_append(&toks, &tk);
     } else {
-      const char  ch          = *s;
-      e_tokentype type        = E_TOKENTYPE_EOF;
-      bool        is_compound = false;
+      const char   ch          = *s;
+      e_token_type type        = E_TOKEN_TYPE_EOF;
+      bool         is_compound = false;
 
       if (s[1] == '=') // non compound
       {
         switch (*s) {
             // clang-format off
-          case '+': type = E_TOKENTYPE_PLUS; is_compound = true; break;
-          case '-': type = E_TOKENTYPE_MINUS; is_compound = true; break;
-          case '*': type = E_TOKENTYPE_MULTIPLY; is_compound = true; break;
-          case '/': type = E_TOKENTYPE_DIVIDE; is_compound = true; break;
-          case '%': type = E_TOKENTYPE_MOD; is_compound = true; break;
-          case '~': type = E_TOKENTYPE_BNOT; is_compound = true; break;
-          case '|': type = E_TOKENTYPE_BOR; is_compound = true; break;
-          case '^': type = E_TOKENTYPE_XOR; is_compound = true; break;
-          case '&': type = E_TOKENTYPE_BAND; is_compound = true; break;
+          case '+': type = E_TOKEN_TYPE_PLUS; is_compound = true; break;
+          case '-': type = E_TOKEN_TYPE_MINUS; is_compound = true; break;
+          case '*': type = E_TOKEN_TYPE_MULTIPLY; is_compound = true; break;
+          case '/': type = E_TOKEN_TYPE_DIVIDE; is_compound = true; break;
+          case '%': type = E_TOKEN_TYPE_MOD; is_compound = true; break;
+          case '~': type = E_TOKEN_TYPE_BNOT; is_compound = true; break;
+          case '|': type = E_TOKEN_TYPE_BOR; is_compound = true; break;
+          case '^': type = E_TOKEN_TYPE_XOR; is_compound = true; break;
+          case '&': type = E_TOKEN_TYPE_BAND; is_compound = true; break;
             // clang-format on
 
-          case '=': type = E_TOKENTYPE_DOUBLEEQUAL; break;
-          case '!': type = E_TOKENTYPE_NOTEQUAL; break;
-          case '<': type = E_TOKENTYPE_LTE; break;
-          case '>': type = E_TOKENTYPE_GTE; break;
+          case '=': type = E_TOKEN_TYPE_DOUBLEEQUAL; break;
+          case '!': type = E_TOKEN_TYPE_NOTEQUAL; break;
+          case '<': type = E_TOKEN_TYPE_LTE; break;
+          case '>': type = E_TOKEN_TYPE_GTE; break;
           default: lexerror("Unrecognized sequence or character\n"); goto err;
         }
         advance(s, line, col);
         advance(s, line, col);
       } else if (s[0] == '+' && s[1] == '+') {
-        type        = E_TOKENTYPE_PLUSPLUS;
+        type        = E_TOKEN_TYPE_PLUSPLUS;
         is_compound = true;
         advance(s, line, col);
         advance(s, line, col);
       } else if (s[0] == '-' && s[1] == '-') {
-        type        = E_TOKENTYPE_MINUSMINUS;
+        type        = E_TOKEN_TYPE_MINUSMINUS;
         is_compound = true;
         advance(s, line, col);
         advance(s, line, col);
       } else if (s[0] == '*' && s[1] == '*') {
-        type        = E_TOKENTYPE_EXPONENT;
+        type        = E_TOKEN_TYPE_EXPONENT;
         is_compound = false;
         advance(s, line, col);
         advance(s, line, col);
       } else {
         switch (*s) {
-          case '+': type = E_TOKENTYPE_PLUS; break;
-          case '-': type = E_TOKENTYPE_MINUS; break;
-          case '*': type = E_TOKENTYPE_MULTIPLY; break;
-          case '/': type = E_TOKENTYPE_DIVIDE; break;
-          case '%': type = E_TOKENTYPE_MOD; break;
-          case '=': type = E_TOKENTYPE_EQUAL; break;
-          case '~': type = E_TOKENTYPE_BNOT; break;
-          case '|': type = E_TOKENTYPE_BOR; break;
-          case '^': type = E_TOKENTYPE_XOR; break;
-          case '&': type = E_TOKENTYPE_BAND; break;
-          case '!': type = E_TOKENTYPE_NOT; break;
-          case '<': type = E_TOKENTYPE_LT; break;
-          case '>': type = E_TOKENTYPE_GT; break;
+          case '+': type = E_TOKEN_TYPE_PLUS; break;
+          case '-': type = E_TOKEN_TYPE_MINUS; break;
+          case '*': type = E_TOKEN_TYPE_MULTIPLY; break;
+          case '/': type = E_TOKEN_TYPE_DIVIDE; break;
+          case '%': type = E_TOKEN_TYPE_MOD; break;
+          case '=': type = E_TOKEN_TYPE_EQUAL; break;
+          case '~': type = E_TOKEN_TYPE_BNOT; break;
+          case '|': type = E_TOKEN_TYPE_BOR; break;
+          case '^': type = E_TOKEN_TYPE_XOR; break;
+          case '&': type = E_TOKEN_TYPE_BAND; break;
+          case '!': type = E_TOKEN_TYPE_NOT; break;
+          case '<': type = E_TOKEN_TYPE_LT; break;
+          case '>': type = E_TOKEN_TYPE_GT; break;
 
-          case ';': type = E_TOKENTYPE_SEMICOLON; break;
-          case ':': type = E_TOKENTYPE_COLON; break;
-          case ',': type = E_TOKENTYPE_COMMA; break;
-          case '{': type = E_TOKENTYPE_OPENBRACE; break;
-          case '}': type = E_TOKENTYPE_CLOSEBRACE; break;
-          case '[': type = E_TOKENTYPE_OPENBRACKET; break;
-          case ']': type = E_TOKENTYPE_CLOSEBRACKET; break;
-          case '(': type = E_TOKENTYPE_OPENPAREN; break;
-          case ')': type = E_TOKENTYPE_CLOSEPAREN; break;
+          case ';': type = E_TOKEN_TYPE_SEMICOLON; break;
+          case ':': type = E_TOKEN_TYPE_COLON; break;
+          case ',': type = E_TOKEN_TYPE_COMMA; break;
+          case '.': type = E_TOKEN_TYPE_DOT; break;
+          case '{': type = E_TOKEN_TYPE_OPENBRACE; break;
+          case '}': type = E_TOKEN_TYPE_CLOSEBRACE; break;
+          case '[': type = E_TOKEN_TYPE_OPENBRACKET; break;
+          case ']': type = E_TOKEN_TYPE_CLOSEBRACKET; break;
+          case '(': type = E_TOKEN_TYPE_OPENPAREN; break;
+          case ')': type = E_TOKEN_TYPE_CLOSEPAREN; break;
 
           default: lexerror("Unrecognized sequence or character\n"); goto err;
         }
@@ -391,7 +394,7 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
   }
 
   // e_token tk = {
-  //   .type = E_TOKENTYPE_EOF,
+  //   .type = E_TOKEN_TYPE_EOF,
   //   .span = { .file = strdup(advertised_file), .line = line, .col = col, },
   // };
   // tklist_append(&toks, &tk);
@@ -406,7 +409,7 @@ void
 e_freetoks(e_token* toks, u32 ntoks)
 {
   for (u32 i = 0; i < ntoks; i++) {
-    if (toks[i].type == E_TOKENTYPE_STRING || toks[i].type == E_TOKENTYPE_IDENT) { free(toks[i].val.s); }
+    if (toks[i].type == E_TOKEN_TYPE_STRING || toks[i].type == E_TOKEN_TYPE_IDENT) { free(toks[i].val.s); }
     free(toks[i].span.file);
   }
   free(toks);

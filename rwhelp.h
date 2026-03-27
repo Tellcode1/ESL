@@ -29,8 +29,10 @@
 #include "cc.h"
 #include "fn.h"
 #include "perr.h"
+#include "pool.h"
 #include "refcount.h"
 #include "stdafx.h"
+#include "var.h"
 
 #include <stdio.h>
 
@@ -39,7 +41,8 @@
 /**
  * Compiled binary file structure is:
  * MAGIC : u32
- * Bytes_needed : u32 // << The number of bytes required to load the whole program
+ * Bytes_needed : u32 // << The number of bytes of memory required to load the whole program
+ *                          Explanation below
  *
  * nLiterals : u32
  *
@@ -60,6 +63,13 @@
  *   arg_slots = u32[nargs]
  *   function_code : u8[code_size]
  * }
+ *
+ *
+ * We use a single allocation for the entire program to ensure the code remains fast.
+ * Thus, we rely on the compiler to provide us with the bytes of memory required to initialize
+ * the program. The value provided is a conservative estimate, and some bytes may be lost.
+ * Also, strings are ref counted. So We have to point the refc
+ * to the allocation (+offset) and initialize their refcounters to 1.
  */
 
 // clang-format off
@@ -122,16 +132,18 @@ e_file_load(FILE* f, void** root_allocation, u32* nlits, e_var** lits, u32* nfun
       u32 len = 0;
       fread(&len, sizeof(len), 1, f);
 
-      lit->val.s = (e_string*)(alloc);
-      alloc += sizeof(e_string);
+      lit->val.s = (e_refdobj*)(alloc);
+      alloc += sizeof(e_refdobj);
 
-      lit->val.s->refc = e_refc_init();
-      lit->val.s->s    = (char*)(alloc);
+      /* Initialize ref counter to 1. Not used for literals but VM expects it */
+      lit->val.s->refc.ctr = 1;
+
+      E_VAR_AS_STRING(lit)->s = (char*)(alloc);
       alloc += len + 1;
 
-      fread(lit->val.s->s, sizeof(char), len, f);
+      fread(E_VAR_AS_STRING(lit)->s, sizeof(char), len, f);
 
-      lit->val.s->s[len] = 0;
+      E_VAR_AS_STRING(lit)->s[len] = 0;
     } else {
       fread(&alits[i].val, sizeof(e_varval), 1, f);
     }
@@ -141,7 +153,6 @@ e_file_load(FILE* f, void** root_allocation, u32* nlits, e_var** lits, u32* nfun
 
   *functions = (e_function*)(alloc);
   alloc += sizeof(e_function) * (*nfunctions);
-  if (*functions == nullptr) return -1;
 
   for (u32 i = 0; i < *nfunctions; i++) {
     e_function func;
@@ -178,10 +189,10 @@ e_file_bytes_required(const e_compilation_result* r)
     const e_var* lit = &r->literals[i];
 
     if (lit->type == E_VARTYPE_STRING) {
-      u32 len = strlen(lit->val.s->s);
+      u32 len = strlen(E_VAR_AS_STRING(lit)->s);
 
-      size += sizeof(e_string); // struct
-      size += len + 1;          // nnull
+      size += sizeof(e_refdobj);
+      size += len + 1; // nnull
     }
   }
 
@@ -213,9 +224,9 @@ e_file_write(const e_compilation_result* r, FILE* f)
     fwrite(&lit->type, sizeof(e_vartype), 1, f);
 
     if (lit->type == E_VARTYPE_STRING) {
-      u32 len = strlen(lit->val.s->s);
+      u32 len = strlen(E_VAR_AS_STRING(lit)->s);
       fwrite(&len, sizeof(len), 1, f);
-      fwrite(lit->val.s->s, sizeof(char), len, f);
+      fwrite(E_VAR_AS_STRING(lit)->s, sizeof(char), len, f);
     } else {
       fwrite(&lit->val, sizeof(lit->val), 1, f);
     }
@@ -239,7 +250,7 @@ e_compilation_result_free(e_compilation_result* r)
     free(r->functions[i].arg_slots);
   }
   free(r->functions);
-  for (u32 i = 0; i < r->nliterals; i++) { e_var_release(&r->literals[i]); }
+  for (u32 i = 0; i < r->nliterals; i++) { e_var_free(&r->literals[i]); }
   free(r->literals);
 }
 

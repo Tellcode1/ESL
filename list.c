@@ -22,7 +22,6 @@
  * SOFTWARE.
  */
 
-#include "refcount.h"
 #include "var.h"
 
 #include <string.h>
@@ -36,7 +35,6 @@ e_list_init(e_var* vars, u64 nvars, struct e_list* list)
 
   u64 capacity = MAX(8, nvars);
 
-  list->refc     = e_refc_init();
   list->size     = nvars;
   list->capacity = capacity;
   list->vars     = (e_var*)malloc(sizeof(e_var) * capacity);

@@ -30,114 +30,114 @@
 #include <stdlib.h>
 
 static inline void
-e_asnode_free(e_ast* p, int nodeID)
+e_ast_node_free(e_ast* p, int nodeID)
 {
   if (nodeID < 0) return;
 
-  free(E_GET_NODE(p, nodeID)->span.file);
+  free(E_GET_NODE(p, nodeID)->common.span.file);
   switch (E_GET_NODE(p, nodeID)->type) {
-    case E_ASNODE_NOP: break;
-    case E_ASNODE_ROOT:
-      for (u32 i = 0; i < E_GET_NODE(p, nodeID)->val.root.nstmts; i++) e_asnode_free(p, E_GET_NODE(p, nodeID)->val.root.stmts[i]);
-      free(E_GET_NODE(p, nodeID)->val.root.stmts);
+    case E_AST_NODE_NOP: break;
+    case E_AST_NODE_ROOT:
+      for (u32 i = 0; i < E_GET_NODE(p, nodeID)->root.nstmts; i++) e_ast_node_free(p, E_GET_NODE(p, nodeID)->root.stmts[i]);
+      free(E_GET_NODE(p, nodeID)->root.stmts);
       break;
-    case E_ASNODE_BINARYOP:
-      e_asnode_free(p, E_GET_NODE(p, nodeID)->val.binaryop.left);
-      e_asnode_free(p, E_GET_NODE(p, nodeID)->val.binaryop.right);
+    case E_AST_NODE_BINARYOP:
+      e_ast_node_free(p, E_GET_NODE(p, nodeID)->binaryop.left);
+      e_ast_node_free(p, E_GET_NODE(p, nodeID)->binaryop.right);
       break;
-    case E_ASNODE_INDEX: {
-      e_asnode_free(p, E_GET_NODE(p, nodeID)->val.index.base);
-      e_asnode_free(p, E_GET_NODE(p, nodeID)->val.index.offset);
-      break;
-    }
-    case E_ASNODE_UNARYOP: e_asnode_free(p, E_GET_NODE(p, nodeID)->val.unaryop.right); break;
-    case E_ASNODE_EXPRESSION_LIST:
-      for (u32 i = 0; i < E_GET_NODE(p, nodeID)->val.stmts.nstmts; i++) e_asnode_free(p, E_GET_NODE(p, nodeID)->val.stmts.stmts[i]);
-      free(E_GET_NODE(p, nodeID)->val.stmts.stmts);
-      break;
-    case E_ASNODE_FOR: {
-      e_asnode_free(p, E_GET_NODE(p, nodeID)->val.for_stmt.initializers);
-      e_asnode_free(p, E_GET_NODE(p, nodeID)->val.for_stmt.condition);
-      e_asnode_free(p, E_GET_NODE(p, nodeID)->val.for_stmt.iterators);
-      for (u32 i = 0; i < E_GET_NODE(p, nodeID)->val.for_stmt.nstmts; i++) { e_asnode_free(p, E_GET_NODE(p, nodeID)->val.for_stmt.stmts[i]); }
-      free(E_GET_NODE(p, nodeID)->val.for_stmt.stmts);
+    case E_AST_NODE_INDEX: {
+      e_ast_node_free(p, E_GET_NODE(p, nodeID)->index.base);
+      e_ast_node_free(p, E_GET_NODE(p, nodeID)->index.offset);
       break;
     }
-    case E_ASNODE_WHILE:
-      for (u32 i = 0; i < E_GET_NODE(p, nodeID)->val.while_stmt.nstmts; i++) e_asnode_free(p, E_GET_NODE(p, nodeID)->val.while_stmt.stmts[i]);
-      e_asnode_free(p, E_GET_NODE(p, nodeID)->val.while_stmt.condition);
-      free(E_GET_NODE(p, nodeID)->val.while_stmt.stmts);
+    case E_AST_NODE_UNARYOP: e_ast_node_free(p, E_GET_NODE(p, nodeID)->unaryop.right); break;
+    case E_AST_NODE_EXPRESSION_LIST:
+      for (u32 i = 0; i < E_GET_NODE(p, nodeID)->stmts.nstmts; i++) e_ast_node_free(p, E_GET_NODE(p, nodeID)->stmts.stmts[i]);
+      free(E_GET_NODE(p, nodeID)->stmts.stmts);
       break;
-    case E_ASNODE_BREAK:
-    case E_ASNODE_CONTINUE: break;
-    case E_ASNODE_RETURN:
-      if (E_GET_NODE(p, nodeID)->val.ret.has_return_value) e_asnode_free(p, E_GET_NODE(p, nodeID)->val.ret.expr_id);
-      break;
-    case E_ASNODE_FUNCTION_DEFINITION: {
-      for (u32 i = 0; i < E_GET_NODE(p, nodeID)->val.func.nstmts; i++) e_asnode_free(p, E_GET_NODE(p, nodeID)->val.func.stmts[i]);
-      for (u32 i = 0; i < E_GET_NODE(p, nodeID)->val.func.nargs; i++) free(E_GET_NODE(p, nodeID)->val.func.args[i]);
-      free(E_GET_NODE(p, nodeID)->val.func.args);
-      free(E_GET_NODE(p, nodeID)->val.func.name);
-      free(E_GET_NODE(p, nodeID)->val.func.stmts);
+    case E_AST_NODE_FOR: {
+      e_ast_node_free(p, E_GET_NODE(p, nodeID)->for_stmt.initializers);
+      e_ast_node_free(p, E_GET_NODE(p, nodeID)->for_stmt.condition);
+      e_ast_node_free(p, E_GET_NODE(p, nodeID)->for_stmt.iterators);
+      for (u32 i = 0; i < E_GET_NODE(p, nodeID)->for_stmt.nstmts; i++) { e_ast_node_free(p, E_GET_NODE(p, nodeID)->for_stmt.stmts[i]); }
+      free(E_GET_NODE(p, nodeID)->for_stmt.stmts);
       break;
     }
-    case E_ASNODE_IF: {
-      e_asnode_free(p, E_GET_NODE(p, nodeID)->val.if_stmt.condition);
-      for (u32 i = 0; i < E_GET_NODE(p, nodeID)->val.if_stmt.nstmts; i++) e_asnode_free(p, E_GET_NODE(p, nodeID)->val.if_stmt.body[i]);
-      for (u32 i = 0; i < E_GET_NODE(p, nodeID)->val.if_stmt.nelse_stmts; i++) e_asnode_free(p, E_GET_NODE(p, nodeID)->val.if_stmt.else_body[i]);
-      for (u32 i = 0; i < E_GET_NODE(p, nodeID)->val.if_stmt.nelse_ifs; i++) {
-        struct e_if_stmt* else_if = &E_GET_NODE(p, nodeID)->val.if_stmt.else_ifs[i];
-        e_asnode_free(p, else_if->condition);
-        for (u32 j = 0; j < else_if->nstmts; j++) e_asnode_free(p, else_if->body[j]);
+    case E_AST_NODE_WHILE:
+      for (u32 i = 0; i < E_GET_NODE(p, nodeID)->while_stmt.nstmts; i++) e_ast_node_free(p, E_GET_NODE(p, nodeID)->while_stmt.stmts[i]);
+      e_ast_node_free(p, E_GET_NODE(p, nodeID)->while_stmt.condition);
+      free(E_GET_NODE(p, nodeID)->while_stmt.stmts);
+      break;
+    case E_AST_NODE_BREAK:
+    case E_AST_NODE_CONTINUE: break;
+    case E_AST_NODE_RETURN:
+      if (E_GET_NODE(p, nodeID)->ret.has_return_value) e_ast_node_free(p, E_GET_NODE(p, nodeID)->ret.expr_id);
+      break;
+    case E_AST_NODE_FUNCTION_DEFINITION: {
+      for (u32 i = 0; i < E_GET_NODE(p, nodeID)->func.nstmts; i++) e_ast_node_free(p, E_GET_NODE(p, nodeID)->func.stmts[i]);
+      for (u32 i = 0; i < E_GET_NODE(p, nodeID)->func.nargs; i++) free(E_GET_NODE(p, nodeID)->func.args[i]);
+      free(E_GET_NODE(p, nodeID)->func.args);
+      free(E_GET_NODE(p, nodeID)->func.name);
+      free(E_GET_NODE(p, nodeID)->func.stmts);
+      break;
+    }
+    case E_AST_NODE_IF: {
+      e_ast_node_free(p, E_GET_NODE(p, nodeID)->if_stmt.condition);
+      for (u32 i = 0; i < E_GET_NODE(p, nodeID)->if_stmt.nstmts; i++) e_ast_node_free(p, E_GET_NODE(p, nodeID)->if_stmt.body[i]);
+      for (u32 i = 0; i < E_GET_NODE(p, nodeID)->if_stmt.nelse_stmts; i++) e_ast_node_free(p, E_GET_NODE(p, nodeID)->if_stmt.else_body[i]);
+      for (u32 i = 0; i < E_GET_NODE(p, nodeID)->if_stmt.nelse_ifs; i++) {
+        struct e_if_stmt* else_if = &E_GET_NODE(p, nodeID)->if_stmt.else_ifs[i];
+        e_ast_node_free(p, else_if->condition);
+        for (u32 j = 0; j < else_if->nstmts; j++) e_ast_node_free(p, else_if->body[j]);
         free(else_if->body);
       }
-      free(E_GET_NODE(p, nodeID)->val.if_stmt.else_ifs);
-      free(E_GET_NODE(p, nodeID)->val.if_stmt.else_body);
-      free(E_GET_NODE(p, nodeID)->val.if_stmt.body);
+      free(E_GET_NODE(p, nodeID)->if_stmt.else_ifs);
+      free(E_GET_NODE(p, nodeID)->if_stmt.else_body);
+      free(E_GET_NODE(p, nodeID)->if_stmt.body);
 
       break;
     }
-    case E_ASNODE_VARIABLE: free(E_GET_NODE(p, nodeID)->val.ident); break;
+    case E_AST_NODE_VARIABLE: free(E_GET_NODE(p, nodeID)->ident.ident); break;
 
-    case E_ASNODE_VARIABLE_DECL:
-      free(E_GET_NODE(p, nodeID)->val.let.name);
-      e_asnode_free(p, E_GET_NODE(p, nodeID)->val.let.initializer);
+    case E_AST_NODE_VARIABLE_DECL:
+      free(E_GET_NODE(p, nodeID)->let.name);
+      e_ast_node_free(p, E_GET_NODE(p, nodeID)->let.initializer);
       break;
 
-    case E_ASNODE_ASSIGN:
-      e_asnode_free(p, E_GET_NODE(p, nodeID)->val.assign.left);
-      e_asnode_free(p, E_GET_NODE(p, nodeID)->val.assign.right);
+    case E_AST_NODE_ASSIGN:
+      e_ast_node_free(p, E_GET_NODE(p, nodeID)->assign.left);
+      e_ast_node_free(p, E_GET_NODE(p, nodeID)->assign.right);
       break;
 
-    case E_ASNODE_INDEX_ASSIGN:
-      e_asnode_free(p, E_GET_NODE(p, nodeID)->val.index_assign.base);
-      e_asnode_free(p, E_GET_NODE(p, nodeID)->val.index_assign.offset);
-      e_asnode_free(p, E_GET_NODE(p, nodeID)->val.index_assign.value);
+    case E_AST_NODE_INDEX_ASSIGN:
+      e_ast_node_free(p, E_GET_NODE(p, nodeID)->index_assign.base);
+      e_ast_node_free(p, E_GET_NODE(p, nodeID)->index_assign.offset);
+      e_ast_node_free(p, E_GET_NODE(p, nodeID)->index_assign.value);
       break;
 
-    case E_ASNODE_CALL:
-      free(E_GET_NODE(p, nodeID)->val.call.function);
-      for (u32 i = 0; i < E_GET_NODE(p, nodeID)->val.call.nargs; i++) e_asnode_free(p, E_GET_NODE(p, nodeID)->val.call.args[i]);
-      free(E_GET_NODE(p, nodeID)->val.call.args);
+    case E_AST_NODE_CALL:
+      free(E_GET_NODE(p, nodeID)->call.function);
+      for (u32 i = 0; i < E_GET_NODE(p, nodeID)->call.nargs; i++) e_ast_node_free(p, E_GET_NODE(p, nodeID)->call.args[i]);
+      free(E_GET_NODE(p, nodeID)->call.args);
       break;
 
-    case E_ASNODE_STRING: free(E_GET_NODE(p, nodeID)->val.s); break;
+    case E_AST_NODE_STRING: free(E_GET_NODE(p, nodeID)->s.s); break;
 
-    case E_ASNODE_LIST:
-      for (u32 i = 0; i < E_GET_NODE(p, nodeID)->val.list.nelems; i++) e_asnode_free(p, E_GET_NODE(p, nodeID)->val.list.elems[i]);
-      free(E_GET_NODE(p, nodeID)->val.list.elems);
+    case E_AST_NODE_LIST:
+      for (u32 i = 0; i < E_GET_NODE(p, nodeID)->list.nelems; i++) e_ast_node_free(p, E_GET_NODE(p, nodeID)->list.elems[i]);
+      free(E_GET_NODE(p, nodeID)->list.elems);
       break;
 
-    case E_ASNODE_INT:
-    case E_ASNODE_CHAR:
-    case E_ASNODE_BOOL:
-    case E_ASNODE_FLOAT:
-    case E_ASNODE_MAP: break;
+    case E_AST_NODE_INT:
+    case E_AST_NODE_CHAR:
+    case E_AST_NODE_BOOL:
+    case E_AST_NODE_FLOAT:
+    case E_AST_NODE_MAP: break;
 
-    case E_ASNODE_INDEX_COMPOUND_OP: {
-      e_asnode_free(p, E_GET_NODE(p, nodeID)->val.index_compound.base);
-      e_asnode_free(p, E_GET_NODE(p, nodeID)->val.index_compound.index);
-      e_asnode_free(p, E_GET_NODE(p, nodeID)->val.index_compound.value);
+    case E_AST_NODE_INDEX_COMPOUND_OP: {
+      e_ast_node_free(p, E_GET_NODE(p, nodeID)->index_compound.base);
+      e_ast_node_free(p, E_GET_NODE(p, nodeID)->index_compound.index);
+      e_ast_node_free(p, E_GET_NODE(p, nodeID)->index_compound.value);
       break;
     }
   }

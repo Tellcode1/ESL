@@ -24,7 +24,7 @@
 
 #include "var.h"
 
-#include "refcount.h"
+#include "pool.h"
 #include "stdafx.h"
 
 #include <stdio.h>
@@ -62,13 +62,11 @@ e_var_deep_cpy(const e_var* var, e_var* dst)
     case E_VARTYPE_CHAR:
     case E_VARTYPE_FLOAT: dst->val = var->val; break;
     case E_VARTYPE_STRING:
-      dst->val.s       = malloc(sizeof(e_string));
-      dst->val.s->refc = e_refc_init();
-      dst->val.s->s    = strdup(var->val.s->s);
+      dst->val.s              = e_refdobj_pool_acquire(&ge_pool);
+      E_VAR_AS_STRING(dst)->s = strdup(E_VAR_AS_STRING(var)->s);
       break;
     case E_VARTYPE_LIST: {
-      dst->val.list = malloc(sizeof(e_list));
-      return e_list_init(var->val.list->vars, var->val.list->size, dst->val.list);
+      return e_list_init(E_VAR_AS_LIST(var)->vars, E_VAR_AS_LIST(var)->size, E_VAR_AS_LIST(dst));
     }
     case E_VARTYPE_MAP:
     case E_VARTYPE_ERROR: break;
@@ -89,22 +87,22 @@ e_var_free(e_var* var)
     case E_VARTYPE_FLOAT: break;
 
     case E_VARTYPE_STRING:
-      e_refc_free(var->val.s->refc);
-      free(var->val.s->s);
-      free(var->val.s);
+      free(E_VAR_AS_STRING(var)->s);
+      e_refdobj_pool_return(&ge_pool, var->val.s);
       break;
 
     case E_VARTYPE_LIST:
-      e_refc_free(var->val.list->refc);
-      e_list_free(var->val.list);
-      free(var->val.list);
+      for (u32 i = 0; i < E_VAR_AS_LIST(var)->size; i++) { e_var_release(&E_VAR_AS_LIST(var)->vars[i]); }
+      free(E_VAR_AS_LIST(var)->vars);
+      e_refdobj_pool_return(&ge_pool, var->val.list);
       break;
 
     case E_VARTYPE_MAP:
-      e_refc_free(var->val.map->refc);
-      for (u64 i = 0; i < var->val.map->size; i++) { e_var_release(&var->val.map->keys[i]); }
-      for (u64 i = 0; i < var->val.map->size; i++) { e_var_release(&var->val.map->vals[i]); }
-      free(var->val.map);
+      for (u64 i = 0; i < E_VAR_AS_MAP(var)->size; i++) {
+        e_var_release(&E_VAR_AS_MAP(var)->keys[i]);
+        e_var_release(&E_VAR_AS_MAP(var)->vals[i]);
+      }
+      e_refdobj_pool_return(&ge_pool, var->val.map);
       break;
   }
 
@@ -121,12 +119,12 @@ e_var_print(const struct e_var* v, FILE* f)
     case E_VARTYPE_CHAR: fprintf(f, "%c", v->val.c); break;
     case E_VARTYPE_BOOL: fprintf(f, "%s", (int)v->val.b ? "true" : "false"); break;
     case E_VARTYPE_FLOAT: fprintf(f, "%g", v->val.f); break;
-    case E_VARTYPE_STRING: fprintf(f, "%s", v->val.s->s); break;
+    case E_VARTYPE_STRING: fprintf(f, "%s", E_VAR_AS_STRING(v)->s); break;
     case E_VARTYPE_LIST: {
       fputc('[', f);
-      for (u32 i = 0; i < v->val.list->size; i++) {
-        e_var_print(&v->val.list->vars[i], f);
-        if (i < v->val.list->size - 1) { fputs(", ", f); }
+      for (u32 i = 0; i < E_VAR_AS_LIST(v)->size; i++) {
+        e_var_print(&E_VAR_AS_LIST(v)->vars[i], f);
+        if (i < E_VAR_AS_LIST(v)->size - 1) { fputs(", ", f); }
       }
       fputc(']', f);
       break;
@@ -148,19 +146,23 @@ e_var_to_string(const struct e_var* v, char* buffer, size_t buffer_size)
     case E_VARTYPE_CHAR: snprintf(buffer, buffer_size, "%c", v->val.c); break;
     case E_VARTYPE_BOOL: snprintf(buffer, buffer_size, "%s", (int)v->val.b ? "true" : "false"); break;
     case E_VARTYPE_FLOAT: snprintf(buffer, buffer_size, "%g", v->val.f); break;
-    case E_VARTYPE_STRING: snprintf(buffer, buffer_size, "%s", v->val.s->s); break;
+    case E_VARTYPE_STRING: snprintf(buffer, buffer_size, "%s", E_VAR_AS_STRING(v)->s); break;
     case E_VARTYPE_LIST: {
       strlcpy(buffer, "[", buffer_size);
 
-      for (u32 i = 0; i < v->val.list->size; i++) {
-        size_t size = e_var_to_string_size(v);
+      size_t offset = strlen(buffer);
 
-        char tmp[size + 1];
-        e_var_to_string(v, tmp, size + 1);
-        strlcat(buffer, tmp, buffer_size);
+      for (u32 i = 0; i < E_VAR_AS_LIST(v)->size; i++) {
+        e_var_to_string(&E_VAR_AS_LIST(v)->vars[i], buffer + offset, buffer_size - offset);
 
-        if (i < v->val.list->size - 1) { strlcat(buffer, ", ", buffer_size); }
+        offset = strlen(buffer);
+
+        if (i < E_VAR_AS_LIST(v)->size - 1) {
+          strlcat(buffer, ", ", buffer_size);
+          offset = strlen(buffer);
+        }
       }
+
       strlcat(buffer, "]", buffer_size);
 
       break;
@@ -183,12 +185,12 @@ e_var_to_string_size(const struct e_var* v)
     case E_VARTYPE_CHAR: total += snprintf(nullptr, 0, "%c", v->val.c); break;
     case E_VARTYPE_BOOL: return strlen((int)v->val.b ? "true" : "false"); break;
     case E_VARTYPE_FLOAT: total += snprintf(nullptr, 0, "%g", v->val.f); break;
-    case E_VARTYPE_STRING: total += strlen(v->val.s->s); break;
+    case E_VARTYPE_STRING: total += strlen(E_VAR_AS_STRING(v)->s); break;
     case E_VARTYPE_LIST: {
       total += 1;
-      for (u32 i = 0; i < v->val.list->size; i++) {
-        total += e_var_to_string_size(&v->val.list->vars[i]);
-        if (i < v->val.list->size - 1) { total += 2; } // ", "
+      for (u32 i = 0; i < E_VAR_AS_LIST(v)->size; i++) {
+        total += e_var_to_string_size(&E_VAR_AS_LIST(v)->vars[i]);
+        if (i < E_VAR_AS_LIST(v)->size - 1) { total += 2; } // ", "
       }
       total += 1;
       break;

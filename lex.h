@@ -27,66 +27,68 @@
 
 #include "cerr.h"
 
-typedef enum e_tokentype {
-  E_TOKENTYPE_EOF,
+typedef enum e_token_type {
+  E_TOKEN_TYPE_EOF,
 
-  E_TOKENTYPE_SEMICOLON,
-  E_TOKENTYPE_COLON,
-  E_TOKENTYPE_COMMA,
-  E_TOKENTYPE_OPENBRACE,
-  E_TOKENTYPE_CLOSEBRACE,
-  E_TOKENTYPE_OPENBRACKET,
-  E_TOKENTYPE_CLOSEBRACKET,
-  E_TOKENTYPE_OPENPAREN,
-  E_TOKENTYPE_CLOSEPAREN,
+  E_TOKEN_TYPE_SEMICOLON,
+  E_TOKEN_TYPE_COLON,
+  E_TOKEN_TYPE_COMMA,
+  E_TOKEN_TYPE_DOT,
+  E_TOKEN_TYPE_OPENBRACE,
+  E_TOKEN_TYPE_CLOSEBRACE,
+  E_TOKEN_TYPE_OPENBRACKET,
+  E_TOKEN_TYPE_CLOSEBRACKET,
+  E_TOKEN_TYPE_OPENPAREN,
+  E_TOKEN_TYPE_CLOSEPAREN,
 
-  E_TOKENTYPE_INT,
-  E_TOKENTYPE_CHAR,
-  E_TOKENTYPE_BOOL,
-  E_TOKENTYPE_FLOAT,
-  E_TOKENTYPE_STRING,
+  E_TOKEN_TYPE_INT,
+  E_TOKEN_TYPE_CHAR,
+  E_TOKEN_TYPE_BOOL,
+  E_TOKEN_TYPE_FLOAT,
+  E_TOKEN_TYPE_STRING,
 
-  E_TOKENTYPE_FN,  // fn keyword for functions, no value
-  E_TOKENTYPE_LET, // let keyword for variable declerations, no value.
-  E_TOKENTYPE_IF,
-  E_TOKENTYPE_ELSE,
-  E_TOKENTYPE_WHILE,
-  E_TOKENTYPE_FOR,
-  E_TOKENTYPE_BREAK,
-  E_TOKENTYPE_CONTINUE,
-  E_TOKENTYPE_RETURN,
+  E_TOKEN_TYPE_FN,  // fn keyword for functions, no value
+  E_TOKEN_TYPE_LET, // let keyword for variable declerations, no value.
+  E_TOKEN_TYPE_IF,
+  E_TOKEN_TYPE_ELSE,
+  E_TOKEN_TYPE_WHILE,
+  E_TOKEN_TYPE_FOR,
+  E_TOKEN_TYPE_BREAK,
+  E_TOKEN_TYPE_CONTINUE,
+  E_TOKEN_TYPE_RETURN,
+  E_TOKEN_TYPE_NAMESPACE,
 
-  E_TOKENTYPE_PLUS,       // +
-  E_TOKENTYPE_MINUS,      // -
-  E_TOKENTYPE_MULTIPLY,   // *
-  E_TOKENTYPE_DIVIDE,     // /
-  E_TOKENTYPE_EXPONENT,   // ^
-  E_TOKENTYPE_MOD,        // %
-  E_TOKENTYPE_PLUSPLUS,   // ++
-  E_TOKENTYPE_MINUSMINUS, // --
+  E_TOKEN_TYPE_PLUS,       // +
+  E_TOKEN_TYPE_MINUS,      // -
+  E_TOKEN_TYPE_MULTIPLY,   // *
+  E_TOKEN_TYPE_DIVIDE,     // /
+  E_TOKEN_TYPE_EXPONENT,   // ^
+  E_TOKEN_TYPE_MOD,        // %
+  E_TOKEN_TYPE_PLUSPLUS,   // ++
+  E_TOKEN_TYPE_MINUSMINUS, // --
 
-  E_TOKENTYPE_AND, // &&
-  E_TOKENTYPE_OR,  // ||
-  E_TOKENTYPE_NOT, // !
+  E_TOKEN_TYPE_AND, // &&
+  E_TOKEN_TYPE_OR,  // ||
+  E_TOKEN_TYPE_NOT, // !
 
-  E_TOKENTYPE_BAND, // &
-  E_TOKENTYPE_BOR,  // |
-  E_TOKENTYPE_XOR,  // ^
-  E_TOKENTYPE_BNOT, // ~
+  E_TOKEN_TYPE_BAND, // &
+  E_TOKEN_TYPE_BOR,  // |
+  E_TOKEN_TYPE_XOR,  // ^
+  E_TOKEN_TYPE_BNOT, // ~
 
-  E_TOKENTYPE_EQUAL,
-  E_TOKENTYPE_NOTEQUAL,
-  E_TOKENTYPE_DOUBLEEQUAL,
+  E_TOKEN_TYPE_EQUAL,
+  E_TOKEN_TYPE_NOTEQUAL,
+  E_TOKEN_TYPE_DOUBLEEQUAL,
 
-  E_TOKENTYPE_LT,
-  E_TOKENTYPE_LTE,
-  E_TOKENTYPE_GT,
-  E_TOKENTYPE_GTE,
+  E_TOKEN_TYPE_LT,
+  E_TOKEN_TYPE_LTE,
+  E_TOKEN_TYPE_GT,
+  E_TOKEN_TYPE_GTE,
 
-  E_TOKENTYPE_IDENT, // identifier/name
-} e_tokentype;
+  E_TOKEN_TYPE_IDENT, // identifier/name
+} e_token_type;
 
-typedef union e_tokenval {
+typedef union e_token_val {
   int    i;
   char   c;
   bool   b;
@@ -97,12 +99,12 @@ typedef union e_tokenval {
     char c;
     bool is_compound;
   } op;
-} e_tokenval;
+} e_token_val;
 
 typedef struct e_token {
-  e_tokentype type;
-  e_tokenval  val;
-  e_filespan  span; // The token owns this span
+  e_token_type type;
+  e_token_val  val;
+  e_filespan   span; // The token owns this span
 } e_token;
 
 /**
@@ -115,51 +117,51 @@ int e_tokenize(const char* input, const char* advertised_file, e_token** outtoks
 void e_freetoks(e_token* toks, u32 ntoks);
 
 static inline const char*
-e_tokentype_to_string(e_tokentype e)
+e_token_type_to_string(e_token_type e)
 {
   switch (e) {
-    case E_TOKENTYPE_EOF: return "EOF";
-    case E_TOKENTYPE_SEMICOLON: return "SEMICOLON";
-    case E_TOKENTYPE_COLON: return "COLON";
-    case E_TOKENTYPE_COMMA: return "COMMA";
-    case E_TOKENTYPE_INT: return "INT";
-    case E_TOKENTYPE_FLOAT: return "FLOAT";
-    case E_TOKENTYPE_STRING: return "STRING";
-    case E_TOKENTYPE_FN: return "FN";
-    case E_TOKENTYPE_LET: return "LET";
-    case E_TOKENTYPE_PLUS: return "PLUS";
-    case E_TOKENTYPE_MINUS: return "MINUS";
-    case E_TOKENTYPE_MULTIPLY: return "MULTIPLY";
-    case E_TOKENTYPE_DIVIDE: return "DIVIDE";
-    case E_TOKENTYPE_EXPONENT: return "EXPONENT";
-    case E_TOKENTYPE_MOD: return "MOD";
-    case E_TOKENTYPE_AND: return "AND";
-    case E_TOKENTYPE_OR: return "OR";
-    case E_TOKENTYPE_EQUAL: return "EQUAL";
-    case E_TOKENTYPE_DOUBLEEQUAL: return "DOUBLEEQUAL";
-    case E_TOKENTYPE_IDENT: return "IDENT";
-    case E_TOKENTYPE_OPENBRACE: return "OPENBRACE";
-    case E_TOKENTYPE_CLOSEBRACE: return "CLOSEBRACE";
-    case E_TOKENTYPE_OPENPAREN: return "OPENPAREN";
-    case E_TOKENTYPE_CLOSEPAREN: return "CLOSEPAREN";
-    case E_TOKENTYPE_CHAR: return "CHAR";
-    case E_TOKENTYPE_BOOL: return "BOOL";
-    case E_TOKENTYPE_IF: return "IF";
-    case E_TOKENTYPE_ELSE: return "ELSE";
-    case E_TOKENTYPE_WHILE: return "WHILE";
-    case E_TOKENTYPE_FOR: return "FOR";
-    case E_TOKENTYPE_BREAK: return "BREAK";
-    case E_TOKENTYPE_CONTINUE: return "CONTINUE";
-    case E_TOKENTYPE_RETURN: return "RETURN";
-    case E_TOKENTYPE_PLUSPLUS: return "PLUSPLUS";
-    case E_TOKENTYPE_MINUSMINUS: return "MINUSMINUS";
-    case E_TOKENTYPE_NOT: return "NOT";
-    case E_TOKENTYPE_BNOT: return "BNOT";
-    case E_TOKENTYPE_NOTEQUAL: return "NOTEQUAL";
-    case E_TOKENTYPE_LT: return "LT";
-    case E_TOKENTYPE_LTE: return "LTE";
-    case E_TOKENTYPE_GT: return "GT";
-    case E_TOKENTYPE_GTE: return "GTE";
+    case E_TOKEN_TYPE_EOF: return "EOF";
+    case E_TOKEN_TYPE_SEMICOLON: return "SEMICOLON";
+    case E_TOKEN_TYPE_COLON: return "COLON";
+    case E_TOKEN_TYPE_COMMA: return "COMMA";
+    case E_TOKEN_TYPE_INT: return "INT";
+    case E_TOKEN_TYPE_FLOAT: return "FLOAT";
+    case E_TOKEN_TYPE_STRING: return "STRING";
+    case E_TOKEN_TYPE_FN: return "FN";
+    case E_TOKEN_TYPE_LET: return "LET";
+    case E_TOKEN_TYPE_PLUS: return "PLUS";
+    case E_TOKEN_TYPE_MINUS: return "MINUS";
+    case E_TOKEN_TYPE_MULTIPLY: return "MULTIPLY";
+    case E_TOKEN_TYPE_DIVIDE: return "DIVIDE";
+    case E_TOKEN_TYPE_EXPONENT: return "EXPONENT";
+    case E_TOKEN_TYPE_MOD: return "MOD";
+    case E_TOKEN_TYPE_AND: return "AND";
+    case E_TOKEN_TYPE_OR: return "OR";
+    case E_TOKEN_TYPE_EQUAL: return "EQUAL";
+    case E_TOKEN_TYPE_DOUBLEEQUAL: return "DOUBLEEQUAL";
+    case E_TOKEN_TYPE_IDENT: return "IDENT";
+    case E_TOKEN_TYPE_OPENBRACE: return "OPENBRACE";
+    case E_TOKEN_TYPE_CLOSEBRACE: return "CLOSEBRACE";
+    case E_TOKEN_TYPE_OPENPAREN: return "OPENPAREN";
+    case E_TOKEN_TYPE_CLOSEPAREN: return "CLOSEPAREN";
+    case E_TOKEN_TYPE_CHAR: return "CHAR";
+    case E_TOKEN_TYPE_BOOL: return "BOOL";
+    case E_TOKEN_TYPE_IF: return "IF";
+    case E_TOKEN_TYPE_ELSE: return "ELSE";
+    case E_TOKEN_TYPE_WHILE: return "WHILE";
+    case E_TOKEN_TYPE_FOR: return "FOR";
+    case E_TOKEN_TYPE_BREAK: return "BREAK";
+    case E_TOKEN_TYPE_CONTINUE: return "CONTINUE";
+    case E_TOKEN_TYPE_RETURN: return "RETURN";
+    case E_TOKEN_TYPE_PLUSPLUS: return "PLUSPLUS";
+    case E_TOKEN_TYPE_MINUSMINUS: return "MINUSMINUS";
+    case E_TOKEN_TYPE_NOT: return "NOT";
+    case E_TOKEN_TYPE_BNOT: return "BNOT";
+    case E_TOKEN_TYPE_NOTEQUAL: return "NOTEQUAL";
+    case E_TOKEN_TYPE_LT: return "LT";
+    case E_TOKEN_TYPE_LTE: return "LTE";
+    case E_TOKEN_TYPE_GT: return "GT";
+    case E_TOKEN_TYPE_GTE: return "GTE";
     default: return "UNKNOWN";
   }
 }

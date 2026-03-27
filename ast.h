@@ -31,40 +31,43 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-typedef enum e_asnodetype {
-  E_ASNODE_NOP,
+typedef enum e_ast_nodetype {
+  E_AST_NODE_NOP,
 
-  E_ASNODE_ROOT,
-  E_ASNODE_BINARYOP,
-  E_ASNODE_UNARYOP,
-  E_ASNODE_EXPRESSION_LIST,
+  E_AST_NODE_ROOT,
+  E_AST_NODE_BINARYOP,
+  E_AST_NODE_UNARYOP,
+  E_AST_NODE_EXPRESSION_LIST,
 
-  E_ASNODE_FOR,
-  E_ASNODE_WHILE,
-  E_ASNODE_BREAK,
-  E_ASNODE_CONTINUE,
-  E_ASNODE_RETURN,
-  E_ASNODE_IF,
-  E_ASNODE_FUNCTION_DEFINITION,
+  E_AST_NODE_FOR,
+  E_AST_NODE_WHILE,
+  E_AST_NODE_BREAK,
+  E_AST_NODE_CONTINUE,
+  E_AST_NODE_RETURN,
+  E_AST_NODE_IF,
+  E_AST_NODE_FUNCTION_DEFINITION,
 
-  E_ASNODE_VARIABLE,
+  E_AST_NODE_VARIABLE,
 
   // let <name> [ : type] [ = initializer];
-  E_ASNODE_VARIABLE_DECL,
-  E_ASNODE_ASSIGN,
-  E_ASNODE_INDEX,
-  E_ASNODE_INDEX_ASSIGN,      // Assign to member
-  E_ASNODE_INDEX_COMPOUND_OP, // Assign to member, using a compound operator (unary/binary)
+  E_AST_NODE_VARIABLE_DECL,
+  E_AST_NODE_ASSIGN,
+  E_AST_NODE_INDEX,
+  E_AST_NODE_INDEX_ASSIGN,      // Assign to member
+  E_AST_NODE_INDEX_COMPOUND_OP, // Assign to member, using a compound operator (unary/binary)
 
-  E_ASNODE_CALL,
-  E_ASNODE_INT,
-  E_ASNODE_CHAR,
-  E_ASNODE_BOOL,
-  E_ASNODE_STRING,
-  E_ASNODE_FLOAT,
-  E_ASNODE_LIST,
-  E_ASNODE_MAP,
-} e_asnode_type;
+  // x.y
+  E_AST_NODE_MEMBER_ACCESS,
+
+  E_AST_NODE_CALL,
+  E_AST_NODE_INT,
+  E_AST_NODE_CHAR,
+  E_AST_NODE_BOOL,
+  E_AST_NODE_STRING,
+  E_AST_NODE_FLOAT,
+  E_AST_NODE_LIST,
+  E_AST_NODE_MAP,
+} e_ast_node_type;
 
 typedef enum e_operator {
   E_OPERATOR_ADD,
@@ -103,6 +106,9 @@ typedef enum e_if_level {
 } e_if_level;
 
 typedef struct e_if_stmt {
+  e_ast_node_type type;
+  e_filespan      span;
+
   int*              body;
   int*              else_body; // NULL for no else statement
   struct e_if_stmt* else_ifs;  // Allocated, free after compilation.
@@ -113,20 +119,67 @@ typedef struct e_if_stmt {
   u32 nelse_ifs;
 } e_if_stmt;
 
-typedef union e_asnode_val {
-  int    i;
-  bool   b;
-  char   c;
-  double f;
-  char*  s;
-  char*  ident;
+/**
+ * A tagged union similar to SDL_Event.
+ * Structured this way to lessen the node->as.<typedata> to
+ * node-><typedata>.
+ * By placing the common fields in the same location in every union,
+ * We guarantee they'll be in the same memory address everytime.
+ * It's standard.
+ */
+typedef union e_ast_node_val {
+  e_ast_node_type type;
+  struct {
+    e_ast_node_type type;
+    e_filespan      span;
+  } common;
 
   struct {
-    char* name;
-    int   initializer; // -1 if not given.
+    e_ast_node_type type;
+    e_filespan      span;
+    int             i;
+  } i;
+
+  struct {
+    e_ast_node_type type;
+    e_filespan      span;
+    bool            b;
+  } b;
+
+  struct {
+    e_ast_node_type type;
+    e_filespan      span;
+    char            c;
+  } c;
+
+  struct {
+    e_ast_node_type type;
+    e_filespan      span;
+    double          f;
+  } f;
+
+  struct {
+    e_ast_node_type type;
+    e_filespan      span;
+    char*           s;
+  } s;
+
+  struct {
+    e_ast_node_type type;
+    e_filespan      span;
+    char*           ident;
+  } ident;
+
+  struct {
+    e_ast_node_type type;
+    e_filespan      span;
+    char*           name;
+    int             initializer; // -1 if not given.
   } let;
 
   struct {
+    e_ast_node_type type;
+    e_filespan      span;
     // Node ID of the expression
     int expr_id;
     // If false, expr_id is < 0 and function must return void.
@@ -134,102 +187,133 @@ typedef union e_asnode_val {
   } ret;
 
   struct {
-    int* elems;
-    u32  nelems;
+    e_ast_node_type type;
+    e_filespan      span;
+    int*            elems;
+    u32             nelems;
   } list;
 
   struct {
-    int* kvpairs;
-    u32  npairs;
+    e_ast_node_type type;
+    e_filespan      span;
+    int*            kvpairs;
+    u32             npairs;
   } map;
 
   struct {
-    int        left; // index of left
-    int        right;
-    e_operator op;
-    bool       is_compound;
+    e_ast_node_type type;
+    e_filespan      span;
+    int             left; // index of left
+    int             right;
+    e_operator      op;
+    bool            is_compound;
   } binaryop;
 
   struct {
-    int left;
-    int right;
+    e_ast_node_type type;
+    e_filespan      span;
+    int             left;
+    int             right;
   } assign;
 
   struct {
-    int base;
-    int offset;
+    e_ast_node_type type;
+    e_filespan      span;
+    int             base;
+    int             offset;
   } index;
 
   struct {
-    int base;   // list/structure
-    int offset; // index: integer
-    int value;  // any value.
+    e_ast_node_type type;
+    e_filespan      span;
+    int             base;   // list/structure
+    int             offset; // index: integer
+    int             value;  // any value.
   } index_assign;
 
   struct {
-    int        base;  // list/structure
-    int        index; // index: integer
-    int        value; // any value.
-    e_operator op;
+    e_ast_node_type type;
+    e_filespan      span;
+    int             base;  // list/structure
+    int             index; // index: integer
+    int             value; // any value.
+    e_operator      op;
   } index_compound;
 
   struct {
-    int        right; // index of right
-    e_operator op;
-    bool       is_compound;
+    e_ast_node_type type;
+    e_filespan      span;
+    int             right; // index of right
+    e_operator      op;
+    bool            is_compound;
   } unaryop;
 
   struct {
-    int* stmts;
-    u32  nstmts;
+    e_ast_node_type type;
+    e_filespan      span;
+    int*            stmts;
+    u32             nstmts;
   } stmts, root;
 
   struct {
-    int left;
-    int value;
+    e_ast_node_type type;
+    e_filespan      span;
+    int             left;
+    int             value;
   } member_assign;
 
   struct {
-    char* function;
-    int*  args;
-    u32   nargs;
+    e_ast_node_type type;
+    e_filespan      span;
+    int             left;
+    char*           right;
+  } member_access;
+
+  struct {
+    e_ast_node_type type;
+    e_filespan      span;
+    char*           function;
+    int*            args;
+    u32             nargs;
   } call;
 
   struct {
-    char*  name;
-    char** args;  // Allocated, + each string is allocated individually.
-    int*   stmts; // Function body
-    u32    nargs;
-    u32    nstmts;
+    e_ast_node_type type;
+    e_filespan      span;
+    char*           name;
+    char**          args;  // Allocated, + each string is allocated individually.
+    int*            stmts; // Function body
+    u32             nargs;
+    u32             nstmts;
   } func;
 
   struct {
-    int  condition;
-    int* stmts;
-    u32  nstmts;
+    e_ast_node_type type;
+    e_filespan      span;
+    int             condition;
+    int*            stmts;
+    u32             nstmts;
   } while_stmt;
 
   struct {
-    int  initializers; // for (<let x = 0>;
-    int  condition;    // x >= 0;
-    int  iterators;    // x++)
-    u32  nstmts;
-    int* stmts;
+    e_ast_node_type type;
+    e_filespan      span;
+    int             initializers; // for (<let x = 0>;
+    int             condition;    // x >= 0;
+    int             iterators;    // x++)
+    u32             nstmts;
+    int*            stmts;
   } for_stmt;
 
   e_if_stmt if_stmt;
-} e_asnode_val;
+} e_ast_node_val;
 
-typedef struct e_asnode {
-  e_asnode_type type;
-  e_asnode_val  val;
-  e_filespan    span;
-} e_asnode;
+typedef e_ast_node_val e_ast_node;
 
 typedef struct e_ast {
-  e_asnode* nodes;
-  u32       nnodes;
-  u32       capacity;
+  e_ast_node* nodes;
+  u32         nnodes;
+  u32         capacity;
 
   e_token* toks;
   u32      ntoks;
@@ -253,65 +337,65 @@ e_ast_peek(const struct e_ast* prsr)
 }
 
 static inline bool
-e_getbp(e_tokentype type, int* left, int* right)
+e_getbp(e_token_type type, int* left, int* right)
 {
   switch (type) {
-    case E_TOKENTYPE_EQUAL:
+    case E_TOKEN_TYPE_EQUAL:
       *left  = 10;
       *right = 9;
       break;
 
-    case E_TOKENTYPE_OR:
+    case E_TOKEN_TYPE_OR:
       *left  = 20;
       *right = 21;
       break;
-    case E_TOKENTYPE_AND:
+    case E_TOKEN_TYPE_AND:
       *left  = 30;
       *right = 31;
       break;
-    case E_TOKENTYPE_NOT:
+    case E_TOKEN_TYPE_NOT:
       *left  = 0;
       *right = 9;
       break;
 
     // bitwise
-    case E_TOKENTYPE_BOR: // |
+    case E_TOKEN_TYPE_BOR: // |
       *left  = 32;
       *right = 33;
       break;
-    case E_TOKENTYPE_XOR: // ^
+    case E_TOKEN_TYPE_XOR: // ^
       *left  = 34;
       *right = 35;
       break;
-    case E_TOKENTYPE_BAND: // &
+    case E_TOKEN_TYPE_BAND: // &
       *left  = 36;
       *right = 37;
       break;
 
     // compares
-    case E_TOKENTYPE_GT:
-    case E_TOKENTYPE_LT:
-    case E_TOKENTYPE_GTE:
-    case E_TOKENTYPE_LTE:
-    case E_TOKENTYPE_DOUBLEEQUAL:
-    case E_TOKENTYPE_NOTEQUAL:
+    case E_TOKEN_TYPE_GT:
+    case E_TOKEN_TYPE_LT:
+    case E_TOKEN_TYPE_GTE:
+    case E_TOKEN_TYPE_LTE:
+    case E_TOKEN_TYPE_DOUBLEEQUAL:
+    case E_TOKEN_TYPE_NOTEQUAL:
       *left  = 40;
       *right = 41;
       break;
 
-    case E_TOKENTYPE_PLUS:
-    case E_TOKENTYPE_MINUS:
+    case E_TOKEN_TYPE_PLUS:
+    case E_TOKEN_TYPE_MINUS:
       *left  = 50;
       *right = 51;
       break;
-    case E_TOKENTYPE_MULTIPLY:
-    case E_TOKENTYPE_DIVIDE:
-    case E_TOKENTYPE_MOD:
+    case E_TOKEN_TYPE_MULTIPLY:
+    case E_TOKEN_TYPE_DIVIDE:
+    case E_TOKEN_TYPE_MOD:
       *left  = 60;
       *right = 61;
       break;
 
-    case E_TOKENTYPE_BNOT: // ~
+    case E_TOKEN_TYPE_BNOT: // ~
       *left  = 0;
       *right = 65;
       break;
@@ -322,19 +406,19 @@ e_getbp(e_tokentype type, int* left, int* right)
       //   *right = 69;
       //   break;
 
-    case E_TOKENTYPE_OPENPAREN:
+    case E_TOKEN_TYPE_OPENPAREN:
       *left  = 90;
       *right = 100;
       break;
 
-    case E_TOKENTYPE_OPENBRACE:
-    case E_TOKENTYPE_OPENBRACKET:
+    case E_TOKEN_TYPE_OPENBRACE:
+    case E_TOKEN_TYPE_OPENBRACKET:
       *left  = 100;
       *right = 99;
       break;
 
-    case E_TOKENTYPE_PLUSPLUS:
-    case E_TOKENTYPE_MINUSMINUS:
+    case E_TOKEN_TYPE_PLUSPLUS:
+    case E_TOKEN_TYPE_MINUSMINUS:
       *left  = 80; // postfix only!!
       *right = 0;
       break;
@@ -348,8 +432,8 @@ static inline int
 e_ast_make_node(e_ast* p)
 {
   if (p->nnodes + 1 >= p->capacity) {
-    u32       newcap   = MAX(p->capacity * 2, 1);
-    e_asnode* newnodes = (e_asnode*)realloc(p->nodes, newcap * sizeof(e_asnode));
+    u32         newcap   = MAX(p->capacity * 2, 1);
+    e_ast_node* newnodes = (e_ast_node*)realloc(p->nodes, newcap * sizeof(e_ast_node));
     if (newnodes == NULL) {
       perror("Allocation failed");
       return -1;
@@ -360,13 +444,13 @@ e_ast_make_node(e_ast* p)
   }
 
   u32 idx = p->nnodes++;
-  memset(&p->nodes[idx], 0, sizeof(e_asnode));
+  memset(&p->nodes[idx], 0, sizeof(e_ast_node));
 
   return (int)idx;
 }
 
 #define E_GET_NODE e_ast_get_node
-static inline e_asnode*
+static inline e_ast_node*
 e_ast_get_node(const e_ast* p, int idx)
 {
   if (idx < 0) return NULL;
@@ -374,14 +458,14 @@ e_ast_get_node(const e_ast* p, int idx)
 }
 
 static inline bool
-e_ast_is_limiter_exempt(e_asnode_type t)
-{ return t == E_ASNODE_IF || t == E_ASNODE_WHILE || t == E_ASNODE_FOR || t == E_ASNODE_FUNCTION_DEFINITION || t == E_ASNODE_EXPRESSION_LIST; }
+e_ast_is_limiter_exempt(e_ast_node_type t)
+{ return t == E_AST_NODE_IF || t == E_AST_NODE_WHILE || t == E_AST_NODE_FOR || t == E_AST_NODE_FUNCTION_DEFINITION || t == E_AST_NODE_EXPRESSION_LIST; }
 
 int e_ast_parse(e_ast* p, int* root_nodeID);
 int e_ast_nud(e_ast* p, e_token* token);
 int e_ast_expr(e_ast* p, int rbp);
 int e_ast_led(e_ast* p, e_token* token, int leftidx, int rbp);
 
-int e_ast_expect(e_ast* p, e_tokentype type);
+int e_ast_expect(e_ast* p, e_token_type type);
 
 #endif // E_AST_H
