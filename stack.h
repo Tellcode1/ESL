@@ -33,28 +33,46 @@
 #include <stddef.h>
 #include <stdlib.h>
 
+/**
+ * Stack frame.
+ * Stack will automatically release
+ * the variables on frame pop.
+ */
 typedef struct e_stack_frame {
   u32 variable_offset;
   u32 stack_size;
 } e_stack_frame;
 
+/**
+ * The position of a variable in the stack.
+ *
+ * Initializing a variable pushes an entry
+ * in to the variables array of the stack.
+ *
+ * There can be multiple entries with the same
+ * ID! This is how we allow overshadowing of variables.
+ */
 typedef struct e_var_offset {
-  u32 offset_index;
   u32 id; /* Hashed name */
-} e_var_offset;
+  u32 offset_index;
+  u32 depth;
+} e_var_entry;
 
+/**
+ * Stack.
+ */
 typedef struct e_stack {
   u32    size;
   u32    capacity;
   e_var* stack;
 
-  u32            depth;
+  u32            depth; // nframes
   u32            frame_capacity;
   e_stack_frame* frames;
 
-  u32           nvariables;
-  u32           variable_capacity;
-  e_var_offset* variables;
+  u32          nvariables;
+  u32          variable_capacity;
+  e_var_entry* variables;
 } e_stack;
 
 static inline int
@@ -73,7 +91,7 @@ e_stack_init(u32 capacity, u32 frame_capacity, u32 variable_capacity, e_stack* s
 
   stack->variable_capacity = variable_capacity;
   stack->nvariables        = 0;
-  stack->variables         = (e_var_offset*)malloc(sizeof(e_var_offset) * variable_capacity);
+  stack->variables         = (e_var_entry*)malloc(sizeof(e_var_entry) * variable_capacity);
   if (stack->variables == nullptr) return E_EMALLOC;
 
   return 0;
@@ -97,10 +115,11 @@ e_stack_push_frame(e_stack* stack)
     if (stack->frames == nullptr) return E_EMALLOC;
   }
 
-  stack->frames[stack->depth++] = (e_stack_frame){
+  stack->frames[stack->depth] = (e_stack_frame){
     .variable_offset = stack->nvariables,
     .stack_size      = stack->size,
   };
+  stack->depth++;
 
   return 0;
 }
@@ -157,25 +176,63 @@ static inline e_var*
 e_stack_push_variable(u32 id, e_stack* stack)
 {
   if (stack->nvariables >= stack->variable_capacity) {
-    u32           new_c         = stack->variable_capacity * 2;
-    e_var_offset* new_variables = (e_var_offset*)realloc(stack->variables, new_c * sizeof(e_var_offset));
+    u32          new_c         = stack->variable_capacity * 2;
+    e_var_entry* new_variables = (e_var_entry*)realloc(stack->variables, new_c * sizeof(e_var_entry));
     if (new_variables == nullptr) exit(-1);
 
     // memset new region to 0
-    memset(new_variables + stack->nvariables, 0, (new_c - stack->nvariables) * sizeof(e_var_offset));
+    memset(new_variables + stack->nvariables, 0, (new_c - stack->nvariables) * sizeof(e_var_entry));
 
     stack->variables         = new_variables;
     stack->variable_capacity = new_c;
   }
 
-  e_var_offset* var = &stack->variables[stack->nvariables];
+  /* Push entry in variables table */
+  e_var_entry* var  = &stack->variables[stack->nvariables];
   var->offset_index = stack->size;
+  var->depth        = stack->depth;
   var->id           = id;
   stack->nvariables++;
 
+  /* Initialized to VOID */
   e_stack_push(stack, (e_var){ .type = E_VARTYPE_VOID });
 
   return e_stack_top(stack);
+}
+
+/**
+ * Find a variable. NULL if doesn't exist.
+ */
+
+static inline e_var*
+e_stack_find(const e_stack* stack, u32 hash)
+{
+  u32 i = stack->nvariables - 1;
+  while (i < stack->nvariables) {
+    u32 offset = stack->variables[i].offset_index;
+    if (stack->variables[i].id == hash) return &stack->stack[offset];
+    i--;
+  }
+  return nullptr;
+}
+
+/**
+ * Find a variable in the current depth of the stack.
+ * NULL if not in stack.
+ */
+static inline e_var*
+e_stack_find_in_current_scope(const e_stack* stack, u32 hash)
+{
+  u32 i     = stack->nvariables - 1;
+  u32 depth = stack->depth;
+  while (i < stack->nvariables) {
+    if (stack->variables[i].depth != depth) break;
+
+    u32 offset = stack->variables[i].offset_index;
+    if (stack->variables[i].id == hash) return &stack->stack[offset];
+    i--;
+  }
+  return nullptr;
 }
 
 #endif // E_STACK_H

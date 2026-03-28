@@ -61,9 +61,6 @@ typedef enum e_ast_nodetype {
 
   E_AST_NODE_NAMESPACE_DECL,
 
-  // x::y
-  E_AST_NODE_NAMESPACE_ACCESS,
-
   E_AST_NODE_CALL,
   E_AST_NODE_INT,
   E_AST_NODE_CHAR,
@@ -88,8 +85,8 @@ typedef enum e_operator {
   E_OPERATOR_BOR,
   E_OPERATOR_BNOT,
   E_OPERATOR_XOR,
-  E_OPERATOR_EQL, // Equal?
-  E_OPERATOR_NEQ, // Not equal?
+  E_OPERATOR_ISEQL, // Equal?
+  E_OPERATOR_ISNEQ, // Not equal?
 
   E_OPERATOR_LT,
   E_OPERATOR_LTE,
@@ -180,6 +177,7 @@ typedef union e_ast_node_val {
     e_filespan      span;
     char*           name;
     int             initializer; // -1 if not given.
+    bool            is_const;
   } let;
 
   struct {
@@ -225,15 +223,15 @@ typedef union e_ast_node_val {
     e_ast_node_type type;
     e_filespan      span;
     int             base;
-    int             offset;
+    int             index;
   } index;
 
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    int             base;   // list/structure
-    int             offset; // index: integer
-    int             value;  // any value.
+    int             base;  // list/structure
+    int             index; // index: integer
+    int             value; // any value.
   } index_assign;
 
   struct {
@@ -312,9 +310,10 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    int             initializers; // for (<let x = 0>;
+    int             initializers; // EXPRESSION_LIST, for (let x = 0, y = 16;
     int             condition;    // x >= 0;
-    int             iterators;    // x++)
+    int*            iterators;    // x++,y--)
+    u32             niterators;
     u32             nstmts;
     int*            stmts;
   } for_stmt;
@@ -353,7 +352,7 @@ static inline e_token*
 e_ast_prev(const struct e_ast* prsr)
 {
   if (prsr->head >= prsr->ntoks || prsr->head == 0) return NULL;
-  return &prsr->toks[prsr->head - 1];
+  return &prsr->toks[prsr->head - 2];
 }
 
 static inline bool
@@ -365,13 +364,14 @@ e_getbp(e_token_type type, int* left, int* right)
       *right = 9;
       break;
 
-    case E_TOKEN_TYPE_OR:
-      *left  = 20;
-      *right = 21;
-      break;
     case E_TOKEN_TYPE_AND:
       *left  = 30;
-      *right = 31;
+      *right = 29;
+      break;
+
+    case E_TOKEN_TYPE_OR:
+      *left  = 20;
+      *right = 19;
       break;
     case E_TOKEN_TYPE_NOT:
       *left  = 0;

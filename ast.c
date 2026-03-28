@@ -87,8 +87,8 @@ conv_token_type_to_operator(e_token_type t)
     case E_TOKEN_TYPE_BOR: return E_OPERATOR_BOR;
     case E_TOKEN_TYPE_BNOT: return E_OPERATOR_BNOT;
     case E_TOKEN_TYPE_XOR: return E_OPERATOR_XOR;
-    case E_TOKEN_TYPE_EQUAL: return E_OPERATOR_EQL;
-    case E_TOKEN_TYPE_NOTEQUAL: return E_OPERATOR_NEQ;
+    case E_TOKEN_TYPE_DOUBLEEQUAL: return E_OPERATOR_ISEQL;
+    case E_TOKEN_TYPE_NOTEQUAL: return E_OPERATOR_ISNEQ;
     case E_TOKEN_TYPE_LT: return E_OPERATOR_LT;
     case E_TOKEN_TYPE_LTE: return E_OPERATOR_LTE;
     case E_TOKEN_TYPE_GT: return E_OPERATOR_GT;
@@ -125,25 +125,29 @@ parse_braces(e_ast* p, int** outstmts, u32* outnstmts)
     // We need the stmt to figure out if we need to chek for a limiter(;) at the end or not.
     int stmt = e_ast_expr(p, 0);
     if (stmt < 0) {
-      asterror(span, "Failed to parse statement in braces\n");
+      asterror(span, "Failed to parse braced statement [braced statement list]\n");
       goto err;
     }
 
+    span = prev(p)->span;
+
     stmts[nstmts++] = stmt;
 
-    e_ast_node* node = e_ast_get_node(p, stmt);
-
-    if (!e_ast_is_limiter_exempt(node->type)) {
-      int e = e_ast_expect(p, E_TOKEN_TYPE_SEMICOLON);
-      if (e) {
-        asterror(prev(p)->span, "Expected semi colon\n"); // use older span, newer one is token after where semicolon should be
+    if (!e_ast_is_limiter_exempt(E_GET_NODE(p, stmt)->type)) {
+      if (e_ast_expect(p, E_TOKEN_TYPE_SEMICOLON)) {
+        /* we need to be expecting a semi colon a character after the last */
+        span.col++;
+        asterror(
+            span,
+            "Expected semi colon ';', got '%s' [braced statement list]\n",
+            e_token_type_to_string(prev(p)->type)); // use older span, newer one is token after where semicolon should be
         goto err;
       }
     }
   }
 
   if (e_ast_expect(p, E_TOKEN_TYPE_CLOSEBRACE)) {
-    asterror(prev(p)->span, "Expected closing brace ('}')\n");
+    asterror(prev(p)->span, "Expected closing brace '}' [braced statement list]\n");
     goto err;
   }
 
@@ -253,51 +257,84 @@ e_ast_expr(e_ast* p, int rbp)
  * Returns node on success, a negative integer on error.
  */
 static int
-parse_variable_decleration(e_ast* ast, int node)
+parse_variable_decleration(e_ast* ast, bool is_const, int node)
 {
   if (node < 0) return node;
 
-  char* name        = nullptr;
-  int   initializer = -1;
-
-  e_token* name_tk = peek(ast);
-  if (!name_tk || name_tk->type != E_TOKEN_TYPE_IDENT) {
-    asterror(name_tk ? name_tk->span : (e_filespan){ 0 }, "Expected identifier\n");
-    goto err;
+  if (peek(ast) && peek(ast)->type == E_TOKEN_TYPE_CONST) {
+    is_const = true;
+    next(ast);
   }
 
-  next(ast);
-  name = strdup(name_tk->val.ident);
+  u32  capacity = 4;
+  u32  ndecls   = 0;
+  int* decls    = malloc(sizeof(int) * capacity);
+  if (!decls) goto err;
 
-  // printf("%s declared\n", name);
+  while (true) {
+    e_token* name_tk = peek(ast);
+    if (!name_tk || name_tk->type != E_TOKEN_TYPE_IDENT) {
+      asterror(name_tk->span, "Expected identifier after 'let', got '%s' [variable decleration]\n", e_token_type_to_string(name_tk->type));
+      goto err;
+    }
 
-  E_GET_NODE(ast, node)->type     = E_AST_NODE_VARIABLE_DECL;
-  E_GET_NODE(ast, node)->let.name = name; // name is strdup'd.
+    next(ast);
 
-  /* This is a variable without an initializer */
-  if (peek(ast)->type == E_TOKEN_TYPE_SEMICOLON) {
-    E_GET_NODE(ast, node)->let.initializer = -1;
-    return 0; // Not an error!
+    int decl_node = e_ast_make_node(ast);
+    if (decl_node < 0) goto err;
+
+    E_GET_NODE(ast, decl_node)->type         = E_AST_NODE_VARIABLE_DECL;
+    E_GET_NODE(ast, decl_node)->let.span     = clonespan(name_tk->span);
+    E_GET_NODE(ast, decl_node)->let.name     = strdup(name_tk->val.ident);
+    E_GET_NODE(ast, decl_node)->let.is_const = is_const;
+
+    int initializer = -1;
+
+    if (peek(ast)->type == E_TOKEN_TYPE_EQUAL) {
+      next(ast); // consume =
+      initializer = e_ast_expr(ast, 0);
+      if (initializer < 0) {
+        asterror(peek(ast)->span, "Error parsing initializer [variable decleration]\n");
+        goto err;
+      }
+    }
+
+    E_GET_NODE(ast, decl_node)->let.initializer = initializer;
+
+    if (ndecls >= capacity) {
+      u32  newcap = capacity * 2;
+      int* tmp    = realloc(decls, sizeof(int) * newcap);
+      if (!tmp) goto err;
+      decls    = tmp;
+      capacity = newcap;
+    }
+
+    decls[ndecls++] = decl_node;
+
+    if (!peek(ast) || peek(ast)->type != E_TOKEN_TYPE_COMMA) break;
+
+    next(ast); // consume ,
   }
 
-  if (e_ast_expect(ast, E_TOKEN_TYPE_EQUAL)) {
-    asterror(peek(ast)->span, "Expected semicolon or initializer\n");
-    goto err;
+  // optimizations ooo
+  if (ndecls == 1) {
+    // ooo optimizations ruined span collection yay
+    E_GET_NODE(ast, node)->type        = E_GET_NODE(ast, decls[0])->type;
+    E_GET_NODE(ast, node)->let         = E_GET_NODE(ast, decls[0])->let;
+    E_GET_NODE(ast, node)->common.span = clonespan(E_GET_NODE(ast, decls[0])->common.span);
+    free(decls);
+    return node;
   }
 
-  initializer = e_ast_expr(ast, 0);
-  if (initializer < 0) {
-    asterror(peek(ast)->span, "Error parsing initializer\n");
-    goto err;
-  }
-
-  E_GET_NODE(ast, node)->let.initializer = initializer;
+  E_GET_NODE(ast, node)->type         = E_AST_NODE_EXPRESSION_LIST;
+  E_GET_NODE(ast, node)->stmts.stmts  = decls;
+  E_GET_NODE(ast, node)->stmts.nstmts = ndecls;
 
   return node;
 
 err:
-  free(name);
-  e_ast_node_free(ast, initializer);
+  for (int i = 0; i < ndecls; i++) e_ast_node_free(ast, decls[i]);
+  free(decls);
   return -1;
 }
 
@@ -324,7 +361,7 @@ parse_if(e_ast* p, int node)
   if (else_ifs == nullptr) goto err;
 
   if (e_ast_expect(p, E_TOKEN_TYPE_OPENPAREN)) {
-    asterror(prev(p)->span, "Expected '(' after [if statement]\n");
+    asterror(prev(p)->span, "Expected '(' after 'if', got '%s' [if statement]\n", e_token_type_to_string(prev(p)->type));
     goto err;
   }
 
@@ -332,12 +369,12 @@ parse_if(e_ast* p, int node)
 
   condition = e_ast_expr(p, 0);
   if (condition < 0) {
-    asterror(prev_span, "Expected condition [if statement]\n");
+    asterror(prev_span, "Expected condition, got '%s' [if statement]\n", e_token_type_to_string(prev(p)->type));
     goto err;
   }
 
   if (e_ast_expect(p, E_TOKEN_TYPE_CLOSEPAREN)) {
-    asterror(prev(p)->span, "Expected ')' after condition [if statement]\n");
+    asterror(prev(p)->span, "Expected ')' after condition, but got '%s' [if statement]\n", e_token_type_to_string(prev(p)->type));
     goto err;
   }
 
@@ -345,7 +382,7 @@ parse_if(e_ast* p, int node)
   e_filespan body_span = peek(p)->span;
 
   if (parse_body(p, &body, &nstmts)) {
-    asterror(body_span, "Error in parsing body [if statement]\n");
+    asterror(body_span, "Error in parsing body, but got '%s' [if statement]\n", e_token_type_to_string(prev(p)->type));
     goto err;
   }
 
@@ -370,20 +407,20 @@ parse_if(e_ast* p, int node)
         }
 
         if (e_ast_expect(p, E_TOKEN_TYPE_OPENPAREN)) {
-          asterror(prev(p)->span, "Expected '(' after 'else if' [if statement :: else if]\n");
+          asterror(prev(p)->span, "Expected '(' after 'else if', but got '%s' [if statement :: else if]\n", e_token_type_to_string(prev(p)->type));
           goto err;
         }
 
         else_if_condition = e_ast_expr(p, 0);
 
         if (e_ast_expect(p, E_TOKEN_TYPE_CLOSEPAREN)) {
-          asterror(prev(p)->span, "Expected ')' after condition [if statement :: else if]\n");
+          asterror(prev(p)->span, "Expected ')' after condition, but got '%s' [if statement :: else if]\n", e_token_type_to_string(prev(p)->type));
           goto err;
         }
 
         body_span = peek(p)->span;
         if (parse_body(p, &else_if_body, &else_if_nstmts)) {
-          asterror(body_span, "Error in parsing body [if statement :: else if]\n");
+          asterror(body_span, "Error in parsing body, but got '%s' [if statement :: else if]\n", e_token_type_to_string(prev(p)->type));
           goto err;
         }
 
@@ -397,7 +434,7 @@ parse_if(e_ast* p, int node)
         e_filespan else_span = peek(p)->span;
 
         if (parse_body(p, &else_body, &nelse_stmts)) {
-          asterror(else_span, "Error in parsing body [if statement :: else]\n");
+          asterror(else_span, "Error in parsing body, but got '%s' [if statement :: else]\n", e_token_type_to_string(prev(p)->type));
           goto err;
         }
 
@@ -469,7 +506,7 @@ parse_while(e_ast* p, int node)
 
   prev_span = peek(p)->span;
   if (parse_body(p, &stmts, &nstmts)) {
-    asterror(prev_span, "Expected while statement body\n");
+    asterror(prev_span, "Failed to parse while statement body\n");
     goto err;
   }
 
@@ -492,11 +529,14 @@ parse_for(e_ast* p, int node)
 {
   int init = -1;
   int cond = -1;
-  int iter = -1;
+
+  u32  niterators = 0;
+  u32  capacity   = 8;
+  int* iterators  = malloc(capacity * sizeof(int));
 
   // (
   if (e_ast_expect(p, E_TOKEN_TYPE_OPENPAREN)) {
-    asterror(prev(p)->span, "Expected ( after 'for'\n");
+    asterror(prev(p)->span, "Expected ( after 'for', got '%s' [for statement]\n", e_token_type_to_string(prev(p)->type));
     goto err;
   }
 
@@ -506,7 +546,7 @@ parse_for(e_ast* p, int node)
 
     init = e_ast_expr(p, 0);
     if (init < 0) {
-      asterror(prev_span, "Expected expression (initializers) ['for' statement]\n");
+      asterror(prev_span, "Expected expression (initializers), got '%s' [for statement]\n", e_token_type_to_string(prev(p)->type));
       goto err;
     }
   } else {
@@ -515,7 +555,7 @@ parse_for(e_ast* p, int node)
 
   // ;
   if (e_ast_expect(p, E_TOKEN_TYPE_SEMICOLON)) {
-    asterror(prev(p)->span, "Expected ';' after initializer list ['for' statement]\n");
+    asterror(prev(p)->span, "Expected ';' after initializer list, got '%s' [for statement]\n", e_token_type_to_string(prev(p)->type));
     goto err;
   }
 
@@ -524,7 +564,7 @@ parse_for(e_ast* p, int node)
     e_filespan prev_span = peek(p)->span;
     cond                 = e_ast_expr(p, 0);
     if (cond < 0) {
-      asterror(prev_span, "Expected expression (condition) ['for' statement]\n");
+      asterror(prev_span, "Expected expression (condition), got '%s' [for statement]\n", e_token_type_to_string(prev(p)->type));
       goto err;
     }
   } else {
@@ -533,25 +573,43 @@ parse_for(e_ast* p, int node)
 
   // ;
   if (e_ast_expect(p, E_TOKEN_TYPE_SEMICOLON)) {
-    asterror(prev(p)->span, "Expected ';' after condition ['for' statement]\n");
+    asterror(prev(p)->span, "Expected ';' after condition, got '%s' [for statement]\n", e_token_type_to_string(prev(p)->type));
     goto err;
   }
 
-  // i++
-  if (peek(p) && peek(p)->type != E_TOKEN_TYPE_SEMICOLON) {
-    e_filespan prev_span = peek(p)->span;
-    iter                 = e_ast_expr(p, 0);
-    if (iter < 0) {
-      asterror(prev_span, "Expected expression (iterators) ['for' statement]\n");
-      goto err;
-    }
-  } else {
+  // i++,y++
+
+  if (peek(p) && peek(p)->type == E_TOKEN_TYPE_SEMICOLON) {
     next(p);
+  } else {
+    while (true) {
+      if (niterators >= capacity) {
+        u32  new_capacity  = capacity * 2;
+        int* new_iterators = realloc(iterators, new_capacity * sizeof(int));
+
+        if (!new_iterators) { goto err; }
+
+        iterators = new_iterators;
+        capacity  = new_capacity;
+      }
+
+      e_filespan prev_span = peek(p)->span;
+      int        iter      = e_ast_expr(p, 0);
+      if (iter < 0) {
+        asterror(prev_span, "Expected expression (iterators), got '%s' [for statement]\n", e_token_type_to_string(prev(p)->type));
+        goto err;
+      }
+
+      iterators[niterators++] = iter;
+
+      if (peek(p) && peek(p)->type != E_TOKEN_TYPE_COMMA) break;
+      next(p); // consume ,
+    }
   }
 
   // )
   if (e_ast_expect(p, E_TOKEN_TYPE_CLOSEPAREN)) {
-    asterror(prev(p)->span, "Expected ')' ['for' statement]\n");
+    asterror(prev(p)->span, "Expected ')' after header, got '%s' [for statement]\n", e_token_type_to_string(prev(p)->type));
     goto err;
   }
 
@@ -560,14 +618,15 @@ parse_for(e_ast* p, int node)
   int* stmts;
   u32  nstmts;
   if (parse_body(p, &stmts, &nstmts)) {
-    asterror(prev_span, "Expected body ['for' statement]\n");
+    asterror(prev_span, "Failed to parse body [for statement]\n");
     goto err;
   }
 
   E_GET_NODE(p, node)->type                  = E_AST_NODE_FOR;
   E_GET_NODE(p, node)->for_stmt.initializers = init;
   E_GET_NODE(p, node)->for_stmt.condition    = cond;
-  E_GET_NODE(p, node)->for_stmt.iterators    = iter;
+  E_GET_NODE(p, node)->for_stmt.niterators   = niterators;
+  E_GET_NODE(p, node)->for_stmt.iterators    = iterators;
   E_GET_NODE(p, node)->for_stmt.stmts        = stmts;
   E_GET_NODE(p, node)->for_stmt.nstmts       = nstmts;
 
@@ -576,12 +635,13 @@ parse_for(e_ast* p, int node)
 err:
   e_ast_node_free(p, init);
   e_ast_node_free(p, cond);
-  e_ast_node_free(p, iter);
+  for (u32 i = 0; i < niterators; i++) e_ast_node_free(p, iterators[i]);
+  free(iterators);
   return -1;
 }
 
 static int
-parse_function(e_ast* p, int node)
+parse_function(e_ast* p, bool external, int node)
 {
   if (node < 0) return node;
 
@@ -593,12 +653,12 @@ parse_function(e_ast* p, int node)
 
   name_tk = peek(p);
   if (e_ast_expect(p, E_TOKEN_TYPE_IDENT)) {
-    asterror(prev(p)->span, "Expected function name after 'fn' [function header]\n");
+    asterror(prev(p)->span, "Expected function name after 'fn'/'extern', got '%s' [function header]\n", e_token_type_to_string(prev(p)->type));
     goto err;
   }
 
   if (e_ast_expect(p, E_TOKEN_TYPE_OPENPAREN)) {
-    asterror(prev(p)->span, "Expected ( [function header]\n");
+    asterror(prev(p)->span, "Expected (, got '%s' [function header]\n", e_token_type_to_string(prev(p)->type));
     goto err;
   }
 
@@ -611,7 +671,7 @@ parse_function(e_ast* p, int node)
   while (peek(p) && peek(p)->type != E_TOKEN_TYPE_CLOSEPAREN) {
     e_token* tk = peek(p);
     if (tk->type != E_TOKEN_TYPE_IDENT) {
-      asterror(peek(p)->span, "Expected parameter name [function header]\n");
+      asterror(peek(p)->span, "Expected parameter name, got '%s' [function header]\n", e_token_type_to_string(prev(p)->type));
       goto err;
     }
     next(p);
@@ -635,23 +695,30 @@ parse_function(e_ast* p, int node)
     if (peek(p) && peek(p)->type == E_TOKEN_TYPE_CLOSEPAREN) { break; }
 
     if (e_ast_expect(p, E_TOKEN_TYPE_COMMA)) {
-      asterror(prev(p)->span, "Expected ',' [function header]\n");
+      asterror(prev(p)->span, "Expected ',', got '%s' [function header]\n", e_token_type_to_string(prev(p)->type));
       goto err;
     }
   }
 
   if (e_ast_expect(p, E_TOKEN_TYPE_CLOSEPAREN)) {
-    asterror(prev(p)->span, "Expected ')' [function header]\n");
+    asterror(prev(p)->span, "Expected ')', got '%s' [function header]\n", e_token_type_to_string(prev(p)->type));
     goto err;
   }
 
   e_filespan parsing_span = peek(p)->span;
 
-  int* stmts;
-  u32  nstmts;
-  if (parse_body(p, &stmts, &nstmts)) {
-    asterror(parsing_span, "Failed to parse function body\n");
-    goto err;
+  int* stmts  = nullptr;
+  u32  nstmts = 0;
+  if (external) {
+    if (e_ast_expect(p, E_TOKEN_TYPE_SEMICOLON)) {
+      asterror(prev(p)->span, "Expected ')', got '%s' [external function decleration]\n", e_token_type_to_string(prev(p)->type));
+      return -1;
+    }
+  } else {
+    if (parse_body(p, &stmts, &nstmts)) {
+      asterror(parsing_span, "Failed to parse function body [function definition]\n");
+      goto err;
+    }
   }
 
   E_GET_NODE(p, node)->type        = E_AST_NODE_FUNCTION_DEFINITION;
@@ -681,7 +748,7 @@ parse_function_call(e_ast* p, e_token* tk, int node)
 
   if (e_ast_expect(p, E_TOKEN_TYPE_OPENPAREN)) // (
   {
-    asterror(prev(p)->span, "Expected '(' after function name\n");
+    asterror(prev(p)->span, "Expected '(' after function name, got '%s'\n", e_token_type_to_string(prev(p)->type));
     goto err;
   }
 
@@ -706,9 +773,10 @@ parse_function_call(e_ast* p, e_token* tk, int node)
      * until the closing parenthesis.
      */
     args[nargs++] = e_ast_expr(p, 0);
+
     if (peek(p)->type == E_TOKEN_TYPE_CLOSEPAREN) { break; }
     if (e_ast_expect(p, E_TOKEN_TYPE_COMMA)) {
-      asterror(prev(p)->span, "Expected ',' or ')'\n");
+      asterror(prev(p)->span, "Expected ',' or ')', got '%s'\n", e_token_type_to_string(prev(p)->type));
       goto err;
     }
   }
@@ -779,13 +847,13 @@ parse_list(e_ast* p, int node)
     if (peek(p) && peek(p)->type == E_TOKEN_TYPE_CLOSEBRACKET) { break; }
 
     if (e_ast_expect(p, E_TOKEN_TYPE_COMMA)) {
-      asterror(prev(p)->span, "Expected ',' between elements (list literal)\n");
+      asterror(prev(p)->span, "Expected ',' or ']', got '%s' [list literal]\n", e_token_type_to_string(prev(p)->type));
       goto err;
     }
   }
 
   if (e_ast_expect(p, E_TOKEN_TYPE_CLOSEBRACKET)) {
-    asterror(prev(p)->span, "Expected ']' (list literal)\n");
+    asterror(prev(p)->span, "Expected ']', got '%s' [list literal]\n", e_token_type_to_string(prev(p)->type));
     goto err;
   }
 
@@ -805,25 +873,33 @@ static int
 parse_namespace_decleration(e_ast* p, int node)
 {
   if (!peek(p) || peek(p)->type != E_TOKEN_TYPE_IDENT) {
-    asterror(peek(p)->span, "Expected namespace name\n");
-    e_ast_node_free(p, node);
+    asterror(peek(p)->span, "Expected namespace name, got '%s' [namespace decleration]\n", e_token_type_to_string(prev(p)->type));
     return -1;
   }
 
   e_token* name_tk = next(p);
 
   if (e_ast_expect(p, E_TOKEN_TYPE_OPENBRACE)) {
-    asterror(prev(p)->span, "Expected '{' after namespace name\n");
-    e_ast_node_free(p, node);
+    asterror(prev(p)->span, "Expected '{' after namespace name, got '%s' [namespace decleration]\n", e_token_type_to_string(prev(p)->type));
     return -1;
   }
 
   int* stmts  = NULL;
   u32  nstmts = 0;
 
-  if (parse_braces(p, &stmts, &nstmts)) {
-    e_ast_node_free(p, node);
-    return -1;
+  if (parse_braces(p, &stmts, &nstmts)) { return -1; }
+
+  for (int i = 0; i < nstmts; i++) {
+    e_ast_node_type type = E_GET_NODE(p, stmts[i])->common.type;
+    e_filespan      span = E_GET_NODE(p, stmts[i])->common.span;
+
+    if (type != E_AST_NODE_FUNCTION_DEFINITION && type != E_AST_NODE_NAMESPACE_DECL && type != E_AST_NODE_VARIABLE_DECL) {
+      asterror(span, "Expected only function definitions, variable declerations or namespace declerations in namespace scope\n");
+
+      for (int j = 0; j < nstmts; j++) { e_ast_node_free(p, stmts[j]); }
+      free(stmts);
+      return -1;
+    }
   }
 
   E_GET_NODE(p, node)->type                  = E_AST_NODE_NAMESPACE_DECL;
@@ -853,8 +929,7 @@ e_ast_nud(e_ast* p, e_token* tk)
 
   // if (tk->type == E_TOKEN_TYPE_EOF) return -1;
 
-  e_filespan clone                     = clonespan(tk->span);
-  e_ast_get_node(p, node)->common.span = clone;
+  e_ast_get_node(p, node)->common.span = clonespan(tk->span);
 
   switch (tk->type) {
     case E_TOKEN_TYPE_INT:
@@ -905,7 +980,14 @@ e_ast_nud(e_ast* p, e_token* tk)
       node = e_ast_expr(p, 0);
       if (e_ast_expect(p, E_TOKEN_TYPE_CLOSEPAREN)) {
         e_filespan opening_paren_span = E_GET_NODE(p, old_node)->common.span;
-        asterror(opening_paren_span, "Expected ')' here [%s:%i:%i] for this '('\n", peek(p)->span.file, peek(p)->span.line, peek(p)->span.col);
+        // asterror(opening_paren_span, "Expected ')' here [%s:%i:%i] for this '('\n", peek(p)->span.file, peek(p)->span.line, peek(p)->span.col);
+        asterror(
+            E_GET_NODE(p, node)->common.span,
+            "Expected ')' for this '(' [%s:%i:%i], got '%s'\n",
+            opening_paren_span.file,
+            opening_paren_span.line,
+            opening_paren_span.col,
+            e_token_type_to_string(prev(p)->type));
         e_ast_node_free(p, node);
         e_ast_node_free(p, old_node);
         return -1;
@@ -963,8 +1045,11 @@ e_ast_nud(e_ast* p, e_token* tk)
       return node;
     }
 
+    case E_TOKEN_TYPE_CONST:
+      // Doing this allows all of [let const, const let and const <varname>]
+      if (peek(p) && peek(p)->type == E_TOKEN_TYPE_LET) next(p); // fallthrough
     case E_TOKEN_TYPE_LET: {
-      if (parse_variable_decleration(p, node) < 0) {
+      if (parse_variable_decleration(p, tk->type == E_TOKEN_TYPE_CONST, node) < 0) {
         e_ast_node_free(p, node);
         return -1;
       }
@@ -996,7 +1081,15 @@ e_ast_nud(e_ast* p, e_token* tk)
     }
 
     case E_TOKEN_TYPE_FN: {
-      if (parse_function(p, node) < 0) {
+      if (parse_function(p, false, node) < 0) {
+        e_ast_node_free(p, node);
+        return -1;
+      }
+      return node;
+    }
+
+    case E_TOKEN_TYPE_EXTERN: {
+      if (parse_function(p, true, node) < 0) {
         e_ast_node_free(p, node);
         return -1;
       }
@@ -1078,10 +1171,10 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
           return -1;
         }
 
-        E_GET_NODE(p, node)->type                = E_AST_NODE_INDEX_ASSIGN;
-        E_GET_NODE(p, node)->index_assign.base   = E_GET_NODE(p, leftidx)->index.base;
-        E_GET_NODE(p, node)->index_assign.offset = E_GET_NODE(p, leftidx)->index.offset;
-        E_GET_NODE(p, node)->index_assign.value  = rightidx;
+        E_GET_NODE(p, node)->type               = E_AST_NODE_INDEX_ASSIGN;
+        E_GET_NODE(p, node)->index_assign.base  = E_GET_NODE(p, leftidx)->index.base;
+        E_GET_NODE(p, node)->index_assign.index = E_GET_NODE(p, leftidx)->index.index;
+        E_GET_NODE(p, node)->index_assign.value = rightidx;
 
         // we stole lefts' children, we don't want to recursively free it.
         free(E_GET_NODE(p, leftidx)->common.span.file);
@@ -1097,7 +1190,7 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
       }
 
       E_GET_NODE(p, node)->type           = E_AST_NODE_ASSIGN;
-      E_GET_NODE(p, node)->binaryop.op    = E_OPERATOR_EQL;
+      E_GET_NODE(p, node)->binaryop.op    = E_OPERATOR_ISEQL;
       E_GET_NODE(p, node)->binaryop.left  = leftidx;
       E_GET_NODE(p, node)->binaryop.right = rightidx;
 
@@ -1108,8 +1201,8 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
     case E_TOKEN_TYPE_OPENBRACKET: {
       e_filespan span = peek(p)->span;
 
-      int offset = e_ast_expr(p, 0);
-      if (offset < 0) {
+      int index = e_ast_expr(p, 0);
+      if (index < 0) {
         cerror(span, "Failed to parse index statement\n");
         e_ast_node_free(p, node);
         return -1;
@@ -1121,9 +1214,9 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
         return -1;
       }
 
-      E_GET_NODE(p, node)->type         = E_AST_NODE_INDEX;
-      E_GET_NODE(p, node)->index.base   = leftidx;
-      E_GET_NODE(p, node)->index.offset = offset;
+      E_GET_NODE(p, node)->type        = E_AST_NODE_INDEX;
+      E_GET_NODE(p, node)->index.base  = leftidx;
+      E_GET_NODE(p, node)->index.index = index;
       return node;
     }
 
@@ -1251,6 +1344,8 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
     case E_TOKEN_TYPE_MOD:
     case E_TOKEN_TYPE_BAND:
     case E_TOKEN_TYPE_BOR:
+    case E_TOKEN_TYPE_AND:
+    case E_TOKEN_TYPE_OR:
     case E_TOKEN_TYPE_XOR:
     case E_TOKEN_TYPE_BNOT:
     case E_TOKEN_TYPE_LT:
@@ -1259,14 +1354,14 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
     case E_TOKEN_TYPE_GTE: {
       int left_bp = 0, right_bp = 0;
       if (!e_getbp(tk->type, &left_bp, &right_bp)) {
-        asterror(tk->span, "Operator %s doesn't have a binding power set in e_getbp! assuming 0\n", e_token_type_to_string(tk->type));
+        asterror(tk->span, "Operator %s doesn't have a binding power set in e_getbp! assuming 0 [binary operator]\n", e_token_type_to_string(tk->type));
         // e_ast_node_free(p, node);
         // return -1;
       }
 
       e_operator op = conv_token_type_to_operator(tk->type);
       if (op == -1) {
-        asterror(tk->span, "Unexpected token: '%s'\n", e_token_type_to_string(tk->type));
+        asterror(tk->span, "Unexpected token: '%s', Expected operator [binary operator]\n", e_token_type_to_string(tk->type));
         e_ast_node_free(p, node);
         return -1;
       }
@@ -1275,7 +1370,7 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
 
       int right = e_ast_expr(p, right_bp);
       if (right < 0) {
-        asterror(prev_span, "Failed to evaluate RHS of binary operator\n");
+        asterror(prev_span, "Failed to evaluate RHS [binary operator]\n");
         e_ast_node_free(p, node);
         return -1;
       }
@@ -1284,7 +1379,7 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
         E_GET_NODE(p, node)->type                 = E_AST_NODE_INDEX_COMPOUND_OP;
         E_GET_NODE(p, node)->index_compound.op    = op;
         E_GET_NODE(p, node)->index_compound.base  = E_GET_NODE(p, leftidx)->index.base;
-        E_GET_NODE(p, node)->index_compound.index = E_GET_NODE(p, leftidx)->index.offset;
+        E_GET_NODE(p, node)->index_compound.index = E_GET_NODE(p, leftidx)->index.index;
         E_GET_NODE(p, node)->index_compound.value = right;
 
         free(E_GET_NODE(p, leftidx)->common.span.file);
@@ -1333,14 +1428,14 @@ e_ast_parse(e_ast* p, int* out_root_node)
 
     node = e_ast_expr(p, 0);
     if (node < 0) {
-      asterror(take_span, "Error parsing expression\n");
+      asterror(take_span, "Error parsing expression [Root statement compilation failed, retreating]\n");
       goto err;
     }
 
     e_ast_node_type type = E_GET_NODE(p, node)->type;
-    if (type != E_AST_NODE_FUNCTION_DEFINITION && type != E_AST_NODE_NAMESPACE_DECL) {
+    if (type != E_AST_NODE_FUNCTION_DEFINITION && type != E_AST_NODE_NAMESPACE_DECL && type != E_AST_NODE_VARIABLE_DECL) {
       // asterror(take_span, "Expected function definition or variable declerations in global scope\n");
-      asterror(take_span, "Expected only function definitions or namespace declerations in global scope\n");
+      asterror(take_span, "Expected only function definitions, variable declerations or namespace declerations in global scope\n");
       goto err;
     }
 

@@ -203,7 +203,7 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
       char*  end1 = NULL;
       char*  end2 = NULL;
       int    i    = (int)strtol(s, &end1, 10);
-      double f    = strtof(s, &end2);
+      double f    = strtod(s, &end2);
 
       bool is_float = (bool)(end2 > end1 || end1 == NULL);
 
@@ -234,6 +234,8 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
         tk = (e_token){ .type = E_TOKEN_TYPE_FN, .span = SPAN };
       } else if (len == strlen("let") && strncmp(snap, "let", len) == 0) {
         tk = (e_token){ .type = E_TOKEN_TYPE_LET, .span = SPAN };
+      } else if (len == strlen("const") && strncmp(snap, "const", len) == 0) {
+        tk = (e_token){ .type = E_TOKEN_TYPE_CONST, .span = SPAN };
       } else if (len == strlen("true") && strncmp(snap, "true", len) == 0) {
         tk = (e_token){ .type = E_TOKEN_TYPE_BOOL, .val.b = true, .span = SPAN };
       } else if (len == strlen("false") && strncmp(snap, "false", len) == 0) {
@@ -254,6 +256,8 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
         tk = (e_token){ .type = E_TOKEN_TYPE_RETURN, .span = SPAN };
       } else if (len == strlen("namespace") && strncmp(snap, "namespace", len) == 0) {
         tk = (e_token){ .type = E_TOKEN_TYPE_NAMESPACE, .span = SPAN };
+      } else if (len == strlen("extern") && strncmp(snap, "extern", len) == 0) {
+        tk = (e_token){ .type = E_TOKEN_TYPE_EXTERN, .span = SPAN };
       } else {
         tk = (e_token){ .type = E_TOKEN_TYPE_IDENT, .val.ident = _strndup(snap, len), .span = SPAN };
       }
@@ -353,6 +357,16 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
         advance(s, line, col);
       } else if (s[0] == ':' && s[1] == ':') {
         type        = E_TOKEN_TYPE_DOUBLE_COLON;
+        is_compound = false;
+        advance(s, line, col);
+        advance(s, line, col);
+      } else if (s[0] == '&' && s[1] == '&') {
+        type        = E_TOKEN_TYPE_AND;
+        is_compound = false;
+        advance(s, line, col);
+        advance(s, line, col);
+      } else if (s[0] == '|' && s[1] == '|') {
+        type        = E_TOKEN_TYPE_OR;
         is_compound = false;
         advance(s, line, col);
         advance(s, line, col);

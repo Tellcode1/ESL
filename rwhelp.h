@@ -38,47 +38,15 @@
 
 #define E_FILE_MAGIC 0xF5F6F7F8
 
-/**
- * Compiled binary file structure is:
- * MAGIC : u32
- * Bytes_needed : u32 // << The number of bytes of memory required to load the whole program
- *                          Explanation below
- *
- * nLiterals : u32
- *
- * Literals : e_var[] {
- *    Type : e_vartype
- *    value : e_varval
- *  For strings:
- *    Type : e_vartype
- *    Len : u32
- *    String : u8[Len]
- * }
- *
- * nFunctions : u32
- * Functions = e_function[] {
- *   code_size : u32
- *   nargs : u32
- *   name_hash : u32
- *   arg_slots = u32[nargs]
- *   function_code : u8[code_size]
- * }
- *
- *
- * We use a single allocation for the entire program to ensure the code remains fast.
- * Thus, we rely on the compiler to provide us with the bytes of memory required to initialize
- * the program. The value provided is a conservative estimate, and some bytes may be lost.
- * Also, strings are ref counted. So We have to point the refc
- * to the allocation (+offset) and initialize their refcounters to 1.
- */
+// See BYTECODE FORMAT section of README.
 
 // clang-format off
-#define E_GEN_READ_FUNCTION(type) static inline type e_read_##type(const u8** _ip) { type v = *(type*)(*(_ip)); *(_ip) += sizeof(type); return v; }
+#define E_GEN_READ_FUNCTION(type) static inline type e_read_##type(const u8** _ip) { type v; memcpy(&v, *_ip, sizeof(type)); *(_ip) += sizeof(type); return v; }
         E_GEN_READ_FUNCTION(u32)
         E_GEN_READ_FUNCTION(u16)
         E_GEN_READ_FUNCTION(u8)
 
-#define E_GEN_EMIT_FN(type) static inline void e_emit_##type(e_compiler* cc, type value) { if (cc->emitted + sizeof(type) > cc->code_capacity) ecc_stream_resize(cc, MAX(cc->emitted + sizeof(type), cc->code_capacity * 2)); *(type*)((uchar*)cc->emit + cc->emitted) = value; cc->emitted += sizeof(type); }
+#define E_GEN_EMIT_FN(type) static inline void e_emit_##type(e_compiler* cc, type value) { if (cc->emitted + sizeof(type) > cc->code_capacity) ecc_stream_resize(cc, MAX(cc->emitted + sizeof(type), cc->code_capacity * 2)); memcpy((type*)((uchar*)cc->emit + cc->emitted), &value, sizeof(value)); cc->emitted += sizeof(type); }
         E_GEN_EMIT_FN(u32)
         E_GEN_EMIT_FN(u64)
         E_GEN_EMIT_FN(u16)

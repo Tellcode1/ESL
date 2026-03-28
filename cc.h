@@ -26,9 +26,14 @@
 #define E_CC_H
 
 #include "bc.h"
+#include "cerr.h"
 #include "fn.h"
+#include "stack.h"
 #include "stdafx.h"
 #include "var.h"
+
+#define E_OBJ_AS_INFO(obj) ((ecc_variable_information*)((obj)->data))
+#define E_VAR_AS_INFO(var) ((ecc_variable_information*)((var)->val.s->data))
 
 struct e_ast;
 
@@ -65,10 +70,23 @@ typedef struct ecc_namespace_stack {
   u32    capacity;
 } ecc_namespace_stack;
 
+/* Must not exceed 40 bytes! If it does, change the LEAFSIZE in pool.h */
+typedef struct ecc_variable_information {
+  e_filespan span; // Span at where the variable (name) is.
+  bool       is_const;
+  u32        hash;
+  u32        depth;         // The stack frame depth it was created in
+  int        initializer;   // initializer provided during creation.
+  int        current_value; // <0 if no value currently (void)
+} ecc_variable_information;
+
 typedef struct e_compiler {
   struct e_ast*        ast;
   ecc_loop_location*   loop;
   ecc_namespace_stack* ns;
+
+  /* Stack for storing information about variables during compilation. */
+  e_stack* stack;
 
   e_var* literals;
   u16*   literal_hashes;
@@ -80,7 +98,7 @@ typedef struct e_compiler {
   u32 code_capacity;
 
   e_function* functions;
-  u32         functions_size;
+  u32         functions_count;
   u32         functions_capacity;
 
   u32 next_label;
@@ -95,6 +113,10 @@ typedef struct e_compilation_result {
   u8*         instructions;
 } e_compilation_result;
 
+/**
+ * Uses ge_pool, Initialize it using e_refdobj_pool_init().
+ * Free later with e_refdobj_pool_free();
+ */
 int e_compile(struct e_ast* ast, int root_node, e_compilation_result* result);
 
 static inline void

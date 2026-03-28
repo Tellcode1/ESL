@@ -48,6 +48,10 @@ struct e_refdobj_pool;
  * Bitmask to allow functions to just check
  * the masks. No variable can have more than one
  * bit set though.
+ *
+ * Compiler Info doesn't have an entry in the
+ * struct because it doesn't need one. Every
+ * variable during compilation is stored as such.
  */
 typedef enum e_vartype {
   E_VARTYPE_VOID   = 1 << 0, // invalid / unset
@@ -80,15 +84,20 @@ typedef struct e_string {
 } e_string;
 
 typedef union e_varval {
-  int        i;
-  char       c;
-  bool       b;
-  int        errcode;
-  double     f;
-  e_refdobj* s;
-  e_refdobj* list;
-  e_refdobj* map;
-  e_refdobj* func; /* localfn */
+  int  i;
+  char c;
+  bool b;
+  int  errcode;
+
+  /* No 32 bit floats :) */
+  double f;
+
+  e_refdobj* s;    // Use E_VAR_AS_STRING to access as e_string*
+  e_refdobj* list; // Use E_VAR_AS_LIST to access as e_list*
+  e_refdobj* map;  // Use E_VAR_AS_MAP to access as e_map*
+
+  /* Compiler info for variables, not stored in runtime. */
+  e_refdobj* compinfo;
 } e_varval;
 
 typedef struct e_var {

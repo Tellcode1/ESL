@@ -47,7 +47,7 @@ e_ast_node_free(e_ast* p, int nodeID)
       break;
     case E_AST_NODE_INDEX: {
       e_ast_node_free(p, E_GET_NODE(p, nodeID)->index.base);
-      e_ast_node_free(p, E_GET_NODE(p, nodeID)->index.offset);
+      e_ast_node_free(p, E_GET_NODE(p, nodeID)->index.index);
       break;
     }
     case E_AST_NODE_UNARYOP: e_ast_node_free(p, E_GET_NODE(p, nodeID)->unaryop.right); break;
@@ -58,9 +58,10 @@ e_ast_node_free(e_ast* p, int nodeID)
     case E_AST_NODE_FOR: {
       e_ast_node_free(p, E_GET_NODE(p, nodeID)->for_stmt.initializers);
       e_ast_node_free(p, E_GET_NODE(p, nodeID)->for_stmt.condition);
-      e_ast_node_free(p, E_GET_NODE(p, nodeID)->for_stmt.iterators);
+      for (u32 i = 0; i < E_GET_NODE(p, nodeID)->for_stmt.niterators; i++) e_ast_node_free(p, E_GET_NODE(p, nodeID)->for_stmt.iterators[i]);
       for (u32 i = 0; i < E_GET_NODE(p, nodeID)->for_stmt.nstmts; i++) { e_ast_node_free(p, E_GET_NODE(p, nodeID)->for_stmt.stmts[i]); }
       free(E_GET_NODE(p, nodeID)->for_stmt.stmts);
+      free(E_GET_NODE(p, nodeID)->for_stmt.iterators);
       break;
     }
     case E_AST_NODE_WHILE:
@@ -111,7 +112,7 @@ e_ast_node_free(e_ast* p, int nodeID)
 
     case E_AST_NODE_INDEX_ASSIGN:
       e_ast_node_free(p, E_GET_NODE(p, nodeID)->index_assign.base);
-      e_ast_node_free(p, E_GET_NODE(p, nodeID)->index_assign.offset);
+      e_ast_node_free(p, E_GET_NODE(p, nodeID)->index_assign.index);
       e_ast_node_free(p, E_GET_NODE(p, nodeID)->index_assign.value);
       break;
 
@@ -143,6 +144,12 @@ e_ast_node_free(e_ast* p, int nodeID)
     case E_AST_NODE_MEMBER_ACCESS: {
       e_ast_node_free(p, E_GET_NODE(p, nodeID)->member_access.left);
       free(E_GET_NODE(p, nodeID)->member_access.right);
+      break;
+    }
+    case E_AST_NODE_NAMESPACE_DECL: {
+      free(E_GET_NODE(p, nodeID)->namespace_decl.name);
+      for (u32 i = 0; i < E_GET_NODE(p, nodeID)->namespace_decl.nstmts; i++) { e_ast_node_free(p, E_GET_NODE(p, nodeID)->namespace_decl.stmts[i]); }
+      free(E_GET_NODE(p, nodeID)->namespace_decl.stmts);
       break;
     }
   }

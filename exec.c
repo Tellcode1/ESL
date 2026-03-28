@@ -172,6 +172,13 @@ call(const e_exec_info* info, u32 hash, u32 nargs)
     goto pop_and_ret;
   }
 
+  // extern
+  for (u32 i = 0; i < info->nextern_funcs; i++) {
+    if (info->extern_funcs[i].hash != hash) continue;
+    if (info->extern_funcs[i].func) return_value = info->extern_funcs[i].func(&info->stack->stack[info->stack->size - nargs]);
+    goto pop_and_ret;
+  }
+
   // user defined
   for (u32 f = 0; f < info->nfuncs; f++) {
     if (info->funcs[f].name_hash != hash) continue;
@@ -199,13 +206,6 @@ call(const e_exec_info* info, u32 hash, u32 nargs)
     goto pop_and_ret;
   }
 
-  // extern
-  for (u32 i = 0; i < info->nextern_funcs; i++) {
-    if (info->extern_funcs[i].hash != hash) continue;
-    if (info->extern_funcs[i].func) return_value = info->extern_funcs[i].func(&info->stack->stack[info->stack->size - nargs]);
-    goto pop_and_ret;
-  }
-
   fprintf(stderr, "Function %u not defined\n", hash);
 
   return (e_var){ .type = E_VARTYPE_ERROR, .val.errcode = E_EUNDEFINED };
@@ -216,7 +216,7 @@ pop_and_ret:
 }
 
 static inline u32
-get_variable_slot(e_var_offset* variables, u32 nvariables, u32 hash)
+get_variable_slot(e_var_entry* variables, u32 nvariables, u32 hash)
 {
   for (u32 i = 0; i < nvariables; i++) {
     if (variables[i].id == hash) { return i; }

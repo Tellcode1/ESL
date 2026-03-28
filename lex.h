@@ -48,9 +48,10 @@ typedef enum e_token_type {
   E_TOKEN_TYPE_FLOAT,
   E_TOKEN_TYPE_STRING,
 
-  E_TOKEN_TYPE_FN,      // fn keyword for functions, no value
-  E_TOKEN_TYPE_LOCALFN, // local function
-  E_TOKEN_TYPE_LET,     // let keyword for variable declerations, no value.
+  E_TOKEN_TYPE_FN,     // fn keyword for functions, no value
+  E_TOKEN_TYPE_EXTERN, // local function
+  E_TOKEN_TYPE_LET,    // let keyword for variable declerations, no value.
+  E_TOKEN_TYPE_CONST,  // const qualifier
   E_TOKEN_TYPE_IF,
   E_TOKEN_TYPE_ELSE,
   E_TOKEN_TYPE_WHILE,
@@ -123,56 +124,57 @@ e_token_type_to_string(e_token_type e)
 {
   switch (e) {
     case E_TOKEN_TYPE_EOF: return "EOF";
-    case E_TOKEN_TYPE_SEMICOLON: return "SEMICOLON";
-    case E_TOKEN_TYPE_COLON: return "COLON";
-    case E_TOKEN_TYPE_COMMA: return "COMMA";
-    case E_TOKEN_TYPE_INT: return "INT";
-    case E_TOKEN_TYPE_FLOAT: return "FLOAT";
-    case E_TOKEN_TYPE_STRING: return "STRING";
-    case E_TOKEN_TYPE_FN: return "FN";
-    case E_TOKEN_TYPE_LET: return "LET";
-    case E_TOKEN_TYPE_PLUS: return "PLUS";
-    case E_TOKEN_TYPE_MINUS: return "MINUS";
-    case E_TOKEN_TYPE_MULTIPLY: return "MULTIPLY";
-    case E_TOKEN_TYPE_DIVIDE: return "DIVIDE";
-    case E_TOKEN_TYPE_EXPONENT: return "EXPONENT";
-    case E_TOKEN_TYPE_MOD: return "MOD";
-    case E_TOKEN_TYPE_AND: return "AND";
-    case E_TOKEN_TYPE_OR: return "OR";
-    case E_TOKEN_TYPE_EQUAL: return "EQUAL";
-    case E_TOKEN_TYPE_DOUBLEEQUAL: return "DOUBLEEQUAL";
-    case E_TOKEN_TYPE_IDENT: return "IDENT";
-    case E_TOKEN_TYPE_OPENBRACE: return "OPENBRACE";
-    case E_TOKEN_TYPE_CLOSEBRACE: return "CLOSEBRACE";
-    case E_TOKEN_TYPE_OPENPAREN: return "OPENPAREN";
-    case E_TOKEN_TYPE_CLOSEPAREN: return "CLOSEPAREN";
-    case E_TOKEN_TYPE_CHAR: return "CHAR";
-    case E_TOKEN_TYPE_BOOL: return "BOOL";
-    case E_TOKEN_TYPE_IF: return "IF";
-    case E_TOKEN_TYPE_ELSE: return "ELSE";
-    case E_TOKEN_TYPE_WHILE: return "WHILE";
-    case E_TOKEN_TYPE_FOR: return "FOR";
-    case E_TOKEN_TYPE_BREAK: return "BREAK";
-    case E_TOKEN_TYPE_CONTINUE: return "CONTINUE";
-    case E_TOKEN_TYPE_RETURN: return "RETURN";
-    case E_TOKEN_TYPE_PLUSPLUS: return "PLUSPLUS";
-    case E_TOKEN_TYPE_MINUSMINUS: return "MINUSMINUS";
-    case E_TOKEN_TYPE_NOT: return "NOT";
-    case E_TOKEN_TYPE_BNOT: return "BNOT";
-    case E_TOKEN_TYPE_NOTEQUAL: return "NOTEQUAL";
-    case E_TOKEN_TYPE_LT: return "LT";
-    case E_TOKEN_TYPE_LTE: return "LTE";
-    case E_TOKEN_TYPE_GT: return "GT";
-    case E_TOKEN_TYPE_GTE: return "GTE";
-    case E_TOKEN_TYPE_DOT: return "DOT";
-    case E_TOKEN_TYPE_OPENBRACKET: return "OPENBRACKET";
-    case E_TOKEN_TYPE_CLOSEBRACKET: return "CLOSEBRACKET";
-    case E_TOKEN_TYPE_LOCALFN: return "LOCALFN";
-    case E_TOKEN_TYPE_NAMESPACE: return "NAMESPACE";
-    case E_TOKEN_TYPE_BAND: return "BAND";
-    case E_TOKEN_TYPE_BOR: return "BOR";
-    case E_TOKEN_TYPE_XOR: return "XOR";
-    case E_TOKEN_TYPE_DOUBLE_COLON: return "DOUBLE_COLON";
+    case E_TOKEN_TYPE_SEMICOLON: return ";";
+    case E_TOKEN_TYPE_COLON: return ":";
+    case E_TOKEN_TYPE_COMMA: return ",";
+    case E_TOKEN_TYPE_INT: return "int";
+    case E_TOKEN_TYPE_FLOAT: return "float";
+    case E_TOKEN_TYPE_STRING: return "string";
+    case E_TOKEN_TYPE_FN: return "fn";
+    case E_TOKEN_TYPE_LET: return "let";
+    case E_TOKEN_TYPE_PLUS: return "+";
+    case E_TOKEN_TYPE_MINUS: return "-";
+    case E_TOKEN_TYPE_MULTIPLY: return "*";
+    case E_TOKEN_TYPE_DIVIDE: return "/";
+    case E_TOKEN_TYPE_EXPONENT: return "**";
+    case E_TOKEN_TYPE_MOD: return "%";
+    case E_TOKEN_TYPE_AND: return "&&";
+    case E_TOKEN_TYPE_OR: return "||";
+    case E_TOKEN_TYPE_EQUAL: return "=";
+    case E_TOKEN_TYPE_DOUBLEEQUAL: return "==";
+    case E_TOKEN_TYPE_IDENT: return "Identifier";
+    case E_TOKEN_TYPE_OPENBRACE: return "{";
+    case E_TOKEN_TYPE_CLOSEBRACE: return "}";
+    case E_TOKEN_TYPE_OPENPAREN: return "(";
+    case E_TOKEN_TYPE_CLOSEPAREN: return ")";
+    case E_TOKEN_TYPE_CONST: return "const";
+    case E_TOKEN_TYPE_CHAR: return "char";
+    case E_TOKEN_TYPE_BOOL: return "bool";
+    case E_TOKEN_TYPE_IF: return "if";
+    case E_TOKEN_TYPE_ELSE: return "else";
+    case E_TOKEN_TYPE_WHILE: return "while";
+    case E_TOKEN_TYPE_FOR: return "for";
+    case E_TOKEN_TYPE_BREAK: return "break";
+    case E_TOKEN_TYPE_CONTINUE: return "continue";
+    case E_TOKEN_TYPE_RETURN: return "return";
+    case E_TOKEN_TYPE_PLUSPLUS: return "++";
+    case E_TOKEN_TYPE_MINUSMINUS: return "--";
+    case E_TOKEN_TYPE_NOT: return "!";
+    case E_TOKEN_TYPE_BNOT: return "~";
+    case E_TOKEN_TYPE_NOTEQUAL: return "!=";
+    case E_TOKEN_TYPE_LT: return "<";
+    case E_TOKEN_TYPE_LTE: return "<=";
+    case E_TOKEN_TYPE_GT: return ">";
+    case E_TOKEN_TYPE_GTE: return ">=";
+    case E_TOKEN_TYPE_DOT: return ".";
+    case E_TOKEN_TYPE_OPENBRACKET: return "[";
+    case E_TOKEN_TYPE_CLOSEBRACKET: return "]";
+    case E_TOKEN_TYPE_EXTERN: return "extern";
+    case E_TOKEN_TYPE_NAMESPACE: return "namespace";
+    case E_TOKEN_TYPE_BAND: return "&";
+    case E_TOKEN_TYPE_BOR: return "|";
+    case E_TOKEN_TYPE_XOR: return "^";
+    case E_TOKEN_TYPE_DOUBLE_COLON: return "::";
   }
   return "UNKNOWN";
 }

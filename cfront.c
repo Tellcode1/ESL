@@ -44,12 +44,12 @@ main(int argc, char* argv[])
   bool                 tokenizer_only = false;
   bool                 ast_only       = false;
   int                  root           = -1;
-  e_ast                ast;
-  e_token*             tokens   = nullptr;
-  u32                  ntoks    = 0;
-  e_compilation_result compiled = { 0 };
-  FILE*                f        = NULL;
-  char*                contents = NULL;
+  e_ast                ast            = { 0 };
+  e_token*             tokens         = nullptr;
+  u32                  ntoks          = 0;
+  e_compilation_result compiled       = { 0 };
+  FILE*                f              = NULL;
+  char*                contents       = NULL;
 
   if (e_refdobj_pool_init(16, &ge_pool)) return -1;
 
@@ -147,7 +147,7 @@ main(int argc, char* argv[])
 
 err:
   if (contents) free(contents);
-  e_freetoks(tokens, ntoks);
+  if (ntoks > 0 && tokens) e_freetoks(tokens, ntoks);
   e_ast_free(&ast);
   e_compilation_result_free(&compiled);
   e_refdobj_pool_free(&ge_pool);

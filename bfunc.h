@@ -30,6 +30,7 @@
 #include "stdafx.h"
 #include "var.h"
 
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -47,7 +48,7 @@ typedef struct e_builtin_func {
    * If a variable does not have a bit set in the mask,
    * The compiler will fail and error out.
    */
-  e_vartype allowed_mask;
+  u32 allowed_mask;
 
   u32 min_args;
 
@@ -76,6 +77,34 @@ e_var eb_cast_bool(e_var* args, u32 nargs);
 e_var eb_cast_float(e_var* args, u32 nargs);
 e_var eb_cast_string(e_var* args, u32 nargs);
 e_var eb_cast_list(e_var* args, u32 nargs);
+
+// clang-format off
+static inline e_var eb_sin(e_var* args, u32 /*nargs*/) { return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = sin(args[0].val.f)}}; }
+static inline e_var eb_cos(e_var* args, u32 /*nargs*/) { return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = cos(args[0].val.f)}}; }
+static inline e_var eb_tan(e_var* args, u32 /*nargs*/) { return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = tan(args[0].val.f)}}; }
+static inline e_var eb_asin(e_var* args, u32 /*nargs*/) { return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = asin(args[0].val.f)}}; }
+static inline e_var eb_acos(e_var* args, u32 /*nargs*/) { return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = acos(args[0].val.f)}}; }
+static inline e_var eb_atan(e_var* args, u32 /*nargs*/) { return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = atan(args[0].val.f)}}; }
+static inline e_var eb_atan2(e_var* args, u32 /*nargs*/) { return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = atan2(args[0].val.f,args[1].val.f)}}; }
+static inline e_var eb_sinh(e_var* args, u32 /*nargs*/) { return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = sinh(args[0].val.f)}}; }
+static inline e_var eb_cosh(e_var* args, u32 /*nargs*/) { return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = cosh(args[0].val.f)}}; }
+static inline e_var eb_tanh(e_var* args, u32 /*nargs*/) { return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = tanh(args[0].val.f)}}; }
+static inline e_var eb_acosh(e_var* args, u32 /*nargs*/) { return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = acosh(args[0].val.f)}}; }
+static inline e_var eb_asinh(e_var* args, u32 /*nargs*/) { return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = asinh(args[0].val.f)}}; }
+static inline e_var eb_atanh(e_var* args, u32 /*nargs*/) { return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = atanh(args[0].val.f)}}; }
+static inline e_var eb_exp(e_var* args, u32 /*nargs*/) { return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = exp(args[0].val.f)}}; }
+static inline e_var eb_log(e_var* args, u32 /*nargs*/) { return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = log(args[0].val.f)}}; }
+static inline e_var eb_log10(e_var* args, u32 /*nargs*/) { return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = log10(args[0].val.f)}}; }
+static inline e_var eb_pow(e_var*args, u32 /*nargs*/) { return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = pow(args[0].val.f, args[1].val.f)}}; }
+static inline e_var eb_sqrt(e_var*args, u32 /*nargs*/) { return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = sqrt(args[0].val.f)}}; }
+static inline e_var eb_ceil(e_var*args, u32 /*nargs*/) { return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = ceil(args[0].val.f)}}; }
+static inline e_var eb_floor(e_var*args, u32 /*nargs*/) { return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = floor(args[0].val.f)}}; }
+static inline e_var eb_fmod(e_var*args, u32 /*nargs*/) { return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = fmod(args[0].val.f,args[1].val.f)}}; }
+static inline e_var eb_round(e_var*args, u32 /*nargs*/) { return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = round(args[0].val.f)}}; }
+static inline e_var eb_trunc(e_var*args, u32 /*nargs*/) { return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = trunc(args[0].val.f)}}; }
+static inline e_var eb_abs(e_var*args, u32 /*nargs*/) { return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = abs(args[0].val.f)}}; }
+static inline e_var eb_hypot(e_var*args, u32 /*nargs*/) { return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = hypot(args[0].val.f, args[1].val.f)}}; }
+// clang-format on
 
 static inline e_var
 eb_len(e_var* args, u32 nargs)
@@ -167,7 +196,34 @@ static const e_builtin_func eb_funcs[] = {
   /* Anything can be added as an element to a list */
   { "list", 0xFFFFFF, 1, UINT32_MAX, eb_cast_list },
 
-  { "len", E_VARTYPE_STRING | E_VARTYPE_LIST, 1, 1, eb_len }
+  { "len", E_VARTYPE_STRING | E_VARTYPE_LIST, 1, 1, eb_len },
+
+  /* Math builtins */
+  { "math::sin", E_VARTYPE_FLOAT, 1, 1, eb_sin },
+  { "math::cos", E_VARTYPE_FLOAT, 1, 1, eb_cos },
+  { "math::tan", E_VARTYPE_FLOAT, 1, 1, eb_tan },
+  { "math::asin", E_VARTYPE_FLOAT, 1, 1, eb_asin },
+  { "math::acos", E_VARTYPE_FLOAT, 1, 1, eb_acos },
+  { "math::atan", E_VARTYPE_FLOAT, 1, 1, eb_atan },
+  { "math::atan2", E_VARTYPE_FLOAT, 2, 2, eb_atan2 },
+  { "math::sinh", E_VARTYPE_FLOAT, 1, 1, eb_sinh },
+  { "math::cosh", E_VARTYPE_FLOAT, 1, 1, eb_cosh },
+  { "math::tanh", E_VARTYPE_FLOAT, 1, 1, eb_tanh },
+  { "math::acosh", E_VARTYPE_FLOAT, 1, 1, eb_acosh },
+  { "math::asinh", E_VARTYPE_FLOAT, 1, 1, eb_asinh },
+  { "math::atanh", E_VARTYPE_FLOAT, 1, 1, eb_atanh },
+  { "math::exp", E_VARTYPE_FLOAT, 1, 1, eb_exp },
+  { "math::log", E_VARTYPE_FLOAT, 1, 1, eb_log },
+  { "math::log10", E_VARTYPE_FLOAT, 1, 1, eb_log10 },
+  { "math::pow", E_VARTYPE_FLOAT, 1, 1, eb_pow },
+  { "math::sqrt", E_VARTYPE_FLOAT, 1, 1, eb_sqrt },
+  { "math::ceil", E_VARTYPE_FLOAT, 1, 1, eb_ceil },
+  { "math::floor", E_VARTYPE_FLOAT, 1, 1, eb_floor },
+  { "math::fmod", E_VARTYPE_FLOAT, 1, 1, eb_fmod },
+  { "math::round", E_VARTYPE_FLOAT, 1, 1, eb_round },
+  { "math::trunc", E_VARTYPE_FLOAT, 1, 1, eb_trunc },
+  { "math::abs", E_VARTYPE_FLOAT, 1, 1, eb_abs },
+  { "math::hypot", E_VARTYPE_FLOAT, 1, 1, eb_hypot },
 };
 
 #endif // E_BUILTIN_FUNCTIONS_H

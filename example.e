@@ -1,3 +1,5 @@
+extern say_hello_from_c();
+
 fn PISS()
 {
   println("PISS!");
@@ -255,6 +257,23 @@ fn main() {
   println(gaming::another_one::fart());
   gaming::hidden_var = 66;
   println(gaming::hidden_var);
+
+  for (let multi1 = 0, multi2 = 4, multi3 = 6; multi1 <= 3 && multi2 >= 0 && multi3 >= 0; multi1++, multi2--, multi3 -= 2)
+  {
+    println(multi1, ", ", multi2, ", ", multi3);
+  }
+
+  const PI  = 3.14159265358979323846;
+  const PI2 = 2 * PI;
+  print("math::sin(0) = ", math::sin(0), "; ");  print("math::sin(PI) = ", math::round(math::sin(PI)), "; "); println("math::sin(PI / 4) = ", math::sin(PI / 4), ";");
+  print("math::cos(0) = ", math::cos(0), "; ");  print("math::cos(PI) = ", math::round(math::cos(PI)), "; ");   println("math::cos(PI / 4) = ", math::cos(PI / 4), ";");
+  print("math::tan(0) = ", math::tan(0), "; ");  print("math::tan(PI) = ", math::round(math::tan(PI)), "; "); println("math::tan(PI / 4) = ", math::tan(PI / 4), ";");
+
+  // math vs meth
+  // PI = 3;
+
+  const let constant = "I hate all humans";
+  println(constant);
 }
 
 fn file_test()

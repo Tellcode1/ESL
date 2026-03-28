@@ -1,6 +1,6 @@
 CC ?= cc
 CFLAGS ?= -g -Wall -Wpedantic -DDEBUG
-LDFLAGS ?= -g
+LDFLAGS ?= -lm
 
 SRC_DIR=.
 BUILD_DIR=build
