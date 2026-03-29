@@ -95,6 +95,7 @@ static inline u32
 make_label_id(e_compiler* cc)
 { return cc->next_label++; }
 
+/* Returns 0 on succcess. */
 static inline int
 emit_lvalue_assign_prologue(e_compiler* cc, e_lval lv)
 {

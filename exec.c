@@ -532,7 +532,7 @@ e_exec(const e_exec_info* info)
       }
 
       // case E_OPCODE_LOAD_REFERENCE:
-      default: printf("Unknown instruction: %u\n", opcode); exit(-1);
+      default: printf("Unknown instruction\n"); exit(-1);
 
       // Non fatal return
       case E_OPCODE_HALT: goto _RETURN;

@@ -24,6 +24,7 @@
 
 // Compiler front end
 
+#include "arena.h"
 #include "ast.h"
 #include "astfree.h"
 #include "cc.h"
@@ -85,7 +86,15 @@ main(int argc, char* argv[])
     goto err;
   }
 
-  int e = e_tokenize(contents, in, &tokens, &ntoks);
+  e_arena arena = { 0 };
+  int     e     = e_arena_init(4, &arena);
+  if (e) {
+    /* TODO Add flag to reducce memory allocations? */
+    fprintf(stderr, "ec: Failed to initialize arena\n");
+    goto err;
+  }
+
+  e = e_tokenize(contents, in, &tokens, &ntoks);
   if (e) {
     fprintf(stderr, "ec: Failed to tokenize input string\n");
     goto err;
@@ -99,7 +108,7 @@ main(int argc, char* argv[])
     fputc('\n', stdout);
   }
 
-  e = e_ast_init(tokens, ntoks, &ast);
+  e = e_ast_init(tokens, ntoks, &arena, &ast);
   if (e) {
     fprintf(stderr, "ec: AST initialization failed\n");
     goto err;
@@ -138,7 +147,7 @@ main(int argc, char* argv[])
 
   e_compilation_result_free(&compiled);
 
-  e_ast_node_free(&ast, root);
+  // e_ast_node_free(&ast, root);
   e_ast_free(&ast);
 
   e_freetoks(tokens, ntoks);
@@ -146,6 +155,8 @@ main(int argc, char* argv[])
   e_refdobj_pool_free(&ge_pool);
 
   free(contents);
+
+  e_arena_free(&arena);
 
   return 0;
 

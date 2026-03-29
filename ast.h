@@ -25,6 +25,7 @@
 #ifndef E_AST_H
 #define E_AST_H
 
+#include "arena.h"
 #include "cerr.h"
 #include "lex.h"
 
@@ -112,6 +113,7 @@ typedef enum e_if_level {
 typedef struct e_if_stmt {
   e_ast_node_type type;
   e_filespan      span;
+  bool            alive;
 
   int*              body;
   int*              else_body; // NULL for no else statement
@@ -136,47 +138,55 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
+    bool            alive;
   } common;
 
   struct {
     e_ast_node_type type;
     e_filespan      span;
+    bool            alive;
     int             i;
   } i;
 
   struct {
     e_ast_node_type type;
     e_filespan      span;
+    bool            alive;
     bool            b;
   } b;
 
   struct {
     e_ast_node_type type;
     e_filespan      span;
+    bool            alive;
     char            c;
   } c;
 
   struct {
     e_ast_node_type type;
     e_filespan      span;
+    bool            alive;
     double          f;
   } f;
 
   struct {
     e_ast_node_type type;
     e_filespan      span;
+    bool            alive;
     char*           s;
   } s;
 
   struct {
     e_ast_node_type type;
     e_filespan      span;
+    bool            alive;
     char*           ident;
   } ident;
 
   struct {
     e_ast_node_type type;
     e_filespan      span;
+    bool            alive;
     char*           name;
     int             initializer; // -1 if not given.
     bool            is_const;
@@ -185,6 +195,7 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
+    bool            alive;
     // Node ID of the expression
     int expr_id;
     // If false, expr_id is < 0 and function must return void.
@@ -194,6 +205,7 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
+    bool            alive;
     int*            elems;
     u32             nelems;
   } list;
@@ -201,6 +213,7 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
+    bool            alive;
     int*            kvpairs;
     u32             npairs;
   } map;
@@ -208,6 +221,7 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
+    bool            alive;
     int             left; // index of left
     int             right;
     e_operator      op;
@@ -217,6 +231,7 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
+    bool            alive;
     int             base;
     int             index;
   } index;
@@ -224,6 +239,7 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
+    bool            alive;
     int             base;  // list/structure
     int             index; // index: integer
     int             value; // any value.
@@ -232,6 +248,7 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
+    bool            alive;
     int             base;  // list/structure
     int             index; // index: integer
     int             value; // any value.
@@ -241,6 +258,7 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
+    bool            alive;
     int             right; // index of right
     e_operator      op;
     bool            is_compound;
@@ -249,6 +267,7 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
+    bool            alive;
     int*            stmts;
     u32             nstmts;
   } stmts, root;
@@ -256,6 +275,7 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
+    bool            alive;
 
     char* name;  // Namespace name
     int*  stmts; // All statements in namespace
@@ -265,6 +285,7 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
+    bool            alive;
     int             left;
     int             value;
   } member_assign;
@@ -272,6 +293,7 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
+    bool            alive;
     int             left;
     char*           right;
   } member_access;
@@ -279,6 +301,7 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
+    bool            alive;
     char*           function_name;
     int*            args;
     u32             nargs;
@@ -287,6 +310,7 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
+    bool            alive;
     char*           name;
     char**          args;  // Allocated, + each string is allocated individually.
     int*            stmts; // Function body
@@ -297,6 +321,7 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
+    bool            alive;
     int             condition;
     int*            stmts;
     u32             nstmts;
@@ -305,6 +330,7 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
+    bool            alive;
     int             initializers; // EXPRESSION_LIST, for (let x = 0, y = 16;
     int             condition;    // x >= 0;
     int*            iterators;    // x++,y--)
@@ -326,9 +352,11 @@ typedef struct e_ast {
   e_token* toks;
   u32      ntoks;
   u32      head;
+
+  e_arena* arena;
 } e_ast;
 
-int  e_ast_init(e_token* toks, u32 ntoks, e_ast* prsr);
+int  e_ast_init(e_token* toks, u32 ntoks, e_arena* a, e_ast* prsr);
 void e_ast_free(e_ast* prsr);
 
 static inline e_token*
@@ -448,12 +476,20 @@ e_getbp(e_token_type type, int* left, int* right)
   return true;
 }
 
+#define E_GET_NODE e_ast_get_node
+static inline e_ast_node*
+e_ast_get_node(const e_ast* p, int idx)
+{
+  if (idx < 0) return NULL;
+  return &p->nodes[idx];
+}
+
 static inline int
 e_ast_make_node(e_ast* p)
 {
   if (p->nnodes + 1 >= p->capacity) {
     u32         newcap   = MAX(p->capacity * 2, 1);
-    e_ast_node* newnodes = (e_ast_node*)realloc(p->nodes, newcap * sizeof(e_ast_node));
+    e_ast_node* newnodes = (e_ast_node*)e_arnrealloc(p->arena, p->nodes, newcap * sizeof(e_ast_node));
     if (newnodes == NULL) {
       perror("Allocation failed");
       return -1;
@@ -467,15 +503,9 @@ e_ast_make_node(e_ast* p)
   memset(&p->nodes[idx], 0, sizeof(e_ast_node));
   p->nnodes++;
 
-  return (int)idx;
-}
+  E_GET_NODE(p, (int)idx)->common.alive = true;
 
-#define E_GET_NODE e_ast_get_node
-static inline e_ast_node*
-e_ast_get_node(const e_ast* p, int idx)
-{
-  if (idx < 0) return NULL;
-  return &p->nodes[idx];
+  return (int)idx;
 }
 
 static inline bool

@@ -1,4 +1,12 @@
-[ VARIABLE DECLERATION ]
+[INTRODUCTION]
+E (working on the name) is a dynamically typed, simple scripting language.
+It is a language targeted at integration with game engines, offering
+great interopability with C (other languages will be worked on).
+
+It currently has x basic types: int, float, string and list.
+
+
+[VARIABLE DECLERATION]
 Variables in the script can be declared using the 'let' keyword.
 For example, to declare a variable PI, we can use the syntax:
 let PI; // Initializes PI to VOID

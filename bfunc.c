@@ -25,7 +25,6 @@
 #include "bfunc.h"
 
 #include "pool.h"
-#include "refcount.h"
 #include "var.h"
 
 #include <stdlib.h>
