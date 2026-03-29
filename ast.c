@@ -22,6 +22,8 @@
  * SOFTWARE.
  */
 
+int help_im_going_to_die = 0;
+
 #include "ast.h"
 
 #include "astfree.h"
@@ -232,8 +234,11 @@ e_ast_expect(e_ast* p, e_token_type type)
 int
 e_ast_expr(e_ast* p, int rbp)
 {
-  int left = e_ast_nud(p, e_ast_next(p));
+  e_token* tk   = next(p);
+  int      left = e_ast_nud(p, tk);
   if (left < 0) return left;
+
+  // E_GET_NODE(p, left)->common.span = clonespan(tk->span);
 
   while (e_ast_peek(p)) {
     e_token* op = e_ast_peek(p);
@@ -260,11 +265,6 @@ static int
 parse_variable_decleration(e_ast* ast, bool is_const, int node)
 {
   if (node < 0) return node;
-
-  if (peek(ast) && peek(ast)->type == E_TOKEN_TYPE_CONST) {
-    is_const = true;
-    next(ast);
-  }
 
   u32  capacity = 4;
   u32  ndecls   = 0;
@@ -321,12 +321,13 @@ parse_variable_decleration(e_ast* ast, bool is_const, int node)
     // ooo optimizations ruined span collection yay
     E_GET_NODE(ast, node)->type        = E_GET_NODE(ast, decls[0])->type;
     E_GET_NODE(ast, node)->let         = E_GET_NODE(ast, decls[0])->let;
-    E_GET_NODE(ast, node)->common.span = clonespan(E_GET_NODE(ast, decls[0])->common.span);
+    E_GET_NODE(ast, node)->common.span = E_GET_NODE(ast, decls[0])->common.span;
+    memset(E_GET_NODE(ast, decls[0]), 0, sizeof(e_ast_node));
     free(decls);
     return node;
   }
 
-  E_GET_NODE(ast, node)->type         = E_AST_NODE_EXPRESSION_LIST;
+  E_GET_NODE(ast, node)->type         = E_AST_NODE_STATEMENT_LIST;
   E_GET_NODE(ast, node)->stmts.stmts  = decls;
   E_GET_NODE(ast, node)->stmts.nstmts = ndecls;
 
@@ -752,8 +753,8 @@ parse_function_call(e_ast* p, e_token* tk, int node)
     goto err;
   }
 
-  E_GET_NODE(p, node)->type          = E_AST_NODE_CALL;
-  E_GET_NODE(p, node)->call.function = strdup(tk->val.ident);
+  E_GET_NODE(p, node)->type               = E_AST_NODE_CALL;
+  E_GET_NODE(p, node)->call.function_name = strdup(tk->val.ident);
   // printf("AST: Detected function call: %s\n", tk->val.ident);
 
   while (peek(p) && peek(p)->type != E_TOKEN_TYPE_CLOSEPAREN) {
@@ -775,6 +776,7 @@ parse_function_call(e_ast* p, e_token* tk, int node)
     args[nargs++] = e_ast_expr(p, 0);
 
     if (peek(p)->type == E_TOKEN_TYPE_CLOSEPAREN) { break; }
+
     if (e_ast_expect(p, E_TOKEN_TYPE_COMMA)) {
       asterror(prev(p)->span, "Expected ',' or ')', got '%s'\n", e_token_type_to_string(prev(p)->type));
       goto err;
@@ -910,6 +912,49 @@ parse_namespace_decleration(e_ast* p, int node)
   return node;
 }
 
+static int
+parse_namespace_call(e_ast* p, char* name, int node)
+{
+  u32  capacity = 4;
+  u32  nargs    = 0;
+  int* args     = malloc(sizeof(int) * capacity);
+  if (!args) { return -1; }
+
+  next(p); // '('
+
+  while (peek(p) && peek(p)->type != E_TOKEN_TYPE_CLOSEPAREN) {
+    if (nargs >= capacity) {
+      u32  newcap   = MAX(capacity * 2, 1);
+      int* new_args = realloc(args, sizeof(int) * newcap);
+      if (!new_args) {
+        free(args);
+        return -1;
+      }
+      args     = new_args;
+      capacity = newcap;
+    }
+
+    args[nargs++] = e_ast_expr(p, 0);
+
+    if (peek(p)->type == E_TOKEN_TYPE_CLOSEPAREN) break;
+
+    if (e_ast_expect(p, E_TOKEN_TYPE_COMMA)) {
+      asterror(prev(p)->span, "Expected ',' or ')' [qualified function call]\n");
+      free(args);
+      return -1;
+    }
+  }
+
+  next(p); // ')'
+
+  E_GET_NODE(p, node)->type               = E_AST_NODE_CALL;
+  E_GET_NODE(p, node)->call.function_name = name;
+  E_GET_NODE(p, node)->call.args          = args;
+  E_GET_NODE(p, node)->call.nargs         = nargs;
+
+  return node;
+}
+
 int
 e_ast_nud(e_ast* p, e_token* tk)
 {
@@ -927,9 +972,9 @@ e_ast_nud(e_ast* p, e_token* tk)
   /* zero out the node for safety. */
   memset(E_GET_NODE(p, node), 0, sizeof(e_ast_node));
 
-  // if (tk->type == E_TOKEN_TYPE_EOF) return -1;
+  E_GET_NODE(p, node)->common.span = clonespan(tk->span);
 
-  e_ast_get_node(p, node)->common.span = clonespan(tk->span);
+  // if (tk->type == E_TOKEN_TYPE_EOF) return -1;
 
   switch (tk->type) {
     case E_TOKEN_TYPE_INT:
@@ -971,6 +1016,8 @@ e_ast_nud(e_ast* p, e_token* tk)
       // Just a variable!
       E_GET_NODE(p, node)->type        = E_AST_NODE_VARIABLE;
       E_GET_NODE(p, node)->ident.ident = strdup(tk->val.ident);
+
+      help_im_going_to_die++;
       return node;
     }
 
@@ -1008,7 +1055,7 @@ e_ast_nud(e_ast* p, e_token* tk)
         return -1;
       }
 
-      E_GET_NODE(p, node)->type         = E_AST_NODE_EXPRESSION_LIST;
+      E_GET_NODE(p, node)->type         = E_AST_NODE_STATEMENT_LIST;
       E_GET_NODE(p, node)->stmts.stmts  = stmts;
       E_GET_NODE(p, node)->stmts.nstmts = nstmts;
 
@@ -1046,10 +1093,21 @@ e_ast_nud(e_ast* p, e_token* tk)
     }
 
     case E_TOKEN_TYPE_CONST:
-      // Doing this allows all of [let const, const let and const <varname>]
-      if (peek(p) && peek(p)->type == E_TOKEN_TYPE_LET) next(p); // fallthrough
     case E_TOKEN_TYPE_LET: {
-      if (parse_variable_decleration(p, tk->type == E_TOKEN_TYPE_CONST, node) < 0) {
+      // const x = 69;
+      // const let gay = false;
+      bool is_const = (tk->type == E_TOKEN_TYPE_CONST);
+
+      // skip the 2nd let tok if it exists
+      if (tk->type == E_TOKEN_TYPE_CONST && peek(p) && peek(p)->type == E_TOKEN_TYPE_LET) { next(p); }
+
+      // skip the 2nd const tok if it exists
+      if (tk->type == E_TOKEN_TYPE_LET && peek(p) && peek(p)->type == E_TOKEN_TYPE_CONST) {
+        is_const = true;
+        next(p);
+      }
+
+      if (parse_variable_decleration(p, is_const, node) < 0) {
         e_ast_node_free(p, node);
         return -1;
       }
@@ -1178,6 +1236,8 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
 
         // we stole lefts' children, we don't want to recursively free it.
         free(E_GET_NODE(p, leftidx)->common.span.file);
+        E_GET_NODE(p, leftidx)->common.span.file = NULL;
+        E_GET_NODE(p, leftidx)->type             = E_AST_NODE_NOP;
 
         return node;
       }
@@ -1265,57 +1325,19 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
 
       // If function call
       if (peek(p) && peek(p)->type == E_TOKEN_TYPE_OPENPAREN) {
-        u32  capacity = 4;
-        u32  nargs    = 0;
-        int* args     = malloc(sizeof(int) * capacity);
-        if (!args) {
+        if (parse_namespace_call(p, fullname, node) < 0) {
           free(fullname);
           e_ast_node_free(p, node);
           return -1;
         }
-
-        next(p); // '('
-
-        while (peek(p) && peek(p)->type != E_TOKEN_TYPE_CLOSEPAREN) {
-          if (nargs >= capacity) {
-            u32  newcap   = MAX(capacity * 2, 1);
-            int* new_args = realloc(args, sizeof(int) * newcap);
-            if (!new_args) {
-              free(fullname);
-              free(args);
-              e_ast_node_free(p, node);
-              return -1;
-            }
-            args     = new_args;
-            capacity = newcap;
-          }
-
-          args[nargs++] = e_ast_expr(p, 0);
-
-          if (peek(p)->type == E_TOKEN_TYPE_CLOSEPAREN) break;
-
-          if (e_ast_expect(p, E_TOKEN_TYPE_COMMA)) {
-            asterror(prev(p)->span, "Expected ',' or ')' [qualified function call]\n");
-            free(fullname);
-            free(args);
-            e_ast_node_free(p, node);
-            return -1;
-          }
-        }
-
-        next(p); // ')'
-
-        E_GET_NODE(p, node)->type          = E_AST_NODE_CALL;
-        E_GET_NODE(p, node)->call.function = fullname;
-        E_GET_NODE(p, node)->call.args     = args;
-        E_GET_NODE(p, node)->call.nargs    = nargs;
-
         return node;
       }
 
+      // just a namespaced variable.
       E_GET_NODE(p, node)->type        = E_AST_NODE_VARIABLE;
       E_GET_NODE(p, node)->ident.ident = fullname;
 
+      help_im_going_to_die++;
       return node;
     }
 

@@ -368,7 +368,7 @@ e_exec(const e_exec_info* info)
 
       case E_OPCODE_INC:
       case E_OPCODE_DEC: {
-        u32    id = (u32)-1;
+        u32    id = UINT32_MAX;
         e_var* v  = e_stack_top(info->stack);
 
         if (attrs & E_ATTR_COMPOUND) { id = e_read_u32(&ip); }
@@ -380,7 +380,10 @@ e_exec(const e_exec_info* info)
         }
 
         if (attrs & E_ATTR_COMPOUND) {
-          assign(info, get_variable_slot(info->stack->variables, info->stack->nvariables, id), *v);
+          u32 slot = get_variable_slot(info->stack->variables, info->stack->nvariables, id);
+          if (slot == UINT32_MAX) break;
+
+          assign(info, slot, *v);
           info->stack->size--; // Variable slot owns v now!
         }
 
@@ -529,7 +532,7 @@ e_exec(const e_exec_info* info)
       }
 
       // case E_OPCODE_LOAD_REFERENCE:
-      default: printf("Unknown instruction\n"); exit(-1);
+      default: printf("Unknown instruction: %u\n", opcode); exit(-1);
 
       // Non fatal return
       case E_OPCODE_HALT: goto _RETURN;

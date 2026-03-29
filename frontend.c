@@ -105,6 +105,8 @@ main(int argc, char* argv[])
     goto err;
   }
 
+  // for (u32 i = 0; i < ntoks; i++) { printf("[%s:%i:%i]\n", tokens[i].span.file, tokens[i].span.line, tokens[i].span.col); }
+
   e = e_ast_parse(&ast, &root);
   if (root < 0 || e) {
     fprintf(stderr, "ec: AST parsing failed\n");
@@ -121,6 +123,8 @@ main(int argc, char* argv[])
     fprintf(stderr, "ec: Compilation failed\n");
     goto err;
   }
+
+  // printf("ljasldkfj: %i\n", help_im_going_to_die);
 
   f = fopen(out, "wb");
   if (!f) {
@@ -148,6 +152,7 @@ main(int argc, char* argv[])
 err:
   if (contents) free(contents);
   if (ntoks > 0 && tokens) e_freetoks(tokens, ntoks);
+  e_ast_node_free(&ast, root);
   e_ast_free(&ast);
   e_compilation_result_free(&compiled);
   e_refdobj_pool_free(&ge_pool);

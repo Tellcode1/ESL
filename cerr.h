@@ -52,6 +52,10 @@ static inline _ATTR_FORMAT(printf, 4, 5) int _cerror(const char* file, size_t li
   return 0;
 }
 
-#define cerror(span, ...) _cerror(__FILE__, __LINE__, span, __VA_ARGS__)
+#define cerror(span, ...)                                                                                                                                                     \
+  do {                                                                                                                                                                        \
+    _UNREACHABLE();                                                                                                                                                           \
+    _cerror(__FILE__, __LINE__, span, __VA_ARGS__);                                                                                                                           \
+  } while (0)
 
 #endif // E_CERR_H

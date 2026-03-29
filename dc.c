@@ -27,6 +27,7 @@
 #include "fn.h"
 #include "rwhelp.h"
 #include "stdafx.h"
+#include "var.h"
 
 #include <stdio.h>
 
@@ -63,6 +64,13 @@ main(int argc, char** argv)
   for (int i = 0; i < nfuncs; i++) {
     printf("%u(%u):\n", funcs[i].name_hash, funcs[i].nargs);
     e_print_instruction_stream((const u8*)funcs[i].code, funcs[i].code_size, 4);
+  }
+
+  printf(".literals:\n");
+  for (u32 i = 0; i < nlits; i++) {
+    printf("[%u] = ", i);
+    e_var_print(&lits[i], stdout);
+    fputc('\n', stdout);
   }
 
   fclose(f);

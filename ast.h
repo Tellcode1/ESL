@@ -31,13 +31,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+extern int help_im_going_to_die;
+
 typedef enum e_ast_nodetype {
   E_AST_NODE_NOP,
 
   E_AST_NODE_ROOT,
   E_AST_NODE_BINARYOP,
   E_AST_NODE_UNARYOP,
-  E_AST_NODE_EXPRESSION_LIST,
+  E_AST_NODE_STATEMENT_LIST,
 
   E_AST_NODE_FOR,
   E_AST_NODE_WHILE,
@@ -215,13 +217,6 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    int             left;
-    int             right;
-  } assign;
-
-  struct {
-    e_ast_node_type type;
-    e_filespan      span;
     int             base;
     int             index;
   } index;
@@ -284,7 +279,7 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    char*           function;
+    char*           function_name;
     int*            args;
     u32             nargs;
   } call;
@@ -468,8 +463,9 @@ e_ast_make_node(e_ast* p)
     p->capacity = newcap;
   }
 
-  u32 idx = p->nnodes++;
+  u32 idx = p->nnodes;
   memset(&p->nodes[idx], 0, sizeof(e_ast_node));
+  p->nnodes++;
 
   return (int)idx;
 }
@@ -484,7 +480,7 @@ e_ast_get_node(const e_ast* p, int idx)
 
 static inline bool
 e_ast_is_limiter_exempt(e_ast_node_type t)
-{ return t == E_AST_NODE_IF || t == E_AST_NODE_WHILE || t == E_AST_NODE_FOR || t == E_AST_NODE_FUNCTION_DEFINITION || t == E_AST_NODE_EXPRESSION_LIST; }
+{ return t == E_AST_NODE_IF || t == E_AST_NODE_WHILE || t == E_AST_NODE_FOR || t == E_AST_NODE_FUNCTION_DEFINITION || t == E_AST_NODE_STATEMENT_LIST; }
 
 int e_ast_parse(e_ast* p, int* root_nodeID);
 int e_ast_nud(e_ast* p, e_token* token);

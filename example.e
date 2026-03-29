@@ -1,4 +1,4 @@
-extern say_hello_from_c();
+// extern say_hello_from_c();
 
 fn PISS()
 {
@@ -263,11 +263,12 @@ fn main() {
     println(multi1, ", ", multi2, ", ", multi3);
   }
 
-  const PI  = 3.14159265358979323846;
-  const PI2 = 2 * PI;
-  print("math::sin(0) = ", math::sin(0), "; ");  print("math::sin(PI) = ", math::round(math::sin(PI)), "; "); println("math::sin(PI / 4) = ", math::sin(PI / 4), ";");
-  print("math::cos(0) = ", math::cos(0), "; ");  print("math::cos(PI) = ", math::round(math::cos(PI)), "; ");   println("math::cos(PI / 4) = ", math::cos(PI / 4), ";");
-  print("math::tan(0) = ", math::tan(0), "; ");  print("math::tan(PI) = ", math::round(math::tan(PI)), "; "); println("math::tan(PI / 4) = ", math::tan(PI / 4), ";");
+  let PI  = 3.14159265358979323846;
+  let PI2 = 2 * math::PI;
+  println("PI = ", PI);
+  print("math::sin(0) = ", math::sin(0), "; ");  print("math::sin(PI) = ", math::round(math::sin(PI)), "; "); println("math::sin(PI / 4) = ", math::sin(PI / 4), "; ");
+  print("math::cos(0) = ", math::cos(0), "; ");  print("math::cos(PI) = ", math::round(math::cos(PI)), "; ");   println("math::cos(PI / 4) = ", math::cos(PI / 4), "; ");
+  print("math::tan(0) = ", math::tan(0), "; ");  print("math::tan(PI) = ", math::round(math::tan(PI)), "; "); println("math::tan(PI / 4) = ", math::tan(PI / 4), "; ");
 
   // math vs meth
   // PI = 3;

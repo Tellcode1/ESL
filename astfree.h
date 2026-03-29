@@ -34,7 +34,15 @@ e_ast_node_free(e_ast* p, int nodeID)
 {
   if (nodeID < 0) return;
 
+  static bool test = false;
+  if (nodeID == 0 && test) {
+    printf("Multiple root nodes!\n");
+    return;
+  }
+  if (nodeID == 0) { test = true; }
+
   free(E_GET_NODE(p, nodeID)->common.span.file);
+
   switch (E_GET_NODE(p, nodeID)->type) {
     case E_AST_NODE_NOP: break;
     case E_AST_NODE_ROOT:
@@ -51,7 +59,7 @@ e_ast_node_free(e_ast* p, int nodeID)
       break;
     }
     case E_AST_NODE_UNARYOP: e_ast_node_free(p, E_GET_NODE(p, nodeID)->unaryop.right); break;
-    case E_AST_NODE_EXPRESSION_LIST:
+    case E_AST_NODE_STATEMENT_LIST:
       for (u32 i = 0; i < E_GET_NODE(p, nodeID)->stmts.nstmts; i++) e_ast_node_free(p, E_GET_NODE(p, nodeID)->stmts.stmts[i]);
       free(E_GET_NODE(p, nodeID)->stmts.stmts);
       break;
@@ -98,7 +106,10 @@ e_ast_node_free(e_ast* p, int nodeID)
 
       break;
     }
-    case E_AST_NODE_VARIABLE: free(E_GET_NODE(p, nodeID)->ident.ident); break;
+    case E_AST_NODE_VARIABLE:
+      free(E_GET_NODE(p, nodeID)->ident.ident);
+      help_im_going_to_die--;
+      break;
 
     case E_AST_NODE_VARIABLE_DECL:
       free(E_GET_NODE(p, nodeID)->let.name);
@@ -106,8 +117,8 @@ e_ast_node_free(e_ast* p, int nodeID)
       break;
 
     case E_AST_NODE_ASSIGN:
-      e_ast_node_free(p, E_GET_NODE(p, nodeID)->assign.left);
-      e_ast_node_free(p, E_GET_NODE(p, nodeID)->assign.right);
+      e_ast_node_free(p, E_GET_NODE(p, nodeID)->binaryop.left);
+      e_ast_node_free(p, E_GET_NODE(p, nodeID)->binaryop.right);
       break;
 
     case E_AST_NODE_INDEX_ASSIGN:
@@ -117,8 +128,8 @@ e_ast_node_free(e_ast* p, int nodeID)
       break;
 
     case E_AST_NODE_CALL:
-      free(E_GET_NODE(p, nodeID)->call.function);
       for (u32 i = 0; i < E_GET_NODE(p, nodeID)->call.nargs; i++) e_ast_node_free(p, E_GET_NODE(p, nodeID)->call.args[i]);
+      free(E_GET_NODE(p, nodeID)->call.function_name);
       free(E_GET_NODE(p, nodeID)->call.args);
       break;
 
@@ -147,8 +158,8 @@ e_ast_node_free(e_ast* p, int nodeID)
       break;
     }
     case E_AST_NODE_NAMESPACE_DECL: {
-      free(E_GET_NODE(p, nodeID)->namespace_decl.name);
       for (u32 i = 0; i < E_GET_NODE(p, nodeID)->namespace_decl.nstmts; i++) { e_ast_node_free(p, E_GET_NODE(p, nodeID)->namespace_decl.stmts[i]); }
+      free(E_GET_NODE(p, nodeID)->namespace_decl.name);
       free(E_GET_NODE(p, nodeID)->namespace_decl.stmts);
       break;
     }

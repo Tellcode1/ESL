@@ -26,6 +26,7 @@
 #define E_CC_H
 
 #include "bc.h"
+#include "bvar.h"
 #include "cerr.h"
 #include "fn.h"
 #include "stack.h"
@@ -92,6 +93,10 @@ typedef struct e_compiler {
   u16*   literal_hashes;
   u32    nliterals;
   u32    cliterals;
+
+  const e_builtin_var* builtin_vars;
+  const u32*           builtin_var_hashes;
+  u32                  nbuiltin_vars;
 
   u8* emit;
   u32 emitted;

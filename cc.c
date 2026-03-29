@@ -27,6 +27,7 @@
 #include "ast.h"
 #include "bc.h"
 #include "bfunc.h"
+#include "bvar.h"
 #include "cerr.h"
 #include "fn.h"
 #include "label.h"
@@ -80,6 +81,7 @@ e_binary_operator_to_opcode(e_operator op)
   return -1;
 }
 
+static char*      mk_name(const e_compiler* cc, const char* name);
 static inline int compile_literal(e_compiler* cc, int node);
 static int        compile_function_definition(struct e_compiler* cc, int node);
 static int        compile_function_call(struct e_compiler* cc, int node);
@@ -109,6 +111,7 @@ emit_lvalue_assign_prologue(e_compiler* cc, e_lval lv)
 
     return 0;
   }
+
   return -1;
 }
 
@@ -184,6 +187,92 @@ lower_node_to_literal(const e_ast* p, int node, e_var* o)
     default: return 1;
   }
   return 1;
+}
+
+e_lval
+e_make_value(e_compiler* cc, int node)
+{
+  switch (E_GET_NODE(cc->ast, node)->type) {
+    case E_AST_NODE_VARIABLE: {
+      char* name = mk_name(cc, E_GET_NODE(cc->ast, node)->ident.ident);
+
+      e_lval l;
+      l.span         = &E_GET_NODE(cc->ast, node)->common.span;
+      l.type         = E_LVAL_VAR;
+      l.val.var.id   = e_hash_fnv(name, strlen(name));
+      l.val.var.name = name;
+      return l;
+    }
+
+    case E_AST_NODE_INDEX: {
+      e_lval l;
+      l.span                 = &E_GET_NODE(cc->ast, node)->common.span;
+      l.type                 = E_LVAL_INDEX;
+      l.val.index.left_node  = E_GET_NODE(cc->ast, node)->index.base;
+      l.val.index.index_node = E_GET_NODE(cc->ast, node)->index.index;
+      return l;
+    }
+
+    case E_AST_NODE_INDEX_ASSIGN: {
+      e_lval l;
+      l.span                 = &E_GET_NODE(cc->ast, node)->common.span;
+      l.type                 = E_LVAL_INDEX;
+      l.val.index.left_node  = E_GET_NODE(cc->ast, node)->index_assign.base;
+      l.val.index.index_node = E_GET_NODE(cc->ast, node)->index_assign.index;
+      return l;
+    }
+
+    case E_AST_NODE_INDEX_COMPOUND_OP: {
+      e_lval l;
+      l.span                 = &E_GET_NODE(cc->ast, node)->common.span;
+      l.type                 = E_LVAL_INDEX;
+      l.val.index.left_node  = E_GET_NODE(cc->ast, node)->index_compound.base;
+      l.val.index.index_node = E_GET_NODE(cc->ast, node)->index_compound.index;
+      return l;
+    }
+
+    default: cerror(E_GET_NODE(cc->ast, node)->common.span, "%i can not be represented as a value (it is %u)\n", node, E_GET_NODE(cc->ast, node)->type); exit(-1);
+  }
+
+  return (e_lval){ .type = E_LVAL_UNKNOWN };
+}
+
+void
+e_free_value(e_lval* lv)
+{
+  if (lv->type == E_LVAL_VAR) { free(lv->val.var.name); }
+}
+
+int
+e_emit_lvalue_load(e_compiler* cc, e_lval lv)
+{
+  if (lv.type == E_LVAL_VAR) {
+    e_var* exists = e_stack_find(cc->stack, lv.val.var.id);
+    if (exists == nullptr) {
+      cerror(lv.span ? *lv.span : (e_filespan){ 0 }, "Variable %s undeclared [variable value load]\n", lv.val.var.name);
+      return -1;
+    }
+
+    // This breaks for arguments. TODO: Add fix.
+    // if (E_VAR_AS_INFO(exists)->initializer < 0 && E_VAR_AS_INFO(exists)->current_value < 0) {
+    //   cerror(*lv.span, "Variable %s possibly uninitialized at time of use [variable value load]\n", lv.val.var.name);
+    // }
+
+    e_emit_instruction(cc, E_OPCODE_LOAD, E_ATTR_NONE);
+    e_emit_u32(cc, lv.val.var.id);
+
+    return 0;
+  } else if (lv.type == E_LVAL_INDEX) {
+    int e = compile(cc, lv.val.index.left_node);
+    if (e < 0) return e;
+
+    e = compile(cc, lv.val.index.index_node);
+    if (e < 0) return e;
+
+    e_emit_instruction(cc, E_OPCODE_INDEX, E_ATTR_NONE);
+  }
+
+  return -1;
 }
 
 static void
@@ -317,7 +406,6 @@ compile_function_definition(struct e_compiler* cc, int node)
   /* Ensure it doesn't already exist */
   for (u32 i = 0; i < cc->functions_count; i++) {
     if (cc->functions[i].name_hash == hash) {
-      _UNREACHABLE();
       cerror(E_GET_NODE(cc->ast, node)->common.span, "Multiple definitions of function \"%s\"\n", function_name);
       return -1;
     }
@@ -330,7 +418,10 @@ compile_function_definition(struct e_compiler* cc, int node)
     arg_slots = (u32*)malloc(sizeof(u32) * nargs);
     for (u32 i = 0; i < nargs; i++) {
       const char* arg_name = E_GET_NODE(cc->ast, node)->func.args[i];
-      u32         arg_hash = e_hash_fnv(arg_name, strlen(arg_name));
+
+      char* full_arg_name = mk_name(cc, arg_name);
+      u32   arg_hash      = e_hash_fnv(full_arg_name, strlen(full_arg_name));
+      free(full_arg_name);
 
       arg_slots[i] = arg_hash;
 
@@ -364,6 +455,9 @@ compile_function_definition(struct e_compiler* cc, int node)
     .functions          = cc->functions,
     .functions_capacity = cc->functions_capacity,
     .functions_count    = cc->functions_count,
+    .builtin_var_hashes = cc->builtin_var_hashes,
+    .nbuiltin_vars      = cc->nbuiltin_vars,
+    .builtin_vars       = cc->builtin_vars,
   };
 
   int e = e_compile_function(&copy, node);
@@ -380,6 +474,7 @@ compile_function_definition(struct e_compiler* cc, int node)
   cc->ns                 = copy.ns;
   cc->functions_count    = copy.functions_count;
   cc->functions_capacity = copy.functions_capacity;
+  /* Can't modify builtin variable count */
 
   e_function f = {
     .code      = copy.emit,
@@ -409,7 +504,8 @@ compile_function_definition(struct e_compiler* cc, int node)
 static int
 compile_binary_op(struct e_compiler* cc, int node)
 {
-  int e = 0;
+  e_lval lv = { 0 };
+  int    e  = 0;
 
   bool is_compound = E_GET_NODE(cc->ast, node)->binaryop.is_compound;
   int  left        = E_GET_NODE(cc->ast, node)->binaryop.left;
@@ -418,47 +514,52 @@ compile_binary_op(struct e_compiler* cc, int node)
   e_opcode opcode = e_binary_operator_to_opcode(E_GET_NODE(cc->ast, node)->binaryop.op);
   if (opcode < 0) {
     cerror(E_GET_NODE(cc->ast, node)->common.span, "Operator %u can not be used as a binary operator\n", E_GET_NODE(cc->ast, node)->binaryop.op);
-    return -1;
+    goto err;
   }
 
   if (is_compound && !e_can_make_value(cc->ast, left)) {
     cerror(E_GET_NODE(cc->ast, left)->common.span, "Can not assign to left\n");
-    return -1;
+    goto err;
   }
 
-  e_lval lv = { 0 };
   if (is_compound) {
     // Verified  earlier that we can make it into an lvalue
-    lv = e_make_value(cc->ast, left);
+    lv = e_make_value(cc, left);
 
     /* Load data to point to where we want to assign it (Not stack information!) */
     e = emit_lvalue_assign_prologue(cc, lv);
-    if (e) return e;
+    if (e) goto err;
 
     /* Load left */
     e = e_emit_lvalue_load(cc, lv);
-    if (e) return e;
+    if (e) goto err;
 
     /* Load right */
     e = compile(cc, right);
-    if (e) return e;
+    if (e) goto err;
 
     /* Emit operator */
     e_emit_instruction(cc, opcode, E_ATTR_NONE);
 
     /* Emit actual assign instruction (takes value produced earlier and assigns it) */
     emit_lvalue_assign_epilogue(cc, lv);
+
+    e_free_value(&lv);
   } else {
     e = compile(cc, left);
-    if (e) return e;
+    if (e) goto err;
 
     e = compile(cc, right);
-    if (e) return e;
+    if (e) goto err;
 
     e_emit_instruction(cc, opcode, E_ATTR_NONE);
   }
 
   return e;
+
+err:
+  e_free_value(&lv);
+  return -1;
 }
 
 static int
@@ -482,23 +583,45 @@ compile_unary_op(struct e_compiler* cc, int node)
   // clang-format on
 
   e_attr attrs = E_ATTR_NONE;
-  if (E_GET_NODE(cc->ast, node)->unaryop.is_compound) { attrs |= E_ATTR_COMPOUND; }
 
-  e_emit_instruction(cc, opcode, attrs);
+  bool is_compound = E_GET_NODE(cc->ast, node)->unaryop.is_compound;
+  if (is_compound) { attrs |= E_ATTR_COMPOUND; }
 
-  if (E_GET_NODE(cc->ast, node)->unaryop.is_compound) {
-    int        right_node = E_GET_NODE(cc->ast, node)->unaryop.right;
-    e_filespan span       = E_GET_NODE(cc->ast, right_node)->common.span;
+  int right = E_GET_NODE(cc->ast, node)->unaryop.right;
+  if (is_compound) {
+    e_lval lv = { 0 };
 
-    if (!e_can_make_value(cc->ast, right_node)) {
-      cerror(span, "Can not lower right to lvalue. Are you sure it's a modifiable variable?\n");
-      return -1;
-    }
+    // Verified  earlier that we can make it into an lvalue
+    lv = e_make_value(cc, right);
 
-    e_emit_u32(cc, e_make_value(cc->ast, right_node).val.var.id);
+    /* Load data to point to where we want to assign it (Not stack information!) */
+    e = emit_lvalue_assign_prologue(cc, lv);
+    if (e) goto err;
+
+    /* Load right */
+    e = compile(cc, right);
+    if (e) goto err;
+
+    /* Emit operator */
+    e_emit_instruction(cc, opcode, E_ATTR_NONE);
+
+    /* Emit actual assign instruction (takes value produced earlier and assigns it) */
+    emit_lvalue_assign_epilogue(cc, lv);
+
+    e_free_value(&lv);
+  } else {
+    /* Load right */
+    e = compile(cc, right);
+    if (e) goto err;
+
+    /* Emit operator */
+    e_emit_instruction(cc, opcode, E_ATTR_NONE);
   }
 
   return 0;
+
+err:
+  return -1;
 }
 
 static inline bool
@@ -526,7 +649,7 @@ compile_function_call(struct e_compiler* cc, int node)
   u32        nargs         = E_GET_NODE(cc->ast, node)->call.nargs;
   int*       args          = E_GET_NODE(cc->ast, node)->call.args;
 
-  const char* function_name = E_GET_NODE(cc->ast, node)->call.function;
+  const char* function_name = E_GET_NODE(cc->ast, node)->call.function_name;
 
   char* full = mk_name(cc, function_name);
   // printf("%s\n", full);
@@ -834,7 +957,8 @@ e_compile_member_access(e_compiler* cc, int node)
   int   left  = E_GET_NODE(cc->ast, node)->member_access.left;
   char* right = E_GET_NODE(cc->ast, node)->member_access.right;
 
-  compile(cc, left);
+  int e = compile(cc, left);
+  if (e) return e;
 
   e_emit_instruction(cc, E_OPCODE_MEMBER_ACCESS, E_ATTR_NONE);
   e_emit_u32(cc, e_hash_fnv(right, strlen(right)));
@@ -896,7 +1020,7 @@ compile(struct e_compiler* cc, int node)
       return 0;
     }
 
-    case E_AST_NODE_EXPRESSION_LIST: {
+    case E_AST_NODE_STATEMENT_LIST: {
       /* Don't push a sccope */
       int e = 0;
       for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->stmts.nstmts; i++) {
@@ -908,6 +1032,11 @@ compile(struct e_compiler* cc, int node)
 
     case E_AST_NODE_NAMESPACE_DECL: {
       const char* name = E_GET_NODE(cc->ast, node)->namespace_decl.name;
+
+      if (strcmp(name, "math") == 0) {
+        cerror(E_GET_NODE(cc->ast, node)->namespace_decl.span, "Can not modify builtin namespace 'math'\n");
+        return -1;
+      }
 
       /* PUSH namespace */
       ns_push(cc, name);
@@ -973,6 +1102,7 @@ compile(struct e_compiler* cc, int node)
       e_emit_u32(cc, cc->loop->break_label);
       return 0;
     }
+
     case E_AST_NODE_CONTINUE: {
       if (!cc->loop) {
         cerror(E_GET_NODE(cc->ast, node)->common.span, "continue used outside loop\n");
@@ -980,7 +1110,7 @@ compile(struct e_compiler* cc, int node)
       }
       e_emit_instruction(cc, E_OPCODE_JMP, E_ATTR_NONE);
       e_emit_u32(cc, cc->loop->continue_label);
-      break;
+      return 0;
     }
 
     case E_AST_NODE_RETURN: {
@@ -1001,6 +1131,20 @@ compile(struct e_compiler* cc, int node)
       char* full = mk_name(cc, E_GET_NODE(cc->ast, node)->ident.ident);
       u32   hash = e_hash_fnv(full, strlen(full));
 
+      for (u32 i = 0; i < cc->nbuiltin_vars; i++) {
+        if (cc->builtin_var_hashes[i] == hash) {
+          /* Instantiate a builtin variable only if it is used. */
+          e_var v = {
+            .type = cc->builtin_vars[i].type,
+            .val  = cc->builtin_vars[i].value,
+          };
+          compile_literal_variable(cc, v);
+
+          free(full);
+          return 0; // compile_literal_variable loads the value! Return.
+        }
+      }
+
       e_var* exists = e_stack_find(cc->stack, hash);
       if (exists == nullptr) {
         cerror(E_GET_NODE(cc->ast, node)->common.span, "Undeclared variable '%s'\n", full);
@@ -1009,7 +1153,13 @@ compile(struct e_compiler* cc, int node)
 
       free(full);
 
-      if (e_emit_lvalue_load(cc, e_make_value(cc->ast, node)) < 0) { return -1; }
+      e_lval lv = e_make_value(cc, node);
+      if (e_emit_lvalue_load(cc, lv) < 0) {
+        e_free_value(&lv);
+        return -1;
+      }
+
+      e_free_value(&lv);
       return 0;
     }
 
@@ -1060,8 +1210,8 @@ compile(struct e_compiler* cc, int node)
     }
 
     case E_AST_NODE_ASSIGN: {
-      int right = E_GET_NODE(cc->ast, node)->assign.right;
-      int left  = E_GET_NODE(cc->ast, node)->assign.left;
+      int right = E_GET_NODE(cc->ast, node)->binaryop.right;
+      int left  = E_GET_NODE(cc->ast, node)->binaryop.left;
 
       if (!e_can_make_value(cc->ast, left)) {
         e_filespan left_span = E_GET_NODE(cc->ast, left)->common.span;
@@ -1072,34 +1222,43 @@ compile(struct e_compiler* cc, int node)
       int e = compile(cc, right);
       if (e) return e;
 
-      e_lval lv = e_make_value(cc->ast, left);
+      e_lval lv = e_make_value(cc, left);
 
       e_var* exists = e_stack_find(cc->stack, lv.val.var.id);
       if (exists == nullptr) {
         cerror(*lv.span, "Undeclared variable '%s'\n", lv.val.var.name);
+        e_free_value(&lv);
         return -1;
       }
 
       if (E_VAR_AS_INFO(exists)->is_const) {
         cerror(*lv.span, "Can not assign to const qualified variable '%s'\n", lv.val.var.name);
+        e_free_value(&lv);
         return -1;
       }
 
-      return e_emit_lvalue_assign(cc, right, lv);
+      e = e_emit_lvalue_assign(cc, right, lv);
+      e_free_value(&lv);
+
+      if (e) return e;
+
+      return 0;
     }
 
     case E_AST_NODE_INDEX_ASSIGN: {
       int value = E_GET_NODE(cc->ast, node)->index_assign.value;
 
       if (!e_can_make_value(cc->ast, node)) {
-        e_filespan left_span = E_GET_NODE(cc->ast, node)->common.span;
+        e_filespan left_span = E_GET_NODE(cc->ast, node)->index_assign.span;
         cerror(left_span, "Can not assign to indexed expression: Failed to lower to lvalue\n");
         return -1;
       }
 
-      e_lval v = e_make_value(cc->ast, node);
-      e_emit_lvalue_assign(cc, value, v);
-      return 0;
+      e_lval v = e_make_value(cc, node);
+      int    e = e_emit_lvalue_assign(cc, value, v);
+      e_free_value(&v);
+
+      return e;
     }
 
     case E_AST_NODE_INDEX_COMPOUND_OP: {
@@ -1111,10 +1270,11 @@ compile(struct e_compiler* cc, int node)
         return -1;
       }
 
-      e_lval v = e_make_value(cc->ast, node);
-      e_emit_lvalue_assign(cc, value, v);
+      e_lval v = e_make_value(cc, node);
+      int    e = e_emit_lvalue_assign(cc, value, v);
+      e_free_value(&v);
 
-      return 0;
+      return e;
     }
 
     case E_AST_NODE_CALL: {
@@ -1154,6 +1314,8 @@ compile(struct e_compiler* cc, int node)
 int
 e_compile_function(e_compiler* cc, int node)
 {
+  // THIS KEEPS HITTING FOR SOME REASON JR:LKJLKFSDJLS:KDJFLKJSDKF
+  // printf("%s\n", E_GET_NODE(cc->ast, node)->func.name);
   u32  nstmts = E_GET_NODE(cc->ast, node)->func.nstmts;
   int* stmts  = E_GET_NODE(cc->ast, node)->func.stmts;
   for (u32 i = 0; i < nstmts; i++) {
@@ -1169,13 +1331,18 @@ e_compile(struct e_ast* ast, int root_node, e_compilation_result* result)
   const u32 init_code_capacity       = 256;
   const u32 init_literal_capacity    = 64;
   const u32 init_function_capacity   = 64;
-  const u32 init_namespaces_capacity = 8;
+  const u32 init_namespaces_capacity = 16;
 
   ecc_namespace_stack ns = {
     .namespaces  = malloc(sizeof(char*) * init_namespaces_capacity),
     .nnamespaces = 0,
     .capacity    = init_namespaces_capacity,
   };
+
+  u32* builtin_variable_hashes = (u32*)malloc(sizeof(u32) * E_ARRLEN(eb_vars));
+  if (!builtin_variable_hashes) return -1;
+
+  for (u32 i = 0; i < E_ARRLEN(eb_vars); i++) { builtin_variable_hashes[i] = e_hash_fnv(eb_vars[i].name, strlen(eb_vars[i].name)); }
 
   e_stack stack;
 
@@ -1194,6 +1361,9 @@ e_compile(struct e_ast* ast, int root_node, e_compilation_result* result)
     .functions_capacity = init_function_capacity,
     .functions_count    = 0,
     .functions          = malloc(sizeof(e_function) * init_function_capacity),
+    .builtin_var_hashes = builtin_variable_hashes,
+    .nbuiltin_vars      = E_ARRLEN(eb_vars),
+    .builtin_vars       = eb_vars,
   };
 
   if (e_stack_init(256, 32, 32, &stack) < 0) return -1;
@@ -1214,6 +1384,7 @@ e_compile(struct e_ast* ast, int root_node, e_compilation_result* result)
     result->instructions  = cc.emit;
   }
 
+  free(builtin_variable_hashes);
   free(cc.literal_hashes);
   free(ns.namespaces);
   e_stack_free(&stack);
