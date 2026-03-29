@@ -24,6 +24,7 @@
 
 #include "cc.h"
 
+#include "arena.h"
 #include "ast.h"
 #include "bc.h"
 #include "bfunc.h"
@@ -148,8 +149,9 @@ e_emit_lvalue_assign(e_compiler* cc, int value, e_lval lv)
 }
 
 static inline int
-lower_node_to_literal(const e_ast* p, int node, e_var* o)
+lower_node_to_literal(const e_compiler* cc, int node, e_var* o)
 {
+  e_ast* p = cc->ast;
   switch (E_GET_NODE(p, node)->type) {
     case E_AST_NODE_INT: *o = (e_var){ .type = E_VARTYPE_INT, .val.i = E_GET_NODE(p, node)->i.i }; return 0;
     case E_AST_NODE_FLOAT: *o = (e_var){ .type = E_VARTYPE_FLOAT, .val.f = E_GET_NODE(p, node)->f.f }; return 0;
@@ -159,7 +161,7 @@ lower_node_to_literal(const e_ast* p, int node, e_var* o)
       e_refdobj* obj = e_refdobj_pool_acquire(&ge_pool);
       if (!obj) return -1;
 
-      E_OBJ_AS_STRING(obj)->s = strdup(E_GET_NODE(p, node)->s.s);
+      E_OBJ_AS_STRING(obj)->s = e_arnstrdup(cc->arena, E_GET_NODE(p, node)->s.s);
 
       *o = (e_var){ .type = E_VARTYPE_STRING, .val.s = obj };
       return 0;
@@ -241,7 +243,8 @@ e_make_value(e_compiler* cc, int node)
 void
 e_free_value(e_lval* lv)
 {
-  if (lv->type == E_LVAL_VAR) { free(lv->val.var.name); }
+  if (lv->type == E_LVAL_VAR) { /* free(lv->val.var.name); */
+  }
 }
 
 int
@@ -281,18 +284,21 @@ ns_push(e_compiler* cc, const char* name)
 {
   if (cc->ns->nnamespaces >= cc->ns->capacity) {
     u32    new_cnamespaces = cc->ns->capacity * 2;
-    char** new_namespaces  = realloc(cc->ns->namespaces, new_cnamespaces * sizeof(char*));
+    char** new_namespaces  = e_arnrealloc(cc->arena, cc->ns->namespaces, new_cnamespaces * sizeof(char*));
 
     cc->ns->namespaces = new_namespaces;
     cc->ns->capacity   = new_cnamespaces;
   }
 
-  cc->ns->namespaces[cc->ns->nnamespaces++] = strdup(name);
+  cc->ns->namespaces[cc->ns->nnamespaces++] = e_arnstrdup(cc->arena, name);
 }
 
 static void
 ns_pop(e_compiler* cc)
-{ free(cc->ns->namespaces[--cc->ns->nnamespaces]); }
+{
+  cc->ns->nnamespaces--;
+  /* free(cc->ns->namespaces[--cc->ns->nnamespaces]); */
+}
 
 /** */
 static char*
@@ -304,7 +310,7 @@ mk_name(const e_compiler* cc, const char* name)
     len += strlen(cc->ns->namespaces[i]) + 2; // ::
   }
 
-  char* out = malloc(len);
+  char* out = e_arnalloc(cc->arena, len);
   out[0]    = '\0';
 
   for (u32 i = 0; i < cc->ns->nnamespaces; i++) {
@@ -321,11 +327,11 @@ compile_literal_variable(e_compiler* cc, e_var v)
 {
   if (cc->nliterals >= cc->cliterals) {
     size_t new_c              = cc->cliterals * 2;
-    e_var* new_literals       = realloc(cc->literals, sizeof(e_var) * new_c);
-    u16*   new_literal_hashes = realloc(cc->literal_hashes, sizeof(u16) * new_c);
+    e_var* new_literals       = e_arnrealloc(cc->arena, cc->literals, sizeof(e_var) * new_c);
+    u16*   new_literal_hashes = e_arnrealloc(cc->arena, cc->literal_hashes, sizeof(u16) * new_c);
     if (!new_literals || !new_literal_hashes) {
-      free(new_literals); // free(NULL) = noop
-      free(new_literal_hashes);
+      // free(new_literals); // free(NULL) = noop
+      // free(new_literal_hashes);
       return -1;
     }
 
@@ -357,7 +363,7 @@ compile_literal_variable(e_compiler* cc, e_var v)
   } else {
     // e_var_free(pool, &v); // free discarded variable
     if (v.type == E_VARTYPE_STRING) {
-      free(E_VAR_AS_STRING(&v)->s);
+      // free(E_VAR_AS_STRING(&v)->s);
       e_refdobj_pool_return(&ge_pool, v.val.s);
     }
 
@@ -384,7 +390,7 @@ static inline int
 compile_literal(e_compiler* cc, int node)
 {
   e_var v = { 0 };
-  if (lower_node_to_literal(cc->ast, node, &v)) return -1;
+  if (lower_node_to_literal(cc, node, &v)) return -1;
 
   return compile_literal_variable(cc, v);
 }
@@ -397,7 +403,7 @@ compile_function_definition(struct e_compiler* cc, int node)
 
   const u32 hash = e_hash_fnv(full, strlen(full));
 
-  free(full);
+  // free(full);
 
   /**
    * Push frame for the stack
@@ -416,13 +422,13 @@ compile_function_definition(struct e_compiler* cc, int node)
 
   u32* arg_slots = nullptr;
   if (nargs > 0) {
-    arg_slots = (u32*)malloc(sizeof(u32) * nargs);
+    arg_slots = (u32*)e_arnalloc(cc->arena, sizeof(u32) * nargs);
     for (u32 i = 0; i < nargs; i++) {
       const char* arg_name = E_GET_NODE(cc->ast, node)->func.args[i];
 
       char* full_arg_name = mk_name(cc, arg_name);
       u32   arg_hash      = e_hash_fnv(full_arg_name, strlen(full_arg_name));
-      free(full_arg_name);
+      // free(full_arg_name);
 
       arg_slots[i] = arg_hash;
 
@@ -442,6 +448,7 @@ compile_function_definition(struct e_compiler* cc, int node)
   const u32 init_code_capacity = 256;
 
   struct e_compiler copy = {
+    .arena              = cc->arena,
     .ast                = cc->ast,
     .loop               = nullptr, // reset loop on function.
     .literals           = cc->literals,
@@ -450,7 +457,7 @@ compile_function_definition(struct e_compiler* cc, int node)
     .cliterals          = cc->cliterals,
     .ns                 = cc->ns,
     .stack              = cc->stack,
-    .emit               = (u8*)malloc(init_code_capacity),
+    .emit               = (u8*)e_arnalloc(cc->arena, init_code_capacity),
     .emitted            = 0,
     .code_capacity      = init_code_capacity,
     .functions          = cc->functions,
@@ -487,7 +494,7 @@ compile_function_definition(struct e_compiler* cc, int node)
 
   if (cc->functions_count >= cc->functions_capacity) {
     u32         new_capacity  = cc->functions_capacity * 2;
-    e_function* new_functions = realloc(cc->functions, sizeof(e_function) * new_capacity);
+    e_function* new_functions = e_arnrealloc(cc->arena, cc->functions, sizeof(e_function) * new_capacity);
     if (!new_functions) return -1;
 
     cc->functions          = new_functions;
@@ -655,7 +662,7 @@ compile_function_call(struct e_compiler* cc, int node)
   char* full = mk_name(cc, function_name);
   // printf("%s\n", full);
   u32 hash = e_hash_fnv(full, strlen(full));
-  free(full);
+  // free(full);
 
   int e = 0;
   for (u32 i = 0; i < nargs; i++) {
@@ -1141,7 +1148,7 @@ compile(struct e_compiler* cc, int node)
           };
           compile_literal_variable(cc, v);
 
-          free(full);
+          // free(full);
           return 0; // compile_literal_variable loads the value! Return.
         }
       }
@@ -1152,7 +1159,7 @@ compile(struct e_compiler* cc, int node)
         return -1;
       }
 
-      free(full);
+      // free(full);
 
       e_lval lv = e_make_value(cc, node);
       if (e_emit_lvalue_load(cc, lv) < 0) {
@@ -1183,7 +1190,7 @@ compile(struct e_compiler* cc, int node)
         return -1;
       }
 
-      free(full);
+      // free(full);
 
       /* Add variable entry to stack */
       e_var* r = e_stack_push_variable(hash, cc->stack);
@@ -1327,7 +1334,7 @@ e_compile_function(e_compiler* cc, int node)
 }
 
 int
-e_compile(struct e_ast* ast, int root_node, e_compilation_result* result)
+e_compile(e_arena* arena, struct e_ast* ast, int root_node, e_compilation_result* result)
 {
   const u32 init_code_capacity       = 256;
   const u32 init_literal_capacity    = 64;
@@ -1335,12 +1342,12 @@ e_compile(struct e_ast* ast, int root_node, e_compilation_result* result)
   const u32 init_namespaces_capacity = 16;
 
   ecc_namespace_stack ns = {
-    .namespaces  = malloc(sizeof(char*) * init_namespaces_capacity),
+    .namespaces  = e_arnalloc(arena, sizeof(char*) * init_namespaces_capacity),
     .nnamespaces = 0,
     .capacity    = init_namespaces_capacity,
   };
 
-  u32* builtin_variable_hashes = (u32*)malloc(sizeof(u32) * E_ARRLEN(eb_vars));
+  u32* builtin_variable_hashes = (u32*)e_arnalloc(arena, sizeof(u32) * E_ARRLEN(eb_vars));
   if (!builtin_variable_hashes) return -1;
 
   for (u32 i = 0; i < E_ARRLEN(eb_vars); i++) { builtin_variable_hashes[i] = e_hash_fnv(eb_vars[i].name, strlen(eb_vars[i].name)); }
@@ -1348,20 +1355,21 @@ e_compile(struct e_ast* ast, int root_node, e_compilation_result* result)
   e_stack stack;
 
   e_compiler cc = {
+    .arena              = arena,
     .ast                = ast,
     .loop               = NULL,
-    .literals           = (e_var*)malloc(sizeof(e_var) * init_literal_capacity),
-    .literal_hashes     = (u16*)malloc(sizeof(u16) * init_literal_capacity),
+    .literals           = (e_var*)e_arnalloc(arena, sizeof(e_var) * init_literal_capacity),
+    .literal_hashes     = (u16*)e_arnalloc(arena, sizeof(u16) * init_literal_capacity),
     .nliterals          = 0,
     .ns                 = &ns,
     .stack              = &stack,
     .cliterals          = init_literal_capacity,
-    .emit               = (u8*)malloc(init_code_capacity),
+    .emit               = (u8*)e_arnalloc(arena, init_code_capacity),
     .emitted            = 0,
     .code_capacity      = init_code_capacity,
     .functions_capacity = init_function_capacity,
     .functions_count    = 0,
-    .functions          = malloc(sizeof(e_function) * init_function_capacity),
+    .functions          = e_arnalloc(arena, sizeof(e_function) * init_function_capacity),
     .builtin_var_hashes = builtin_variable_hashes,
     .nbuiltin_vars      = E_ARRLEN(eb_vars),
     .builtin_vars       = eb_vars,
@@ -1385,9 +1393,6 @@ e_compile(struct e_ast* ast, int root_node, e_compilation_result* result)
     result->instructions  = cc.emit;
   }
 
-  free(builtin_variable_hashes);
-  free(cc.literal_hashes);
-  free(ns.namespaces);
   e_stack_free(&stack);
 
   // e_print_instruction_stream(cc.emit, cc.emitted);

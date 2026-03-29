@@ -127,7 +127,7 @@ main(int argc, char* argv[])
     return 0;
   }
 
-  e = e_compile(&ast, root, &compiled);
+  e = e_compile(&arena, &ast, root, &compiled);
   if (e) {
     fprintf(stderr, "ec: Compilation failed\n");
     goto err;
@@ -155,6 +155,14 @@ main(int argc, char* argv[])
   e_refdobj_pool_free(&ge_pool);
 
   free(contents);
+
+  size_t        goob = 0;
+  e_arena_page* next = arena.root;
+  while (next) {
+    goob++;
+    next = next->next;
+  }
+  printf("%zu pages were allocated\n", goob);
 
   e_arena_free(&arena);
 

@@ -113,7 +113,6 @@ typedef enum e_if_level {
 typedef struct e_if_stmt {
   e_ast_node_type type;
   e_filespan      span;
-  bool            alive;
 
   int*              body;
   int*              else_body; // NULL for no else statement
@@ -138,55 +137,47 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    bool            alive;
   } common;
 
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    bool            alive;
     int             i;
   } i;
 
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    bool            alive;
     bool            b;
   } b;
 
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    bool            alive;
     char            c;
   } c;
 
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    bool            alive;
     double          f;
   } f;
 
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    bool            alive;
     char*           s;
   } s;
 
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    bool            alive;
     char*           ident;
   } ident;
 
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    bool            alive;
     char*           name;
     int             initializer; // -1 if not given.
     bool            is_const;
@@ -195,7 +186,6 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    bool            alive;
     // Node ID of the expression
     int expr_id;
     // If false, expr_id is < 0 and function must return void.
@@ -205,7 +195,6 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    bool            alive;
     int*            elems;
     u32             nelems;
   } list;
@@ -213,7 +202,6 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    bool            alive;
     int*            kvpairs;
     u32             npairs;
   } map;
@@ -221,7 +209,6 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    bool            alive;
     int             left; // index of left
     int             right;
     e_operator      op;
@@ -231,7 +218,6 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    bool            alive;
     int             base;
     int             index;
   } index;
@@ -239,7 +225,6 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    bool            alive;
     int             base;  // list/structure
     int             index; // index: integer
     int             value; // any value.
@@ -248,7 +233,6 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    bool            alive;
     int             base;  // list/structure
     int             index; // index: integer
     int             value; // any value.
@@ -258,7 +242,6 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    bool            alive;
     int             right; // index of right
     e_operator      op;
     bool            is_compound;
@@ -267,7 +250,6 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    bool            alive;
     int*            stmts;
     u32             nstmts;
   } stmts, root;
@@ -275,7 +257,6 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    bool            alive;
 
     char* name;  // Namespace name
     int*  stmts; // All statements in namespace
@@ -285,7 +266,6 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    bool            alive;
     int             left;
     int             value;
   } member_assign;
@@ -293,7 +273,6 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    bool            alive;
     int             left;
     char*           right;
   } member_access;
@@ -301,7 +280,6 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    bool            alive;
     char*           function_name;
     int*            args;
     u32             nargs;
@@ -310,7 +288,6 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    bool            alive;
     char*           name;
     char**          args;  // Allocated, + each string is allocated individually.
     int*            stmts; // Function body
@@ -321,7 +298,6 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    bool            alive;
     int             condition;
     int*            stmts;
     u32             nstmts;
@@ -330,7 +306,6 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    bool            alive;
     int             initializers; // EXPRESSION_LIST, for (let x = 0, y = 16;
     int             condition;    // x >= 0;
     int*            iterators;    // x++,y--)
@@ -502,8 +477,6 @@ e_ast_make_node(e_ast* p)
   u32 idx = p->nnodes;
   memset(&p->nodes[idx], 0, sizeof(e_ast_node));
   p->nnodes++;
-
-  E_GET_NODE(p, (int)idx)->common.alive = true;
 
   return (int)idx;
 }

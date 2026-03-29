@@ -30,7 +30,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 
-#define E_PAGE_SIZE 4096
+#define E_PAGE_SIZE (4096 * 4)
 
 /* Data is (uchar*)&page + sizeof(size_t) */
 typedef struct e_arena_page {
@@ -137,6 +137,19 @@ e_arnrealloc(e_arena* a, void* ptr, size_t size)
   memcpy(new_blk, ptr, MIN(old_size, size));
 
   return new_blk;
+}
+
+static inline char*
+e_arnstrdup(e_arena* arena, const char* s)
+{
+  char* new_s = nullptr;
+  if (s != nullptr) {
+    size_t l = strlen(s);
+    new_s    = (char*)e_arnalloc(arena, l + 1);
+    strlcpy(new_s, s, l + 1);
+    new_s[l] = 0;
+  }
+  return new_s;
 }
 
 static inline void

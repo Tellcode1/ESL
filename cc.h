@@ -25,6 +25,7 @@
 #ifndef E_CC_H
 #define E_CC_H
 
+#include "arena.h"
 #include "bc.h"
 #include "bvar.h"
 #include "cerr.h"
@@ -82,6 +83,8 @@ typedef struct ecc_variable_information {
 } ecc_variable_information;
 
 typedef struct e_compiler {
+  e_arena* arena;
+
   struct e_ast*        ast;
   ecc_loop_location*   loop;
   ecc_namespace_stack* ns;
@@ -122,14 +125,14 @@ typedef struct e_compilation_result {
  * Uses ge_pool, Initialize it using e_refdobj_pool_init().
  * Free later with e_refdobj_pool_free();
  */
-int e_compile(struct e_ast* ast, int root_node, e_compilation_result* result);
+int e_compile(e_arena* arena, struct e_ast* ast, int root_node, e_compilation_result* result);
 
 static inline void
 ecc_stream_resize(e_compiler* cc, int new_cap)
 {
   if (cc == nullptr || new_cap == 0) return;
 
-  u8* newcode = (u8*)realloc(cc->emit, sizeof(u8) * new_cap);
+  u8* newcode = (u8*)e_arnrealloc(cc->arena, cc->emit, sizeof(u8) * new_cap);
   if (newcode == nullptr) { return; }
 
   cc->emit          = newcode;

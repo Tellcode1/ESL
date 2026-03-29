@@ -60,24 +60,11 @@ static inline _FORMAT_(printf, 4, 5) bool _asterror(const char* file, size_t lin
 
 #define asterror(span, ...) _asterror(__FILE__, __LINE__, span, __VA_ARGS__)
 
-static inline char*
-arnstrdup(e_arena* arena, const char* s)
-{
-  char* new = nullptr;
-  if (s != nullptr) {
-    size_t l = strlen(s);
-    new      = e_arnalloc(arena, l + 1);
-    strlcpy(new, s, l + 1);
-    new[l] = 0;
-  }
-  return new;
-}
-
 static inline e_filespan
 clonespan(e_ast* a, e_filespan s)
 {
   e_filespan dup = {
-    .file = arnstrdup(a->arena, s.file),
+    .file = e_arnstrdup(a->arena, s.file),
     .line = s.line,
     .col  = s.col,
   };
@@ -301,7 +288,7 @@ parse_variable_decleration(e_ast* ast, bool is_const, int node)
     int decl_node = e_ast_make_node(ast);
     if (decl_node < 0) goto err;
 
-    name = arnstrdup(ast->arena, name_tk->val.s);
+    name = e_arnstrdup(ast->arena, name_tk->val.s);
     if (!name) goto err;
 
     E_GET_NODE(ast, decl_node)->type         = E_AST_NODE_VARIABLE_DECL;
@@ -699,7 +686,7 @@ parse_function(e_ast* p, bool external, int node)
     goto err;
   }
 
-  function_name = arnstrdup(p->arena, name_tk->val.ident);
+  function_name = e_arnstrdup(p->arena, name_tk->val.ident);
 
   names_capacity = 32; // NON ZERO
   arg_names_size = 0;
@@ -726,7 +713,7 @@ parse_function(e_ast* p, bool external, int node)
       names_capacity = new_capacity;
     }
 
-    arg_name = arnstrdup(p->arena, tk->val.ident);
+    arg_name = e_arnstrdup(p->arena, tk->val.ident);
     if (!arg_name) {
       asterror(peek(p)->span, "Alloc error [function argument name]\n");
       goto err;
@@ -786,7 +773,7 @@ parse_function_call(e_ast* p, e_token* tk, int node)
   u32   capacity  = 4;
   u32   nargs     = 0;
   int*  args      = e_arnalloc(p->arena, capacity * sizeof(int)); // argument nodes
-  char* func_name = arnstrdup(p->arena, tk->val.ident);
+  char* func_name = e_arnstrdup(p->arena, tk->val.ident);
 
   if (!func_name || !args) goto err;
 
@@ -863,7 +850,7 @@ make_literal_node(e_ast* p, int node, const e_token* tk)
     nodep->c.c  = tk->val.c;
   } else if (tk->type == E_TOKEN_TYPE_STRING) {
     nodep->type = E_AST_NODE_STRING;
-    nodep->s.s  = arnstrdup(p->arena, tk->val.s);
+    nodep->s.s  = e_arnstrdup(p->arena, tk->val.s);
     if (!nodep->s.s) return -1;
   }
   return node;
@@ -949,7 +936,7 @@ parse_namespace_decleration(e_ast* p, int node)
   }
 
   E_GET_NODE(p, node)->type                  = E_AST_NODE_NAMESPACE_DECL;
-  E_GET_NODE(p, node)->namespace_decl.name   = arnstrdup(p->arena, name_tk->val.ident);
+  E_GET_NODE(p, node)->namespace_decl.name   = e_arnstrdup(p->arena, name_tk->val.ident);
   E_GET_NODE(p, node)->namespace_decl.stmts  = stmts;
   E_GET_NODE(p, node)->namespace_decl.nstmts = nstmts;
 
@@ -1098,7 +1085,7 @@ e_ast_nud(e_ast* p, e_token* tk)
         return node;
       }
 
-      char* name = arnstrdup(p->arena, tk->val.ident);
+      char* name = e_arnstrdup(p->arena, tk->val.ident);
       if (!name) goto err1;
 
       // Just a variable!
@@ -1384,7 +1371,7 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
 
       E_GET_NODE(p, node)->type                = E_AST_NODE_MEMBER_ACCESS;
       E_GET_NODE(p, node)->member_access.left  = leftidx;
-      E_GET_NODE(p, node)->member_access.right = arnstrdup(p->arena, s);
+      E_GET_NODE(p, node)->member_access.right = e_arnstrdup(p->arena, s);
 
       return node;
     }
