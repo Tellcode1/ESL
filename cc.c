@@ -573,9 +573,6 @@ err:
 static int
 compile_unary_op(struct e_compiler* cc, int node)
 {
-  int e = compile(cc, E_GET_NODE(cc->ast, node)->unaryop.right);
-  if (e) return e;
-
   e_opcode opcode = -1;
 
   // clang-format off
@@ -586,18 +583,23 @@ compile_unary_op(struct e_compiler* cc, int node)
         case E_OPERATOR_INC: opcode = E_OPCODE_INC; break;
         case E_OPERATOR_DEC: opcode = E_OPCODE_DEC; break;
         case E_OPERATOR_SUB: opcode = E_OPCODE_NEG; break;
+        case E_OPERATOR_ADD: opcode = E_OPCODE_NOOP; break;
         default: cerror(E_GET_NODE(cc->ast, node)->common.span, "Operator %u can not be used as a unary operator\n", E_GET_NODE(cc->ast, node)->unaryop.op); return -1;
       }
   // clang-format on
 
-  e_attr attrs = E_ATTR_NONE;
-
   bool is_compound = E_GET_NODE(cc->ast, node)->unaryop.is_compound;
-  if (is_compound) { attrs |= E_ATTR_COMPOUND; }
 
   int right = E_GET_NODE(cc->ast, node)->unaryop.right;
+  int e     = 0;
+
   if (is_compound) {
     e_lval lv = { 0 };
+
+    if (!e_can_make_value(cc->ast, right)) {
+      cerror(E_GET_NODE(cc->ast, right)->common.span, "Can not assign to right\n");
+      return -1;
+    }
 
     // Verified  earlier that we can make it into an lvalue
     lv = e_make_value(cc, right);
@@ -975,6 +977,53 @@ e_compile_member_access(e_compiler* cc, int node)
 }
 
 static int
+compile_assign(e_compiler* cc, int node)
+{
+  int right = E_GET_NODE(cc->ast, node)->binaryop.right;
+  int left  = E_GET_NODE(cc->ast, node)->binaryop.left;
+
+  if (!e_can_make_value(cc->ast, left)) {
+    e_filespan left_span = E_GET_NODE(cc->ast, left)->common.span;
+    cerror(left_span, "Can not assign to left: Failed to lower to lvalue\n");
+    return -1;
+  }
+
+  int e = compile(cc, right);
+  if (e) return e;
+
+  e_lval lv = e_make_value(cc, left);
+
+  e_var* exists = e_stack_find(cc->stack, lv.val.var.id);
+  if (!exists) {
+    /* Check if the user is trying to modify a builtin variable. */
+    for (u32 i = 0; i < cc->nbuiltin_vars; i++) {
+      if (lv.val.var.id == cc->builtin_var_hashes[i]) {
+        cerror(E_GET_NODE(cc->ast, left)->common.span, "Attempting to modify builtin constant '%s'\n", lv.val.var.name);
+        e_free_value(&lv);
+        return -1;
+      }
+    }
+
+    cerror(E_GET_NODE(cc->ast, left)->common.span, "Undeclared variable '%s'\n", lv.val.var.name);
+    e_free_value(&lv);
+    return -1;
+  }
+
+  if (E_VAR_AS_INFO(exists)->is_const) {
+    cerror(E_GET_NODE(cc->ast, left)->common.span, "Can not assign to const qualified variable '%s'\n", lv.val.var.name);
+    e_free_value(&lv);
+    return -1;
+  }
+
+  e = e_emit_lvalue_assign(cc, right, lv);
+  e_free_value(&lv);
+
+  if (e) return e;
+
+  return 0;
+}
+
+static int
 compile(struct e_compiler* cc, int node)
 {
   if (node < 0) return -1;
@@ -1218,38 +1267,7 @@ compile(struct e_compiler* cc, int node)
     }
 
     case E_AST_NODE_ASSIGN: {
-      int right = E_GET_NODE(cc->ast, node)->binaryop.right;
-      int left  = E_GET_NODE(cc->ast, node)->binaryop.left;
-
-      if (!e_can_make_value(cc->ast, left)) {
-        e_filespan left_span = E_GET_NODE(cc->ast, left)->common.span;
-        cerror(left_span, "Can not assign to left: Failed to lower to lvalue\n");
-        return -1;
-      }
-
-      int e = compile(cc, right);
-      if (e) return e;
-
-      e_lval lv = e_make_value(cc, left);
-
-      e_var* exists = e_stack_find(cc->stack, lv.val.var.id);
-      if (exists == nullptr) {
-        cerror(*lv.span, "Undeclared variable '%s'\n", lv.val.var.name);
-        e_free_value(&lv);
-        return -1;
-      }
-
-      if (E_VAR_AS_INFO(exists)->is_const) {
-        cerror(*lv.span, "Can not assign to const qualified variable '%s'\n", lv.val.var.name);
-        e_free_value(&lv);
-        return -1;
-      }
-
-      e = e_emit_lvalue_assign(cc, right, lv);
-      e_free_value(&lv);
-
-      if (e) return e;
-
+      if (compile_assign(cc, node) < 0) { return -1; }
       return 0;
     }
 

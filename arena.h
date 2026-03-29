@@ -109,14 +109,12 @@ e_arnalloc(e_arena* a, size_t size)
 
   uchar* data = ((uchar*)fits + sizeof(*fits)) + fits->head;
 
+  // Write the size to the start of the pointer
   memcpy(data, &size, sizeof(size));
 
+  // And return the pointer after it.
   void* ptr = data + sizeof(size);
   fits->head += total;
-
-#ifndef NDEBUG
-  memset(ptr, 0, size);
-#endif
 
   return ptr;
 }
@@ -124,15 +122,13 @@ e_arnalloc(e_arena* a, size_t size)
 static inline void*
 e_arnrealloc(e_arena* a, void* ptr, size_t size)
 {
-  void* new_blk = e_arnalloc(a, size);
-  if (ptr == nullptr) return new_blk;
-
   size_t old_size = 0;
   memcpy(&old_size, (size_t*)ptr - 1, sizeof(size_t));
 
-#ifndef NDEBUG
-  memset(new_blk, 0, size);
-#endif
+  if (old_size >= size) { return ptr; }
+
+  void* new_blk = e_arnalloc(a, size);
+  if (ptr == nullptr) return new_blk;
 
   memcpy(new_blk, ptr, MIN(old_size, size));
 

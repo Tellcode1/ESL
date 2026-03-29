@@ -32,8 +32,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-extern int help_im_going_to_die;
-
 typedef enum e_ast_nodetype {
   E_AST_NODE_NOP,
 

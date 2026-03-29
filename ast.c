@@ -22,11 +22,9 @@
  * SOFTWARE.
  */
 
-#include "arena.h"
-int help_im_going_to_die = 0;
-
 #include "ast.h"
-#include "astfree.h"
+
+#include "arena.h"
 #include "cerr.h"
 #include "lex.h"
 
@@ -68,6 +66,7 @@ clonespan(e_ast* a, e_filespan s)
     .line = s.line,
     .col  = s.col,
   };
+  // printf("[%s:%i:%i]\n", dup.file, dup.line, dup.col);
   return dup;
 }
 
@@ -161,8 +160,6 @@ parse_braces(e_ast* p, int** outstmts, u32* outnstmts)
   return 0;
 
 err:
-  for (u32 i = 0; i < nstmts; i++) e_ast_node_free(p, stmts[i]);
-  // if (stmts) free(stmts);
   if (outstmts) *outstmts = nullptr;
   if (outnstmts) *outnstmts = 0;
 
@@ -223,8 +220,6 @@ parse_body(e_ast* p, int** outstmts, u32* outnstmts)
   return 0;
 
 err:
-  for (u32 i = 0; i < nstmts; i++) { e_ast_node_free(p, stmts[i]); }
-  // free(stmts);
   return -1;
 }
 
@@ -242,7 +237,7 @@ e_ast_expr(e_ast* p, int rbp)
   int      left = e_ast_nud(p, tk);
   if (left < 0) return left;
 
-  // E_GET_NODE(p, left)->common.span = clonespan(tk->span);
+  E_GET_NODE(p, left)->common.span = clonespan(p, tk->span);
 
   while (e_ast_peek(p)) {
     e_token* op = e_ast_peek(p);
@@ -353,9 +348,6 @@ parse_variable_decleration(e_ast* ast, bool is_const, int node)
   return node;
 
 err:
-  // if (name) free(name);
-  for (int i = 0; i < ndecls; i++) e_ast_node_free(ast, decls[i]);
-  // free(decls);
   return -1;
 }
 
@@ -476,22 +468,6 @@ parse_if(e_ast* p, int node)
 
   return node;
 err:
-
-  e_ast_node_free(p, condition);
-
-  for (u32 i = 0; i < nstmts; i++) e_ast_node_free(p, body[i]);
-  // free(body);
-
-  for (u32 i = 0; i < num_else_ifs; i++) {
-    e_ast_node_free(p, else_ifs[i].condition);
-    for (u32 j = 0; j < else_ifs[i].nstmts; j++) e_ast_node_free(p, else_ifs[i].body[j]);
-    // free(else_ifs[i].body);
-  }
-  // free(else_ifs);
-
-  for (u32 i = 0; i < nelse_stmts; i++) { e_ast_node_free(p, else_body[i]); }
-  // free(else_body);
-
   return -1;
 }
 
@@ -539,9 +515,6 @@ parse_while(e_ast* p, int node)
   return node;
 
 err:
-  if (cnd >= 0) e_ast_node_free(p, cnd);
-  for (u32 i = 0; i < nstmts; i++) e_ast_node_free(p, stmts[i]);
-  // free(stmts);
   return -1;
 }
 
@@ -654,10 +627,6 @@ parse_for(e_ast* p, int node)
   return node;
 
 err:
-  e_ast_node_free(p, init);
-  e_ast_node_free(p, cond);
-  for (u32 i = 0; i < niterators; i++) e_ast_node_free(p, iterators[i]);
-  // free(iterators);
   return -1;
 }
 
@@ -759,11 +728,6 @@ parse_function(e_ast* p, bool external, int node)
   return node;
 
 err:
-  // for (u32 i = 0; i < arg_names_size; i++) { free(arg_names[i]); }
-  // free(arg_names);
-  // free(function_name);
-  for (u32 i = 0; i < nstmts; i++) { e_ast_node_free(p, stmts[i]); }
-  // free(stmts);
   return -1;
 }
 
@@ -821,9 +785,6 @@ parse_function_call(e_ast* p, e_token* tk, int node)
   return node;
 
 err:
-  for (u32 i = 0; i < nargs; i++) { e_ast_node_free(p, args[i]); }
-  // free(args);
-  // free(func_name);
   return -1;
 }
 
@@ -897,7 +858,6 @@ parse_list(e_ast* p, int node)
   return node;
 
 err:
-  for (u32 i = 0; i < nelems; i++) e_ast_node_free(p, elems[i]);
   // free(elems);
   return -1;
 }
@@ -929,8 +889,6 @@ parse_namespace_decleration(e_ast* p, int node)
     if (type != E_AST_NODE_FUNCTION_DEFINITION && type != E_AST_NODE_NAMESPACE_DECL && type != E_AST_NODE_VARIABLE_DECL) {
       asterror(span, "Expected only function definitions, variable declerations or namespace declerations in namespace scope\n");
 
-      for (int j = 0; j < nstmts; j++) { e_ast_node_free(p, stmts[j]); }
-      // free(stmts);
       return -1;
     }
   }
@@ -991,7 +949,7 @@ parse_namespace_access(e_ast* p, int leftidx, int node)
 {
   if (!peek(p) || peek(p)->type != E_TOKEN_TYPE_IDENT) {
     asterror(peek(p)->span, "Expected identifier after :: [namespace access]\n");
-    e_ast_node_free(p, node);
+
     return -1;
   }
 
@@ -1023,7 +981,6 @@ parse_namespace_access(e_ast* p, int leftidx, int node)
   E_GET_NODE(p, node)->type        = E_AST_NODE_VARIABLE;
   E_GET_NODE(p, node)->ident.ident = fullname;
 
-  help_im_going_to_die++;
   return node;
 }
 
@@ -1044,7 +1001,7 @@ e_ast_nud(e_ast* p, e_token* tk)
   /* zero out the node for safety. */
   memset(E_GET_NODE(p, node), 0, sizeof(e_ast_node));
 
-  // E_GET_NODE(p, node)->common.span = clonespan(tk->span);
+  E_GET_NODE(p, node)->common.span = clonespan(p, tk->span);
 
   // if (tk->type == E_TOKEN_TYPE_EOF) return -1;
 
@@ -1055,33 +1012,20 @@ e_ast_nud(e_ast* p, e_token* tk)
     case E_TOKEN_TYPE_FLOAT:
     case E_TOKEN_TYPE_STRING: {
       int e = make_literal_node(p, node, tk);
-      if (e < 0) {
-        /**
-         * This doesn't really have anything much to do with releasing the literal
-         * Mostly just about freeing the node metadata.
-         */
-        e_ast_node_free(p, node);
-        return -1;
-      }
+      if (e < 0) { return -1; }
       return node;
     }
 
     /* List declerator ([elem1,elem2,]) */
     case E_TOKEN_TYPE_OPENBRACKET: {
-      if (parse_list(p, node) < 0) {
-        e_ast_node_free(p, node);
-        return -1;
-      }
+      if (parse_list(p, node) < 0) { return -1; }
       return node;
     }
 
     case E_TOKEN_TYPE_IDENT: {
       // Function call
       if (peek(p)->type == E_TOKEN_TYPE_OPENPAREN) {
-        if (parse_function_call(p, tk, node) < 0) {
-          e_ast_node_free(p, node);
-          return -1;
-        }
+        if (parse_function_call(p, tk, node) < 0) { return -1; }
         return node;
       }
 
@@ -1093,11 +1037,10 @@ e_ast_nud(e_ast* p, e_token* tk)
       E_GET_NODE(p, node)->ident.ident = name;
       // printf("%s\n", tk->val.ident);
 
-      help_im_going_to_die++;
       return node;
 
     err1:
-      e_ast_node_free(p, node);
+
       // free(name);
       return -1;
     }
@@ -1116,13 +1059,8 @@ e_ast_nud(e_ast* p, e_token* tk)
             opening_paren_span.line,
             opening_paren_span.col,
             e_token_type_to_string(prev(p)->type));
-        e_ast_node_free(p, node);
-        e_ast_node_free(p, old_node);
         return -1;
       }
-
-      /* we're replacing the node, so free the old one that we allocated */
-      e_ast_node_free(p, old_node);
 
       return node;
     }
@@ -1131,10 +1069,7 @@ e_ast_nud(e_ast* p, e_token* tk)
     case E_TOKEN_TYPE_OPENBRACE: {
       int* stmts  = nullptr;
       u32  nstmts = 0;
-      if (parse_braces(p, &stmts, &nstmts)) {
-        e_ast_node_free(p, node);
-        return -1;
-      }
+      if (parse_braces(p, &stmts, &nstmts)) { return -1; }
 
       E_GET_NODE(p, node)->type         = E_AST_NODE_STATEMENT_LIST;
       E_GET_NODE(p, node)->stmts.stmts  = stmts;
@@ -1159,7 +1094,6 @@ e_ast_nud(e_ast* p, e_token* tk)
         // Expect an expression
         int expr = e_ast_expr(p, 0);
         if (expr < 0) {
-          e_ast_node_free(p, node);
           return expr; // Parser will eat semicolon
         }
 
@@ -1188,58 +1122,37 @@ e_ast_nud(e_ast* p, e_token* tk)
         next(p);
       }
 
-      if (parse_variable_decleration(p, is_const, node) < 0) {
-        e_ast_node_free(p, node);
-        return -1;
-      }
+      if (parse_variable_decleration(p, is_const, node) < 0) { return -1; }
       return node;
     }
 
     case E_TOKEN_TYPE_IF: {
-      if (parse_if(p, node) < 0) {
-        e_ast_node_free(p, node);
-        return -1;
-      }
+      if (parse_if(p, node) < 0) { return -1; }
       return node;
     }
 
     case E_TOKEN_TYPE_WHILE: {
-      if (parse_while(p, node) < 0) {
-        e_ast_node_free(p, node);
-        return -1;
-      }
+      if (parse_while(p, node) < 0) { return -1; }
       return node;
     }
 
     case E_TOKEN_TYPE_FOR: {
-      if (parse_for(p, node) < 0) {
-        e_ast_node_free(p, node);
-        return -1;
-      }
+      if (parse_for(p, node) < 0) { return -1; }
       return node;
     }
 
     case E_TOKEN_TYPE_FN: {
-      if (parse_function(p, false, node) < 0) {
-        e_ast_node_free(p, node);
-        return -1;
-      }
+      if (parse_function(p, false, node) < 0) { return -1; }
       return node;
     }
 
     case E_TOKEN_TYPE_EXTERN: {
-      if (parse_function(p, true, node) < 0) {
-        e_ast_node_free(p, node);
-        return -1;
-      }
+      if (parse_function(p, true, node) < 0) { return -1; }
       return node;
     }
 
     case E_TOKEN_TYPE_NAMESPACE: {
-      if (parse_namespace_decleration(p, node) < 0) {
-        e_ast_node_free(p, node);
-        return -1;
-      }
+      if (parse_namespace_decleration(p, node) < 0) { return -1; }
       return node;
     }
 
@@ -1254,21 +1167,21 @@ e_ast_nud(e_ast* p, e_token* tk)
       int left_bp = 0, right_bp = 0;
       if (!e_getbp(tk->type, &left_bp, &right_bp)) {
         asterror(tk->span, "Unexpected token: '%s'\n", e_token_type_to_string(tk->type));
-        e_ast_node_free(p, node);
+
         return -1;
       }
 
       e_operator op = conv_token_type_to_operator(tk->type);
       if (op < 0) {
         asterror(tk->span, "Unexpected token: '%s'\n", e_token_type_to_string(tk->type));
-        e_ast_node_free(p, node);
+
         return -1;
       }
 
       int right = e_ast_expr(p, right_bp);
       if (right < 0) {
         asterror(tk->span, "Failed to evaluate RHS of unary operator\n");
-        e_ast_node_free(p, node);
+
         return -1;
       }
 
@@ -1279,10 +1192,7 @@ e_ast_nud(e_ast* p, e_token* tk)
       return node;
     }
 
-    default:
-      asterror(tk->span, "Unexpected token: '%s'\n", e_token_type_to_string(tk->type));
-      e_ast_node_free(p, node);
-      return -1;
+    default: asterror(tk->span, "Unexpected token: '%s'\n", e_token_type_to_string(tk->type)); return -1;
   }
 
   /* The handlers consume all the tokens that nud() is supposed to consume. */
@@ -1297,6 +1207,8 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
   int node = e_ast_make_node(p);
   if (node < 0) return node; // ERROR!
 
+  E_GET_NODE(p, node)->common.span = clonespan(p, tk->span);
+
   switch (tk->type) {
     case E_TOKEN_TYPE_EQUAL: {
       // printf("ASSIGN YAYY!!\n");
@@ -1306,7 +1218,7 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
         int rightidx = e_ast_expr(p, rbp);
         if (rightidx < 0) {
           asterror(peek(p)->span, "Invalid RHS in index assignment\n");
-          e_ast_node_free(p, node);
+
           return -1;
         }
 
@@ -1326,7 +1238,7 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
       int rightidx = e_ast_expr(p, rbp);
       if (rightidx < 0) {
         asterror(peek(p)->span, "Invalid RHS in assignment\n");
-        e_ast_node_free(p, node);
+
         return -1;
       }
 
@@ -1344,7 +1256,7 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
       int index = e_ast_expr(p, 0);
       if (index < 0) {
         cerror(span, "Failed to parse index statement\n");
-        e_ast_node_free(p, node);
+
         return -1;
       }
 
@@ -1379,10 +1291,7 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
     // Namespace access
     // x::y
     case E_TOKEN_TYPE_DOUBLE_COLON: {
-      if (parse_namespace_access(p, leftidx, node) < 0) {
-        e_ast_node_free(p, node);
-        return -1;
-      }
+      if (parse_namespace_access(p, leftidx, node) < 0) { return -1; }
       return node;
     }
 
@@ -1402,6 +1311,7 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
       return node;
     }
 
+    case E_TOKEN_TYPE_DOUBLEEQUAL:
     case E_TOKEN_TYPE_NOTEQUAL:
     case E_TOKEN_TYPE_PLUS:
     case E_TOKEN_TYPE_MINUS:
@@ -1422,14 +1332,14 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
       int left_bp = 0, right_bp = 0;
       if (!e_getbp(tk->type, &left_bp, &right_bp)) {
         asterror(tk->span, "Operator %s doesn't have a binding power set in e_getbp! assuming 0 [binary operator]\n", e_token_type_to_string(tk->type));
-        // e_ast_node_free(p, node);
+        //
         // return -1;
       }
 
       e_operator op = conv_token_type_to_operator(tk->type);
       if (op == -1) {
         asterror(tk->span, "Unexpected token: '%s', Expected operator [binary operator]\n", e_token_type_to_string(tk->type));
-        e_ast_node_free(p, node);
+
         return -1;
       }
 
@@ -1438,7 +1348,7 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
       int right = e_ast_expr(p, right_bp);
       if (right < 0) {
         asterror(prev_span, "Failed to evaluate RHS [binary operator]\n");
-        e_ast_node_free(p, node);
+
         return -1;
       }
 
@@ -1451,8 +1361,6 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
 
         // free(E_GET_NODE(p, leftidx)->common.span.file);
         E_GET_NODE(p, leftidx)->type = E_AST_NODE_NOP;
-
-        e_ast_node_free(p, leftidx);
 
         return node;
       }
@@ -1467,7 +1375,7 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
 
     default: {
       asterror(tk->span, "Unexpected token: '%s'\n", e_token_type_to_string(tk->type));
-      e_ast_node_free(p, node);
+
       return -1;
     }
   }
@@ -1535,11 +1443,6 @@ e_ast_parse(e_ast* p, int* out_root_node)
   return 0;
 
 err:
-  if (rootnode >= 0) { e_ast_node_free(p, rootnode); }
-  if (node >= 0) { e_ast_node_free(p, node); }
-  /* node will never be in stmts. */
-  for (u32 i = 0; i < nstmts; i++) { e_ast_node_free(p, stmts[i]); }
-  // free(stmts);
   return -1;
 }
 

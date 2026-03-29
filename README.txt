@@ -1,9 +1,18 @@
 [INTRODUCTION]
 E (working on the name) is a dynamically typed, simple scripting language.
 It is a language targeted at integration with game engines, offering
-great interopability with C (other languages will be worked on).
+great interopability with C/C++ (other languages will be worked on).
 
-It currently has x basic types: int, float, string and list.
+It currently has 4 basic types: int, float, string and list.
+
+
+[PRINTING]
+Values can be printed to the console using one of the two builtin functions provided.
+print(): prints all variables provided, in order, to the console.
+println(): Similar to print, but prints a newline after printing the arguments.
+
+
+[]
 
 
 [VARIABLE DECLERATION]
@@ -28,6 +37,8 @@ On starting the script, the VM initializes all global (and namespaced/qualified)
 After this, it jumps to the main function.
 The program must have a main function defined.
 main Can not accept any arguments.
+
+fn main()
 
 
 [BYTECODE FORMAT]

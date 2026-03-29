@@ -48,14 +48,6 @@ extern "C" {
 #  define MIN(a, b) ((a) < (b) ? (a) : (b))
 #endif
 
-#ifndef _UNREACHABLE
-#  if defined(__has_builtin) && __has_builtin(__builtin_unreachable)
-#    define _UNREACHABLE() __builtin_unreachable()
-#  else
-#    define _UNREACHABLE()
-#  endif
-#endif
-
 #ifndef E_ARRLEN
 #  define E_ARRLEN(array) (sizeof(array) / sizeof(*array))
 #endif

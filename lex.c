@@ -200,28 +200,35 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
     const struct e_filespan span = { .file = strdup(advertised_file), .line = line, .col = col };
 #endif
     if (isdigit(*s)) {
-      char*  end1 = NULL;
-      char*  end2 = NULL;
-      int    i    = (int)strtol(s, &end1, 10);
-      double f    = strtod(s, &end2);
+      char* end = NULL;
 
-      bool is_float = (bool)(end2 > end1 || end1 == NULL);
+      double f = strtod(s, &end);
 
-      // both of them errored out
-      if (end1 == NULL && end2 == NULL) {
-        lexerror("Invalid integer or floating point literal\n");
+      if (end == s) {
+        lexerror("Invalid numeric literal\n");
         goto err;
+      }
+
+      bool is_float = false;
+      for (const char* p = s; p < end; p++) {
+        if (*p == '.' || *p == 'e' || *p == 'E') {
+          is_float = true;
+          break;
+        }
       }
 
       if (is_float) {
         e_token tk = { .type = E_TOKEN_TYPE_FLOAT, .val.f = f, .span = SPAN };
         tklist_append(&toks, &tk);
       } else {
-        e_token tk = { .type = E_TOKEN_TYPE_INT, .val.i = i, .span = SPAN };
+        long i = strtol(s, NULL, 10);
+
+        e_token tk = { .type = E_TOKEN_TYPE_INT, .val.i = (int)i, .span = SPAN };
         tklist_append(&toks, &tk);
       }
 
-      while (s < MAX(end1, end2)) { advance(s, line, col); }
+      // Advance correctly
+      while (s < end) { advance(s, line, col); }
     } else if (isalpha(*s) || *s == '_') {
       const char* snap = s;
       while (isalpha(*s) || isdigit(*s) || *s == '_') { advance(s, line, col); }

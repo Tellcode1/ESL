@@ -26,7 +26,6 @@
 
 #include "arena.h"
 #include "ast.h"
-#include "astfree.h"
 #include "cc.h"
 #include "lex.h"
 #include "pool.h"
@@ -133,8 +132,6 @@ main(int argc, char* argv[])
     goto err;
   }
 
-  // printf("ljasldkfj: %i\n", help_im_going_to_die);
-
   f = fopen(out, "wb");
   if (!f) {
     perror("Failed to open out file");
@@ -171,7 +168,6 @@ main(int argc, char* argv[])
 err:
   if (contents) free(contents);
   if (ntoks > 0 && tokens) e_freetoks(tokens, ntoks);
-  e_ast_node_free(&ast, root);
   e_ast_free(&ast);
   e_compilation_result_free(&compiled);
   e_refdobj_pool_free(&ge_pool);

@@ -220,9 +220,6 @@ e_var_equal(const e_var* a, const e_var* b)
       exit(-1); /* TODO: Implement */
       return false;
   }
-#if defined(__has_builtin) && __has_builtin(__builtin_unreachable)
-  __builtin_unreachable();
-#endif
   return false;
 }
 

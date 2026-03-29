@@ -1,4 +1,5 @@
-// extern say_hello_from_c();
+extern say_hello_from_c();
+extern gooboog();
 
 fn PISS()
 {
@@ -245,7 +246,7 @@ fn main() {
 
   let INT32_MIN = -2147483648;
   let INT32_MAX = ~INT32_MIN & ~0;
-  println("INT32_MAX = ", INT32_MAX);
+  println("INT32_MIN = ", INT32_MIN, ", " , "INT32_MAX = ", INT32_MAX);
 
   let i = (-500);
   while (i < 500)
@@ -270,11 +271,34 @@ fn main() {
   print("math::cos(0) = ", math::cos(0), "; ");  print("math::cos(PI) = ", math::round(math::cos(PI)), "; ");   println("math::cos(PI / 4) = ", math::cos(PI / 4), "; ");
   print("math::tan(0) = ", math::tan(0), "; ");  print("math::tan(PI) = ", math::round(math::tan(PI)), "; "); println("math::tan(PI / 4) = ", math::tan(PI / 4), "; ");
 
+  if (PI == math::PI)
+  {
+    println(math::PI, " vs ", PI);
+    println("Our constant is pretty close to the value of PI!");
+  }
+
+  // math::PI = 3;
+
   // math vs meth
   // PI = 3;
 
   const let constant = "I hate all humans";
   println(constant);
+
+  let b = 1;
+  while (gooboog())
+  {
+    b*=2;
+  }
+  println(b);
+
+  for (let i = 0, x = 1, y = 1, z = 1; i < 10; i++)
+  {
+    x++;
+    y--;
+    z *= 2;
+    println(x, ", ", y, ", ", z);
+  }
 }
 
 fn file_test()

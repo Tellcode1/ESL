@@ -143,7 +143,7 @@ e_file_load(FILE* f, void** root_allocation, u32* ninstructions, u8** instructio
   }
 
   fread(ninstructions, sizeof(*ninstructions), 1, f);
-  *instructions = (u8*)malloc(*ninstructions);
+  *instructions = (u8*)alloc;
   fread(*instructions, sizeof(u8), *ninstructions, f);
 
   return 0;

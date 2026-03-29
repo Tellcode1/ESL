@@ -42,16 +42,16 @@
 
 #define PASTE(x, y) x##y
 
-// clang-format off
 #define TRY(expr)                                                                                                                                                             \
   do {                                                                                                                                                                        \
-    int PASTE(__e__,__LINE__) = 0; if ((PASTE(__e__,__LINE__) = (expr))) { return PASTE(__e__,__LINE__)_; }                                                                                                                                       \
+    int PASTE(__e__, __LINE__) = 0;                                                                                                                                           \
+    if ((PASTE(__e__, __LINE__) = (expr))) { return PASTE(__e__, __LINE__); }                                                                                                 \
   } while (0)
-  #define TRY_V(expr)                                                                                                                                                             \
+#define TRY_V(expr)                                                                                                                                                           \
   do {                                                                                                                                                                        \
-    int PASTE(__e__,__LINE__) = 0; if ((PASTE(__e__,__LINE__) = (expr))) { return (e_var){.type = E_VARTYPE_ERROR, .val.errcode = PASTE(__e__,__LINE__)}; }                                                                                                                                       \
+    int PASTE(__e__, __LINE__) = (expr);                                                                                                                                      \
+    if (PASTE(__e__, __LINE__)) { return (e_var){ .type = E_VARTYPE_ERROR, .val.errcode = PASTE(__e__, __LINE__) }; }                                                         \
   } while (0)
-// clang-format on
 
 #define BINOP(l, r, op)                                                                                                                                                       \
   (l.type == E_VARTYPE_FLOAT || r.type == E_VARTYPE_FLOAT) ? (e_var){ .type = E_VARTYPE_FLOAT, .val.f = (double)l.val.f op(double) r.val.f } : (e_var)                        \
@@ -132,13 +132,13 @@ operate(e_var l, e_var r, e_opcode op)
         case E_VARTYPE_FLOAT: return (e_var){ .type = E_VARTYPE_FLOAT, .val.f = -r.val.f };
         default: break;
       }
-      if (r.type == E_VARTYPE_INT) return (e_var){ .type = E_VARTYPE_INT, .val.i = -r.val.i };
     case E_OPCODE_BNOT: return (e_var){ .type = E_VARTYPE_INT, .val.i = ~to_int(r) };
     case E_OPCODE_BAND: return (e_var){ .type = E_VARTYPE_INT, .val.i = to_int(l) & to_int(r) };
     case E_OPCODE_BOR: return (e_var){ .type = E_VARTYPE_INT, .val.i = to_int(l) | to_int(r) };
     case E_OPCODE_XOR: return (e_var){ .type = E_VARTYPE_INT, .val.i = to_int(l) ^ to_int(r) };
-    default: return (e_var){ 0 };
+    default: break;
   }
+  return (e_var){ 0 };
 }
 
 // static inline e_var*
@@ -291,7 +291,7 @@ e_exec(const e_exec_info* info)
         if (r.type == E_VARTYPE_ERROR) { return r; }
 
         /* Push the return value only after popping the arguments. */
-        if (r.type != E_VARTYPE_VOID) { TRY_V(e_stack_push(info->stack, r)); }
+        if (r.type != E_VARTYPE_VOID) { TRY_V(e_stack_push(info->stack, &r)); }
         break;
       }
 
@@ -302,7 +302,7 @@ e_exec(const e_exec_info* info)
         e_var v;
         e_var_deep_cpy(&info->literals[id], &v); // Deep copy the literal.
 
-        TRY_V(e_stack_push(info->stack, v));
+        TRY_V(e_stack_push(info->stack, &v));
 
         break;
       }
@@ -331,7 +331,7 @@ e_exec(const e_exec_info* info)
         for (u32 i = 0; i < nelems; i++) { e_var_release(&stack[stack_size - nelems + i]); }
         info->stack->size -= nelems;
 
-        TRY_V(e_stack_push(info->stack, new_list));
+        TRY_V(e_stack_push(info->stack, &new_list));
 
         break;
       }
@@ -352,8 +352,7 @@ e_exec(const e_exec_info* info)
       case E_OPCODE_LT:
       case E_OPCODE_LTE:
       case E_OPCODE_GT:
-      case E_OPCODE_GTE:
-      case E_OPCODE_NEG: {
+      case E_OPCODE_GTE: {
         // Since we compile left first, right next
         // right will be at the top of the stack and left will be below it
         e_var r = operate(info->stack->stack[info->stack->size - 2], info->stack->stack[info->stack->size - 1], opcode);
@@ -362,7 +361,7 @@ e_exec(const e_exec_info* info)
         e_stack_pop(info->stack);
 
         /* No need to acquire r. */
-        TRY_V(e_stack_push(info->stack, r));
+        TRY_V(e_stack_push(info->stack, &r));
         break;
       }
 
@@ -390,14 +389,24 @@ e_exec(const e_exec_info* info)
         break;
       }
 
+      case E_OPCODE_NEG:
       case E_OPCODE_NOT:
       case E_OPCODE_BNOT: {
         // Provide an empty variable for the LHS
         e_var r = operate((e_var){ 0 }, *e_stack_top(info->stack), opcode);
 
-        e_stack_pop(info->stack); // remove R
+        // printf("in goes ");
+        // eb_print(e_stack_top(info->stack), 1);
+        // printf(", and out comes ");
+        // eb_println(&r, 1);
 
-        TRY_V(e_stack_push(info->stack, r));
+        if (attrs & E_ATTR_COMPOUND) {
+          e_var_release(e_stack_top(info->stack));
+          *e_stack_top(info->stack) = r;
+        } else {
+          e_stack_pop(info->stack); // remove RHS
+          TRY_V(e_stack_push(info->stack, &r));
+        }
 
         break;
       }
@@ -446,7 +455,7 @@ e_exec(const e_exec_info* info)
         e_var_shallow_cpy(slot, &v);
         e_var_acquire(&v);
 
-        TRY_V(e_stack_push(info->stack, v));
+        TRY_V(e_stack_push(info->stack, &v));
         break;
       }
 
@@ -462,7 +471,7 @@ e_exec(const e_exec_info* info)
 
         if (list && idx >= 0 && (u64)idx < list->size) {
           e_var_acquire(&list->vars[idx]);
-          TRY_V(e_stack_push(info->stack, list->vars[idx]));
+          TRY_V(e_stack_push(info->stack, &list->vars[idx]));
         }
         break;
       }

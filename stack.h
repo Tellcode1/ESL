@@ -25,6 +25,7 @@
 #ifndef E_STACK_H
 #define E_STACK_H
 
+#include "bfunc.h"
 #include "perr.h"
 #include "pool.h"
 #include "stdafx.h"
@@ -139,7 +140,7 @@ e_stack_pop_frame(e_stack* stack)
 }
 
 static inline int
-e_stack_push(e_stack* stack, e_var v)
+e_stack_push(e_stack* stack, const e_var* v)
 {
   {
     if (stack->size >= stack->capacity) {
@@ -151,9 +152,10 @@ e_stack_push(e_stack* stack, e_var v)
       stack->stack    = new_stack;
     }
 
-    stack->stack[stack->size] = v;
+    stack->stack[stack->size] = *v;
     stack->size++;
   }
+
   return 0;
 }
 
@@ -178,7 +180,7 @@ e_stack_push_variable(u32 id, e_stack* stack)
   if (stack->nvariables >= stack->variable_capacity) {
     u32          new_c         = stack->variable_capacity * 2;
     e_var_entry* new_variables = (e_var_entry*)realloc(stack->variables, new_c * sizeof(e_var_entry));
-    if (new_variables == nullptr) exit(-1);
+    if (new_variables == nullptr) return nullptr;
 
     // memset new region to 0
     memset(new_variables + stack->nvariables, 0, (new_c - stack->nvariables) * sizeof(e_var_entry));
@@ -195,7 +197,8 @@ e_stack_push_variable(u32 id, e_stack* stack)
   stack->nvariables++;
 
   /* Initialized to VOID */
-  e_stack_push(stack, (e_var){ .type = E_VARTYPE_VOID });
+  e_var void_var = (e_var){ .type = E_VARTYPE_VOID };
+  e_stack_push(stack, &void_var);
 
   return e_stack_top(stack);
 }
