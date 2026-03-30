@@ -88,11 +88,11 @@ fn maptest()
     "Five!"  : 5 
   };
   let index_table = [
-    "One!",
-    "Two!",
-    "Three!",
-    "Four!",
-    "Five!",
+    map[1],
+    map[2],
+    map[3],
+    map[4],
+    map[5],
   ];
   for (let i = 0; i < len(map); i++)
   {

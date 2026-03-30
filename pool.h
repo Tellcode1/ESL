@@ -37,7 +37,7 @@
 /**
  * Size of a leaf, excluding the reference counter.
  */
-#define E_REFLEAVE_SIZE MAX(sizeof(e_list), MAX(sizeof(e_map), sizeof(e_string)))
+#define E_REFLEAVE_SIZE MAX(MAX(sizeof(e_list), MAX(sizeof(e_map), sizeof(e_string))), 40)
 struct e_refdobj;
 struct e_refdobj_branch;
 struct e_refdobj_pool;

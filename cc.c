@@ -108,10 +108,10 @@ compiler_make_fork(const e_compiler* old_c, e_compiler* new_c)
     .stack              = old_c->stack,
     .emit               = (u8*)e_arnalloc(old_c->arena, init_code_capacity),
     .emitted            = 0,
-    .code_capacity      = init_code_capacity,
+    .emit_capacity      = init_code_capacity,
     .functions          = old_c->functions,
     .functions_capacity = old_c->functions_capacity,
-    .functions_count    = old_c->functions_count,
+    .nfunctions         = old_c->nfunctions,
     .builtin_var_hashes = old_c->builtin_var_hashes,
     .nbuiltin_vars      = old_c->nbuiltin_vars,
     .builtin_vars       = old_c->builtin_vars,
@@ -128,7 +128,7 @@ compiler_join_fork(const e_compiler* copy, e_compiler* cc)
   cc->cliterals          = copy->cliterals;
   cc->functions          = copy->functions;
   cc->ns                 = copy->ns;
-  cc->functions_count    = copy->functions_count;
+  cc->nfunctions         = copy->nfunctions;
   cc->functions_capacity = copy->functions_capacity;
   /* Can't modify builtin variable count */
 }
@@ -437,6 +437,24 @@ compile_literal(e_compiler* cc, int node)
 }
 
 static int
+add_function_entry(e_compiler* cc, const e_function* func)
+{
+  if (cc->nfunctions >= cc->functions_capacity) {
+    u32         new_capacity  = cc->functions_capacity * 2;
+    e_function* new_functions = e_arnrealloc(cc->arena, cc->functions, sizeof(e_function) * new_capacity);
+    if (!new_functions) return -1;
+
+    cc->functions          = new_functions;
+    cc->functions_capacity = new_capacity;
+  }
+
+  cc->functions[cc->nfunctions] = *func;
+  cc->nfunctions++;
+
+  return 0;
+}
+
+static int
 compile_function_definition(struct e_compiler* cc, int node)
 {
   const char* function_name = E_GET_NODE(cc->ast, node)->func.name;
@@ -452,7 +470,7 @@ compile_function_definition(struct e_compiler* cc, int node)
   e_stack_push_frame(cc->stack);
 
   /* Ensure it doesn't already exist */
-  for (u32 i = 0; i < cc->functions_count; i++) {
+  for (u32 i = 0; i < cc->nfunctions; i++) {
     if (cc->functions[i].name_hash == hash) {
       cerror(E_GET_NODE(cc->ast, node)->common.span, "Multiple definitions of function \"%s\"\n", function_name);
       return -1;
@@ -480,7 +498,7 @@ compile_function_definition(struct e_compiler* cc, int node)
       r->val.compinfo                 = e_refdobj_pool_acquire(&ge_pool);
       E_VAR_AS_INFO(r)->initializer   = -1; // Arguments aren't initialized.
       E_VAR_AS_INFO(r)->current_value = -1; // Or initialized to void if you think about it.
-      E_VAR_AS_INFO(r)->hash          = arg_hash;
+      E_VAR_AS_INFO(r)->name_hash     = arg_hash;
       E_VAR_AS_INFO(r)->span          = E_GET_NODE(cc->ast, node)->common.span;
       E_VAR_AS_INFO(r)->is_const      = false; // User can override the argument any time.
     }
@@ -505,17 +523,8 @@ compile_function_definition(struct e_compiler* cc, int node)
     .nargs     = nargs,
   };
 
-  if (cc->functions_count >= cc->functions_capacity) {
-    u32         new_capacity  = cc->functions_capacity * 2;
-    e_function* new_functions = e_arnrealloc(cc->arena, cc->functions, sizeof(e_function) * new_capacity);
-    if (!new_functions) return -1;
-
-    cc->functions          = new_functions;
-    cc->functions_capacity = new_capacity;
-  }
-
-  cc->functions[cc->functions_count] = f;
-  cc->functions_count++;
+  e = add_function_entry(cc, &f);
+  if (e) return e;
 
   e_stack_pop_frame(cc->stack);
 
@@ -701,7 +710,7 @@ compile_function_call(struct e_compiler* cc, int node)
   // Find the function (user defined) and check if the argument count matches
   else {
     e_function* func = nullptr;
-    for (u32 i = 0; i < cc->functions_count; i++) {
+    for (u32 i = 0; i < cc->nfunctions; i++) {
       if (cc->functions[i].name_hash == hash) {
         func = &cc->functions[i];
         break;
@@ -1064,7 +1073,7 @@ compile(struct e_compiler* cc, int node)
 
       /* Find main and ensure it doesn't ask for any arguments. */
       bool found = false;
-      for (u32 i = 0; i < cc->functions_count; i++) {
+      for (u32 i = 0; i < cc->nfunctions; i++) {
         if (cc->functions[i].name_hash == main_id) {
           found = true;
 
@@ -1100,31 +1109,52 @@ compile(struct e_compiler* cc, int node)
       return 0;
     }
 
-    case E_AST_NODE_STRUCT_DECL: {
-      const char* name = E_GET_NODE(cc->ast, node)->namespace_decl.name;
+    case E_AST_NODE_NAMESPACE_DECL: {
+      const char* ns_name        = E_GET_NODE(cc->ast, node)->namespace_decl.name;
+      int*        ns_decl_stmts  = E_GET_NODE(cc->ast, node)->namespace_decl.stmts;
+      u32         ns_decl_nstmts = E_GET_NODE(cc->ast, node)->namespace_decl.nstmts;
 
-      if (strcmp(name, "math") == 0) {
-        cerror(E_GET_NODE(cc->ast, node)->namespace_decl.span, "Can not modify builtin namespace 'math'\n");
-        return -1;
-      }
+      ns_push(cc, ns_name);
 
-      /* PUSH namespace */
-      ns_push(cc, name);
-
-      int* stmts  = E_GET_NODE(cc->ast, node)->namespace_decl.stmts;
-      u32  nstmts = E_GET_NODE(cc->ast, node)->namespace_decl.nstmts;
-
-      /* Initialize variables and load functions. */
-      for (u32 i = 0; i < nstmts; i++) {
-        int e = compile(cc, stmts[i]);
+      for (u32 i = 0; i < ns_decl_nstmts; i++) {
+        int e = compile(cc, ns_decl_stmts[i]);
         if (e) {
           ns_pop(cc);
           return e;
         }
       }
 
-      /* POP namespace */
       ns_pop(cc);
+
+      return 0;
+    }
+
+    case E_AST_NODE_STRUCT_DECL: {
+      const char* struct_name        = E_GET_NODE(cc->ast, node)->struct_decl.name;
+      int*        struct_decl_stmts  = E_GET_NODE(cc->ast, node)->struct_decl.stmts;
+      u32         struct_decl_nstmts = E_GET_NODE(cc->ast, node)->struct_decl.nstmts;
+
+      u32 struct_name_hash = e_hash_fnv(struct_name, strlen(struct_name));
+
+      e_compiler copy;
+      compiler_make_fork(cc, &copy);
+
+      for (u32 i = 0; i < struct_decl_nstmts; i++) {
+        int e = compile(&copy, struct_decl_stmts[i]);
+        if (e) { return e; }
+      }
+
+      compiler_join_fork(&copy, cc);
+
+      e_function f = {
+        .code      = copy.emit,
+        .code_size = copy.emitted,
+        .arg_slots = nullptr,
+        .name_hash = struct_name_hash,
+        .nargs     = 0, // no arguments to constructor
+      };
+      add_function_entry(cc, &f);
+
       return 0;
     }
 
@@ -1261,7 +1291,7 @@ compile(struct e_compiler* cc, int node)
       r->val.compinfo                 = e_refdobj_pool_acquire(&ge_pool);
       E_VAR_AS_INFO(r)->initializer   = initializer;
       E_VAR_AS_INFO(r)->current_value = initializer; // current value is initializer, -1 if none
-      E_VAR_AS_INFO(r)->hash          = hash;
+      E_VAR_AS_INFO(r)->name_hash     = hash;
       E_VAR_AS_INFO(r)->span          = E_GET_NODE(cc->ast, node)->common.span;
       E_VAR_AS_INFO(r)->is_const      = E_GET_NODE(cc->ast, node)->let.is_const;
 
@@ -1411,9 +1441,9 @@ e_compile(e_arena* arena, struct e_ast* ast, int root_node, e_compilation_result
     .cliterals          = init_literal_capacity,
     .emit               = (u8*)e_arnalloc(arena, init_code_capacity),
     .emitted            = 0,
-    .code_capacity      = init_code_capacity,
+    .emit_capacity      = init_code_capacity,
     .functions_capacity = init_function_capacity,
-    .functions_count    = 0,
+    .nfunctions         = 0,
     .functions          = e_arnalloc(arena, sizeof(e_function) * init_function_capacity),
     .builtin_var_hashes = builtin_variable_hashes,
     .nbuiltin_vars      = E_ARRLEN(eb_vars),
@@ -1427,13 +1457,13 @@ e_compile(e_arena* arena, struct e_ast* ast, int root_node, e_compilation_result
 
   /* Resolve all labels after compilation. Ensure this is the last optimization / cleanup function called! */
   e_resolve_labels(cc.emit, cc.emitted);
-  for (size_t i = 0; i < cc.functions_count; i++) { e_resolve_labels(cc.functions[i].code, cc.functions[i].code_size); } // resolve all function labels
+  for (size_t i = 0; i < cc.nfunctions; i++) { e_resolve_labels(cc.functions[i].code, cc.functions[i].code_size); } // resolve all function labels
 
   if (result) {
     result->literals      = cc.literals;
     result->nliterals     = cc.nliterals;
     result->functions     = cc.functions;
-    result->nfunctions    = cc.functions_count;
+    result->nfunctions    = cc.nfunctions;
     result->ninstructions = cc.emitted;
     result->instructions  = cc.emit;
   }

@@ -60,6 +60,7 @@ typedef enum e_ast_nodetype {
   // x.y
   E_AST_NODE_MEMBER_ACCESS,
 
+  E_AST_NODE_NAMESPACE_DECL,
   E_AST_NODE_STRUCT_DECL,
 
   E_AST_NODE_CALL,

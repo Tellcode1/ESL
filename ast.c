@@ -953,20 +953,20 @@ parse_namespace_decleration(e_ast* p, int node)
       int* list_stmts  = E_GET_NODE(p, stmts[i])->stmts.stmts;
       for (u32 j = 0; j < list_nstmts; j++) {
         type = E_GET_NODE(p, list_stmts[j])->common.type;
-        if (type != E_AST_NODE_FUNCTION_DEFINITION && type != E_AST_NODE_STRUCT_DECL && type != E_AST_NODE_VARIABLE_DECL) {
+        if (type != E_AST_NODE_FUNCTION_DEFINITION && type != E_AST_NODE_STRUCT_DECL && type != E_AST_NODE_NAMESPACE_DECL && type != E_AST_NODE_VARIABLE_DECL) {
           asterror(span, "Expected only function definitions, variable declerations or namespace declerations in namespace scope\n");
 
           return -1;
         }
       }
-    } else if (type != E_AST_NODE_FUNCTION_DEFINITION && type != E_AST_NODE_STRUCT_DECL && type != E_AST_NODE_VARIABLE_DECL) {
+    } else if (type != E_AST_NODE_FUNCTION_DEFINITION && type != E_AST_NODE_STRUCT_DECL && type != E_AST_NODE_NAMESPACE_DECL && type != E_AST_NODE_VARIABLE_DECL) {
       asterror(span, "Expected only function definitions, variable declerations or namespace declerations in namespace scope\n");
 
       return -1;
     }
   }
 
-  E_GET_NODE(p, node)->type                  = E_AST_NODE_STRUCT_DECL;
+  E_GET_NODE(p, node)->type                  = E_AST_NODE_NAMESPACE_DECL;
   E_GET_NODE(p, node)->namespace_decl.name   = e_arnstrdup(p->arena, name_tk->val.ident);
   E_GET_NODE(p, node)->namespace_decl.stmts  = stmts;
   E_GET_NODE(p, node)->namespace_decl.nstmts = nstmts;
@@ -1545,9 +1545,9 @@ e_ast_parse(e_ast* p, int* out_root_node)
     }
 
     e_ast_node_type type = E_GET_NODE(p, node)->type;
-    if (type != E_AST_NODE_FUNCTION_DEFINITION && type != E_AST_NODE_STRUCT_DECL && type != E_AST_NODE_VARIABLE_DECL) {
+    if (type != E_AST_NODE_FUNCTION_DEFINITION && type != E_AST_NODE_NAMESPACE_DECL && type != E_AST_NODE_STRUCT_DECL && type != E_AST_NODE_VARIABLE_DECL) {
       // asterror(take_span, "Expected function definition or variable declerations in global scope\n");
-      asterror(take_span, "Expected only function definitions, variable declerations or namespace declerations in global scope\n");
+      asterror(take_span, "Expected only function definitions, variable declerations,  namespace declerations or struct declerations in global scope\n");
       goto err;
     }
 

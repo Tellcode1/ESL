@@ -44,23 +44,6 @@ typedef struct ecc_loop_location {
   e_labelID break_label;
 } ecc_loop_location;
 
-/**'
- * struct used by the compiler to track variable state.
- */
-typedef struct ecc_variable {
-  bool is_initialized;
-  bool was_modified;
-
-  e_vartype type;
-
-  int initializer_node_id;
-
-  /**
-   * If variable is a constant, its value
-   */
-  e_varval constant_value;
-} ecc_variable;
-
 typedef struct ecc_callframe {
   bool is_function;
   u32  restore_sp; // The stack pointer to return to when the scope exits.
@@ -72,15 +55,23 @@ typedef struct ecc_namespace_stack {
   u32    capacity;
 } ecc_namespace_stack;
 
-/* Must not exceed 40 bytes! If it does, change the LEAFSIZE in pool.h */
+/* Must not exceed E_REFLEAVE_SIZE bytes! If it does, change the LEAFSIZE in pool.h */
 typedef struct ecc_variable_information {
   e_filespan span; // Span at where the variable (name) is.
-  bool       is_const;
-  u32        hash;
-  u32        depth;         // The stack frame depth it was created in
+  u32        name_hash;
+  u32        stack_depth;   // The stack frame depth it was created in
   int        initializer;   // initializer provided during creation.
   int        current_value; // <0 if no value currently (void)
+  bool       is_const;
 } ecc_variable_information;
+
+typedef struct ecc_struct_information {
+  char*  name;
+  char** fields;
+  u32*   field_hashes;
+  u32    nfields;
+  u32    name_hash;
+} ecc_struct_information;
 
 typedef struct e_compiler {
   e_arena* arena;
@@ -103,10 +94,10 @@ typedef struct e_compiler {
 
   u8* emit;
   u32 emitted;
-  u32 code_capacity;
+  u32 emit_capacity;
 
   e_function* functions;
-  u32         functions_count;
+  u32         nfunctions;
   u32         functions_capacity;
 
   u32 next_label;
@@ -136,7 +127,7 @@ ecc_stream_resize(e_compiler* cc, int new_cap)
   if (newcode == nullptr) { return; }
 
   cc->emit          = newcode;
-  cc->code_capacity = new_cap;
+  cc->emit_capacity = new_cap;
 }
 
 #endif // E_CC_H
