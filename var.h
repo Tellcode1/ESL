@@ -120,9 +120,12 @@ void e_map_free(e_map* map);
 
 e_var* e_map_find(e_map* map, const e_var* key);
 
-e_var* e_list_index(struct e_list* list, u64 index);
-int    e_list_append(e_var* v, struct e_list* list);
-int    e_list_remove(u64 index, struct e_list* list);
+e_var* e_list_index(struct e_list* list, u32 index);
+void   e_list_append(e_var* v, struct e_list* list);
+void   e_list_pop(struct e_list* list);
+void   e_list_insert(u32 index, e_var* v, struct e_list* list);
+void   e_list_remove(u32 index, struct e_list* list);
+int    e_list_reserve(u32 new_capacity, struct e_list* list);
 
 i32  e_var_acquire(e_var* v);
 void e_var_release(e_var* v);

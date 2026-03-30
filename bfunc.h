@@ -107,6 +107,8 @@ static inline e_var eb_abs(e_var*args, u32 nargs) { (void)nargs; return (e_var){
 static inline e_var eb_hypot(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = hypot(args[0].val.f, args[1].val.f)}}; }
 // clang-format on
 
+// Form a string from a list of characters
+e_var eb_str_from_list(e_var* args, u32 nargs);
 e_var eb_str_append(e_var* args, u32 nargs);
 e_var eb_str_substr(e_var* args, u32 nargs); // substring: string, int start, int length
 e_var eb_str_repeat(e_var* args, u32 nargs); // repeat: string, int times
@@ -119,6 +121,16 @@ eb_str_strip(e_var* args, u32 nargs)
   return eb_str_rstrip(&l, 1);
 }
 e_var eb_str_len(e_var* args, u32 nargs);
+
+// Make list from elements
+e_var eb_list_make(e_var* args, u32 nargs);
+e_var eb_list_append(e_var* args, u32 nargs);
+e_var eb_list_pop(e_var* args, u32 nargs);     // fast
+e_var eb_list_remove(e_var* args, u32 nargs);  // expensive
+e_var eb_list_insert(e_var* args, u32 nargs);  // Replaces value if it exists!
+e_var eb_list_find(e_var* args, u32 nargs);    // Returns index, -1 if it doesn't exist.
+e_var eb_list_reserve(e_var* args, u32 nargs); // number of new variables to reserve
+e_var eb_list_len(e_var* args, u32 nargs);
 
 static inline e_var
 eb_len(e_var* args, u32 nargs)
@@ -156,6 +168,8 @@ e_var_type_bitmask_to_string(e_vartype mask, char* buffer, size_t buffer_size)
 
   strlcat(buffer, "]", buffer_size);
 }
+
+#define E_ALL_TYPES E_VARTYPE_INT | E_VARTYPE_CHAR | E_VARTYPE_BOOL | E_VARTYPE_FLOAT | E_VARTYPE_LIST | E_VARTYPE_MAP | E_VARTYPE_STRING
 
 static const e_builtin_func eb_funcs[] = {
   /* Can print anything. */
@@ -210,6 +224,15 @@ static const e_builtin_func eb_funcs[] = {
   { "str::rstrip", E_VARTYPE_STRING, 1, 1, eb_str_rstrip },
   { "str::strip", E_VARTYPE_STRING, 1, 1, eb_str_strip },
   { "str::len", E_VARTYPE_STRING, 1, 1, eb_str_len }, // equivalent to len()
+
+  { "list::make", E_ALL_TYPES, 1, UINT32_MAX, eb_list_make },
+  { "list::append", E_ALL_TYPES, 2, 2, eb_list_append },
+  { "list::pop", E_ALL_TYPES, 1, 1, eb_list_pop },
+  { "list::remove", E_ALL_TYPES, 2, 2, eb_list_remove },
+  { "list::insert", E_ALL_TYPES, 2, 2, eb_list_insert },
+  { "list::find", E_ALL_TYPES, 2, 2, eb_list_find },
+  { "list::reserve", E_ALL_TYPES, 2, 2, eb_list_reserve },
+  { "list::len", E_ALL_TYPES, 1, 1, eb_list_len },
 };
 
 #endif // E_BUILTIN_FUNCTIONS_H

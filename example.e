@@ -343,6 +343,31 @@ fn main() {
   let to_repeat = "Repeat";
   let repeated = str::repeat(to_repeat, 5);
   println("repeat(s, 5) = ", repeated);
+
+  let advanced_listing = list::make(1,2,3,4,5,6,7,8,9,10);
+  println("Our list is: ", advanced_listing, " And our query is for 5");
+  println("list::find(l,5) returns: ", list::find(advanced_listing, 5));
+
+  list::remove(advanced_listing, list::find(advanced_listing, 5));
+  
+  println("Our new list is: ", advanced_listing, " And our query is for 5");
+  println("list::find(l,5) returns: ", list::find(advanced_listing, 5));
+
+  println("Appending 11 to 20 to the list...");
+  for (let i = 11; i <= 20; i++)
+  {
+    list::append(advanced_listing, i);
+  }
+
+  println("Our new list is: ", advanced_listing);
+
+  println("Ehh.. I kinda don't like the new list. I'm popping the last 5 elements");
+  for (let i = 0; i < 5; i++)
+  {
+    list::pop(advanced_listing);
+  }
+
+  println("Perfect! Now I have: ", advanced_listing);
 }
 
 fn file_test()
