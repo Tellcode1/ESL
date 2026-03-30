@@ -326,7 +326,7 @@ fn main() {
   }
   println(b);
 
-  for (let i = 0, x = 1, y = 1, z = 1; i < 10; i++)
+  for (let i = 0, x = 1, y = 1, z = 1; i < 5; i++)
   {
     x++;
     y--;
@@ -335,6 +335,14 @@ fn main() {
   }
 
   maptest();
+
+  let s = "Pee is stored in the balls";
+  let lo = str::len(s);
+  println("len(s) = ", lo);
+
+  let to_repeat = "Repeat";
+  let repeated = str::repeat(to_repeat, 5);
+  println("repeat(s, 5) = ", repeated);
 }
 
 fn file_test()

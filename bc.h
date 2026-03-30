@@ -25,12 +25,12 @@
 #ifndef E_BYTECODE_H
 #define E_BYTECODE_H
 
-#include "stdafx.h"
+/**
+ * TODO: Revise the entire documentation.
+ * All of it is severly outdated!
+ */
 
-typedef u16 e_operand;
-typedef u32 e_varID;
-typedef u32 e_fnID;    // Resolved at compile time.
-typedef u32 e_labelID; // Resolved at compile time.
+#include "stdafx.h"
 
 typedef u16 e_ins;
 
@@ -265,42 +265,9 @@ typedef enum e_opcode_bck {
 } e_opcode_bck;
 typedef u8 e_opcode;
 
-typedef enum e_attr_bits {
-  E_ATTR_NONE          = 0,
-  E_ATTR_COMPOUND      = 1 << 0,
-  E_ATTR_MEMBER_ACCESS = 1 << 1,
-  E_ATTR_INLINE        = 1 << 2,
-  E_ATTR_VARIABLE      = 1 << 3,
-  E_ATTR_MULTIPLE      = 1 << 4,
-} e_attr_bits;
-typedef u8 e_attr;
-
 static const u8 __e_opcode_must_have_less_than_256_entries__[E_OPCODE_COUNT <= 256 ? 1 : -1] = { 0 };
 
-static inline e_ins
-e_pack_ins(e_opcode opcode, e_attr tags)
-{
-  const u32 bits = sizeof(e_opcode) * 8;
-  return (e_ins)opcode | ((e_ins)tags << bits);
-}
-
-static inline u64
-e_pack_label_ins(u32 target)
-{
-  const u32 bits = sizeof(e_opcode) * 8;
-  return E_OPCODE_LABEL | ((u64)target << bits);
-}
-
-static inline void
-e_unpack_ins(e_ins ins, e_opcode* opcode, e_attr* tags)
-{
-  const u32 bits = sizeof(e_opcode) * 8;
-  *opcode        = (e_opcode)(ins & 0xFF);
-  *tags          = (e_attr)((ins >> bits) & 0xFF);
-}
-
 typedef struct e_ins_packed {
-  u8 attrs;
   u8 opcode;
   union {
     u32  init;

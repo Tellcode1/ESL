@@ -272,11 +272,10 @@ e_exec(const e_exec_info* info)
   const u8* end = info->code + info->code_size;
 
   while (ip < end) {
-    e_opcode opcode = *(e_opcode*)ip;
-    ip += sizeof(e_opcode);
+    e_opcode opcode;
+    memcpy(&opcode, ip, sizeof(opcode)); // faster for some reason?
 
-    e_attr attrs = *(e_attr*)ip;
-    ip += sizeof(e_attr);
+    ip += sizeof(e_opcode);
 
     switch ((e_opcode_bck)opcode) {
       /* NOOPs */
@@ -284,8 +283,8 @@ e_exec(const e_exec_info* info)
       case E_OPCODE_NOOP: break;
 
       case E_OPCODE_CALL: {
-        u16 func_nargs = e_read_u16(&ip);
         u32 hash       = e_read_u32(&ip);
+        u16 func_nargs = e_read_u16(&ip);
 
         e_var r = call(info, hash, func_nargs);
         if (r.type == E_VARTYPE_ERROR) { return r; }
@@ -356,8 +355,8 @@ e_exec(const e_exec_info* info)
         e_map_init(elems, npairs, map); // acquires the elements.
 
         // Release variables from the stack.
-        for (u32 i = 0; i < npairs; i++) { e_var_release(&stack[stack_size - npairs + i]); }
-        info->stack->size -= npairs;
+        for (u32 i = 0; i < npairs * 2; i++) { e_var_release(&stack[stack_size - (npairs * 2) + i]); }
+        info->stack->size -= (npairs * 2);
 
         TRY_V(e_stack_push(info->stack, &new_map));
 
@@ -395,23 +394,15 @@ e_exec(const e_exec_info* info)
 
       case E_OPCODE_INC:
       case E_OPCODE_DEC: {
-        u32    id = UINT32_MAX;
-        e_var* v  = e_stack_top(info->stack);
+        e_var* top = e_stack_top(info->stack);
 
-        if (attrs & E_ATTR_COMPOUND) { id = e_read_u32(&ip); }
+        /* These two are always compound, but still emit the is_compound flag */
+        (void)e_read_u8(&ip);
 
-        if (v->type == E_VARTYPE_INT) {
-          v->val.i += (opcode == E_OPCODE_INC) ? 1 : -1;
+        if (top->type == E_VARTYPE_INT) {
+          top->val.i += (opcode == E_OPCODE_INC) ? 1 : -1;
         } else {
-          v->val.f += (opcode == E_OPCODE_INC) ? 1.F : -1.F;
-        }
-
-        if (attrs & E_ATTR_COMPOUND) {
-          u32 slot = get_variable_slot(info->stack->variables, info->stack->nvariables, id);
-          if (slot == UINT32_MAX) break;
-
-          assign(info, slot, *v);
-          info->stack->size--; // Variable slot owns v now!
+          top->val.f += (opcode == E_OPCODE_INC) ? 1.F : -1.F;
         }
 
         break;
@@ -420,6 +411,7 @@ e_exec(const e_exec_info* info)
       case E_OPCODE_NEG:
       case E_OPCODE_NOT:
       case E_OPCODE_BNOT: {
+        bool is_compound = (bool)e_read_u8(&ip);
         // Provide an empty variable for the LHS
         e_var r = operate((e_var){ 0 }, *e_stack_top(info->stack), opcode);
 
@@ -428,7 +420,7 @@ e_exec(const e_exec_info* info)
         // printf(", and out comes ");
         // eb_println(&r, 1);
 
-        if (attrs & E_ATTR_COMPOUND) {
+        if (is_compound) {
           e_var_release(e_stack_top(info->stack));
           *e_stack_top(info->stack) = r;
         } else {
@@ -463,11 +455,14 @@ e_exec(const e_exec_info* info)
         // case E_OPCODE_JNE: ip = inss + e_read_u32(&ip); break;
 
       case E_OPCODE_INIT: {
+        u32  hash        = e_read_u32(&ip);
+        bool is_compound = (bool)e_read_u8(&ip);
+
         e_var* old_top = e_stack_top(info->stack);
 
-        e_var* v = e_stack_push_variable(e_read_u32(&ip), info->stack);
+        e_var* v = e_stack_push_variable(hash, info->stack);
 
-        if (attrs & E_ATTR_COMPOUND) {
+        if (is_compound) {
           e_var_acquire(old_top);
           e_var_shallow_cpy(old_top, v);
         }
@@ -546,6 +541,8 @@ e_exec(const e_exec_info* info)
         e_var_shallow_cpy(&value, &list->vars[idx]);
         e_var_acquire(&list->vars[idx]);
         e_var_release(&value); // release our temporary hold
+
+        // TODO: Handle maps too ... :<
         break;
       }
 

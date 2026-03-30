@@ -126,7 +126,15 @@ main(int argc, char* argv[])
     return 0;
   }
 
-  e = e_compile(&arena, &ast, root, &compiled);
+  ecc_info info = {
+    .arena              = &arena,
+    .ast                = &ast,
+    .root               = root,
+    .custom_entry_point = nullptr,
+    .opt_level          = 0,
+  };
+
+  e = e_compile(&info, &compiled);
   if (e) {
     fprintf(stderr, "ec: Compilation failed\n");
     goto err;

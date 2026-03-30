@@ -30,6 +30,12 @@
 #include "var.h"
 
 /**
+ * I made this after looking at the linux slab allocator.
+ * Do take a loot at it! It's really interesting.
+ * Teaches you a lot about allocators, caching (both hw and sw).
+ */
+
+/**
  * Must be a power of 2!
  */
 #define E_REFLEAVE_COUNT 64
@@ -84,6 +90,13 @@ typedef struct e_refdobj_pool {
   u32                nbranches;
 } e_refdobj_pool;
 
+/**
+ * TODO: Eliminate the global variables.
+ * This script is designed to be used in games!
+ * Using global variables will just make it harder to
+ * integrate this into long running programs, like say, games.
+ * Or not?? Check it out.
+ */
 extern e_refdobj_pool ge_pool;
 
 /* Returns 0 on success. */

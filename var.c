@@ -132,17 +132,13 @@ e_var_free(e_var* var)
       break;
 
     case E_VARTYPE_LIST:
-      for (u32 i = 0; i < E_VAR_AS_LIST(var)->size; i++) { e_var_release(&E_VAR_AS_LIST(var)->vars[i]); }
-      free(E_VAR_AS_LIST(var)->vars);
+      e_list_free(E_VAR_AS_LIST(var));
       e_refdobj_pool_return(&ge_pool, var->val.list);
       break;
 
     case E_VARTYPE_MAP:
-      for (u64 i = 0; i < E_VAR_AS_MAP(var)->size; i++) {
-        e_var_release(&E_VAR_AS_MAP(var)->keys[i]);
-        e_var_release(&E_VAR_AS_MAP(var)->vals[i]);
-      }
-      e_refdobj_pool_return(&ge_pool, var->val.map);
+      e_map_free(E_VAR_AS_MAP(var));
+      e_refdobj_pool_return(&ge_pool, var->val.list);
       break;
   }
 

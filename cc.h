@@ -39,9 +39,21 @@
 
 struct e_ast;
 
+typedef struct ecc_info {
+  e_arena* arena; // If NULL, cc initializes its own arena
+
+  struct e_ast* ast;  // Must not be NULL
+  int           root; // Must be a valid node.
+
+  // If NULL, main is used.
+  const char* custom_entry_point;
+
+  int opt_level; // 0 or 1/2/3
+} ecc_info;
+
 typedef struct ecc_loop_location {
-  e_labelID continue_label;
-  e_labelID break_label;
+  u32 continue_label;
+  u32 break_label;
 } ecc_loop_location;
 
 typedef struct ecc_callframe {
@@ -75,6 +87,8 @@ typedef struct ecc_struct_information {
 
 typedef struct e_compiler {
   e_arena* arena;
+
+  const ecc_info* info;
 
   struct e_ast*        ast;
   ecc_loop_location*   loop;
@@ -116,7 +130,7 @@ typedef struct e_compilation_result {
  * Uses ge_pool, Initialize it using e_refdobj_pool_init().
  * Free later with e_refdobj_pool_free();
  */
-int e_compile(e_arena* arena, struct e_ast* ast, int root_node, e_compilation_result* result);
+int e_compile(const ecc_info* info, e_compilation_result* result);
 
 static inline void
 ecc_stream_resize(e_compiler* cc, int new_cap)

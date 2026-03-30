@@ -107,6 +107,19 @@ static inline e_var eb_abs(e_var*args, u32 nargs) { (void)nargs; return (e_var){
 static inline e_var eb_hypot(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = hypot(args[0].val.f, args[1].val.f)}}; }
 // clang-format on
 
+e_var eb_str_append(e_var* args, u32 nargs);
+e_var eb_str_substr(e_var* args, u32 nargs); // substring: string, int start, int length
+e_var eb_str_repeat(e_var* args, u32 nargs); // repeat: string, int times
+e_var eb_str_lstrip(e_var* args, u32 nargs);
+e_var eb_str_rstrip(e_var* args, u32 nargs);
+static inline e_var
+eb_str_strip(e_var* args, u32 nargs)
+{
+  e_var l = eb_str_lstrip(args, nargs);
+  return eb_str_rstrip(&l, 1);
+}
+e_var eb_str_len(e_var* args, u32 nargs);
+
 static inline e_var
 eb_len(e_var* args, u32 nargs)
 {
@@ -158,7 +171,7 @@ static const e_builtin_func eb_funcs[] = {
   { "bool", E_VARTYPE_INT | E_VARTYPE_CHAR | E_VARTYPE_BOOL | E_VARTYPE_FLOAT | E_VARTYPE_STRING, 1, 1, eb_cast_bool },
   { "float", E_VARTYPE_INT | E_VARTYPE_CHAR | E_VARTYPE_BOOL | E_VARTYPE_FLOAT | E_VARTYPE_STRING, 1, 1, eb_cast_float },
 
-  /* Anything can be added as an element to a list, even void */
+  /* Anything can be added as an element to a list */
   { "list", 0xFFFFFF, 1, UINT32_MAX, eb_cast_list },
 
   { "len", E_VARTYPE_STRING | E_VARTYPE_LIST | E_VARTYPE_MAP, 1, 1, eb_len },
@@ -189,6 +202,14 @@ static const e_builtin_func eb_funcs[] = {
   { "math::trunc", E_VARTYPE_FLOAT, 1, 1, eb_trunc },
   { "math::abs", E_VARTYPE_FLOAT, 1, 1, eb_abs },
   { "math::hypot", E_VARTYPE_FLOAT, 1, 1, eb_hypot },
+
+  { "str::append", E_VARTYPE_STRING, 1, UINT32_MAX, eb_str_append },
+  { "str::substr", E_VARTYPE_STRING, 1, 3, eb_str_substr },
+  { "str::repeat", E_VARTYPE_STRING, 1, 2, eb_str_repeat },
+  { "str::lstrip", E_VARTYPE_STRING, 1, 1, eb_str_lstrip },
+  { "str::rstrip", E_VARTYPE_STRING, 1, 1, eb_str_rstrip },
+  { "str::strip", E_VARTYPE_STRING, 1, 1, eb_str_strip },
+  { "str::len", E_VARTYPE_STRING, 1, 1, eb_str_len }, // equivalent to len()
 };
 
 #endif // E_BUILTIN_FUNCTIONS_H

@@ -55,17 +55,21 @@
 // clang-format on
 
 static inline void
-e_emit_instruction(e_compiler* cc, e_opcode opcode, e_attr attrs)
+e_emit_instruction(e_compiler* cc, e_opcode opcode)
 {
+  // u32 align = cc->info->min_instruction_alignment;
+
+  // if (align != 0) {
+  //   while (((uintptr_t)(cc->emit + cc->emitted) % align) != 0) { e_emit_u8(cc, E_OPCODE_NOOP); }
+  // }
+
   e_emit_u8(cc, opcode);
-  e_emit_u8(cc, attrs);
 }
 
 static inline void
 e_emit_label(e_compiler* cc, u32 labelid)
 {
   e_emit_u8(cc, E_OPCODE_LABEL);
-  e_emit_u8(cc, E_ATTR_NONE);
   e_emit_u32(cc, labelid);
 }
 

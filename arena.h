@@ -30,7 +30,16 @@
 #include <stddef.h>
 #include <stdlib.h>
 
+/**
+ * Minimum size of memory block that is allocated.
+ */
 #define E_PAGE_SIZE (4096 * 4)
+
+/**
+ * When a page is more than this % full,
+ * allocate another one, before it is used.
+ */
+#define E_EARLY_ALLOCATION_THRESHOLD 0.9F
 
 /* Data is (uchar*)&page + sizeof(size_t) */
 typedef struct e_arena_page {
@@ -115,6 +124,15 @@ e_arnalloc(e_arena* a, size_t size)
   // And return the pointer after it.
   void* ptr = data + sizeof(size);
   fits->head += total;
+
+  /**
+   * If we detect the branch is close to being full,
+   * we can place an order to the OS for more memory,
+   * before we actually need it.
+   * This generally improves performance by amortizing
+   * malloc cost.
+   */
+  if ((float)fits->head / (float)fits->size >= E_EARLY_ALLOCATION_THRESHOLD) { e__create_and_link_page(E_PAGE_SIZE, a); }
 
   return ptr;
 }

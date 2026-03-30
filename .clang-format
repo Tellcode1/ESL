@@ -2,7 +2,7 @@ BasedOnStyle: gnu
 IndentWidth: 2
 TabWidth: 2
 UseTab: Never
-ColumnLimit: 175
+ColumnLimit: 150
 AllowAllParametersOfDeclarationOnNextLine: true
 AlignAfterOpenBracket: AlwaysBreak
 AlignConsecutiveAssignments: Consecutive

@@ -99,6 +99,7 @@ compiler_make_fork(const e_compiler* old_c, e_compiler* new_c)
   *new_c                       = (e_compiler){
     .arena              = old_c->arena,
     .ast                = old_c->ast,
+    .info               = old_c->info,
     .loop               = nullptr, // reset loop on function.
     .literals           = old_c->literals,
     .literal_hashes     = old_c->literal_hashes,
@@ -162,13 +163,13 @@ static inline int
 emit_lvalue_assign_epilogue(e_compiler* cc, e_lval lv)
 {
   if (lv.type == E_LVAL_VAR) {
-    e_emit_instruction(cc, E_OPCODE_ASSIGN, E_ATTR_NONE);
+    e_emit_instruction(cc, E_OPCODE_ASSIGN);
     e_emit_u32(cc, lv.val.var.id);
     return 0;
   }
   /* LVAL_INDEX handles all three of INDEX, INDEX_ASSIGN and INDEX_COMPOUND */
   else if (lv.type == E_LVAL_INDEX) {
-    e_emit_instruction(cc, E_OPCODE_INDEX_ASSIGN, E_ATTR_NONE);
+    e_emit_instruction(cc, E_OPCODE_INDEX_ASSIGN);
     return 0;
   }
   return -1;
@@ -217,7 +218,8 @@ lower_node_to_literal(const e_compiler* cc, int node, e_var* o)
       // e_var* vars_tmp = (e_var*)malloc(sizeof(e_var) * nelems);
       // for (u32 i = 0; i < nelems; i++) {
       //   int elem_node = E_GET_NODE(p, node)->val.list.elems[i];
-      //   if (lower_node_to_literal(p, elem_node, &vars_tmp[i])) { cerror(E_GET_NODE(p, elem_node)->common.span, "Failed to compile literal for list"); }
+      //   if (lower_node_to_literal(p, elem_node, &vars_tmp[i])) { cerror(E_GET_NODE(p, elem_node)->common.span, "Failed to compile literal for
+      //   list"); }
       // }
 
       // e_list_init(vars_tmp, nelems, o->val.list);
@@ -275,7 +277,9 @@ e_make_value(e_compiler* cc, int node)
       return l;
     }
 
-    default: cerror(E_GET_NODE(cc->ast, node)->common.span, "%i can not be represented as a value (it is %u)\n", node, E_GET_NODE(cc->ast, node)->type); exit(-1);
+    default:
+      cerror(E_GET_NODE(cc->ast, node)->common.span, "%i can not be represented as a value (it is %u)\n", node, E_GET_NODE(cc->ast, node)->type);
+      exit(-1);
   }
 
   return (e_lval){ .type = E_LVAL_UNKNOWN };
@@ -303,7 +307,7 @@ e_emit_lvalue_load(e_compiler* cc, e_lval lv)
     //   cerror(*lv.span, "Variable %s possibly uninitialized at time of use [variable value load]\n", lv.val.var.name);
     // }
 
-    e_emit_instruction(cc, E_OPCODE_LOAD, E_ATTR_NONE);
+    e_emit_instruction(cc, E_OPCODE_LOAD);
     e_emit_u32(cc, lv.val.var.id);
 
     return 0;
@@ -314,7 +318,7 @@ e_emit_lvalue_load(e_compiler* cc, e_lval lv)
     e = compile(cc, lv.val.index.index_node);
     if (e < 0) return e;
 
-    e_emit_instruction(cc, E_OPCODE_INDEX, E_ATTR_NONE);
+    e_emit_instruction(cc, E_OPCODE_INDEX);
   }
 
   return -1;
@@ -420,8 +424,8 @@ compile_literal_variable(e_compiler* cc, e_var v)
     // e_var_acquire(&cc->literals[id]); // refcounter++ for the reused variable
   }
 
-  // printf("LOADK[%u], ATTR_NONE[%u], IDX[%u]\n", E_OPCODE_LITERAL, E_ATTR_NONE, cc->nliterals);
-  e_emit_instruction(cc, E_OPCODE_LITERAL, E_ATTR_NONE);
+  // printf("LOADK[%u], ATTR_NONE[%u], IDX[%u]\n", E_OPCODE_LITERAL, cc->nliterals);
+  e_emit_instruction(cc, E_OPCODE_LITERAL);
   e_emit_u16(cc, id);
 
   return 0;
@@ -510,7 +514,7 @@ compile_function_definition(struct e_compiler* cc, int node)
   int e = e_compile_function(&copy, node);
 
   /* Always return void if no other return value was specified */
-  e_emit_instruction(&copy, E_OPCODE_RETURN, E_ATTR_NONE);
+  e_emit_instruction(&copy, E_OPCODE_RETURN);
   e_emit_u8(&copy, false);
 
   compiler_join_fork(&copy, cc);
@@ -569,7 +573,7 @@ compile_binary_op(struct e_compiler* cc, int node)
     if (e) goto err;
 
     /* Emit operator */
-    e_emit_instruction(cc, opcode, E_ATTR_NONE);
+    e_emit_instruction(cc, opcode);
 
     /* Emit actual assign instruction (takes value produced earlier and assigns it) */
     emit_lvalue_assign_epilogue(cc, lv);
@@ -582,7 +586,7 @@ compile_binary_op(struct e_compiler* cc, int node)
     e = compile(cc, right);
     if (e) goto err;
 
-    e_emit_instruction(cc, opcode, E_ATTR_NONE);
+    e_emit_instruction(cc, opcode);
   }
 
   return e;
@@ -635,7 +639,8 @@ compile_unary_op(struct e_compiler* cc, int node)
     if (e) goto err;
 
     /* Emit operator */
-    e_emit_instruction(cc, opcode, E_ATTR_NONE);
+    e_emit_instruction(cc, opcode);
+    e_emit_u8(cc, true); // is_compound flag
 
     /* Emit actual assign instruction (takes value produced earlier and assigns it) */
     emit_lvalue_assign_epilogue(cc, lv);
@@ -647,7 +652,8 @@ compile_unary_op(struct e_compiler* cc, int node)
     if (e) goto err;
 
     /* Emit operator */
-    e_emit_instruction(cc, opcode, E_ATTR_NONE);
+    e_emit_instruction(cc, opcode);
+    e_emit_u8(cc, true); // is_compound flag
   }
 
   return 0;
@@ -703,7 +709,13 @@ compile_function_call(struct e_compiler* cc, int node)
 
     // }
     if (nargs > func->max_args || nargs < func->min_args) {
-      cerror(function_span, "Builtin function '%s' expects between [%u-%u] arguments, but [%u] were given\n", func->name, func->min_args, func->max_args, nargs);
+      cerror(
+          function_span,
+          "Builtin function '%s' expects between [%u-%u] arguments, but [%u] were given\n",
+          func->name,
+          func->min_args,
+          func->max_args,
+          nargs);
       return -1;
     }
   }
@@ -718,14 +730,19 @@ compile_function_call(struct e_compiler* cc, int node)
     }
 
     if (func && func->nargs != nargs) {
-      cerror(E_GET_NODE(cc->ast, node)->common.span, "User defined function '%s' expects [%u] arguments, but [%u] were given\n", function_name, func->nargs, nargs);
+      cerror(
+          E_GET_NODE(cc->ast, node)->common.span,
+          "User defined function '%s' expects [%u] arguments, but [%u] were given\n",
+          function_name,
+          func->nargs,
+          nargs);
       return -1;
     }
   }
 
-  e_emit_instruction(cc, E_OPCODE_CALL, E_ATTR_NONE);    // 2 bytes
-  e_emit_u16(cc, E_GET_NODE(cc->ast, node)->call.nargs); // 2 bytes, number of arguments
+  e_emit_instruction(cc, E_OPCODE_CALL);                 // 2 bytes
   e_emit_u32(cc, hash);                                  // 4 bytes, function ID
+  e_emit_u16(cc, E_GET_NODE(cc->ast, node)->call.nargs); // 2 bytes, number of arguments
 
   return 0;
 }
@@ -744,7 +761,7 @@ compile_if_statement(struct e_compiler* cc, int node)
   u32 next_in_chain_label = make_label_id(cc);
 
   /* Push a new scope before everything. */
-  e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES, E_ATTR_NONE);
+  e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES);
   /* For the compiler too */
   e_stack_push_frame(cc->stack);
 
@@ -753,8 +770,8 @@ compile_if_statement(struct e_compiler* cc, int node)
   if (e) return e;
 
   // condition failed :<
-  e_emit_instruction(cc, E_OPCODE_JZ, E_ATTR_NONE); // Jump to the next in chain
-                                                    // Possibly else if or else
+  e_emit_instruction(cc, E_OPCODE_JZ); // Jump to the next in chain
+                                       // Possibly else if or else
   e_emit_u32(cc, next_in_chain_label);
 
   // BODY OF ROOT IF STATEMENT
@@ -765,7 +782,7 @@ compile_if_statement(struct e_compiler* cc, int node)
 
   // Still inside the body, JMP over all other branches
   // since we're done executing the body of the if statement
-  e_emit_instruction(cc, E_OPCODE_JMP, E_ATTR_NONE); // JUMP!
+  e_emit_instruction(cc, E_OPCODE_JMP); // JUMP!
   e_emit_u32(cc, end_label);
 
   // ELSE IFS
@@ -782,7 +799,7 @@ compile_if_statement(struct e_compiler* cc, int node)
     if (e) return e;
 
     /* Failed. Jump to the next in chain. */
-    e_emit_instruction(cc, E_OPCODE_JZ, E_ATTR_NONE);
+    e_emit_instruction(cc, E_OPCODE_JZ);
     e_emit_u32(cc, next_in_chain_label);
 
     /* Condition true! Execute the body */
@@ -792,7 +809,7 @@ compile_if_statement(struct e_compiler* cc, int node)
     }
 
     /* JMP over all other branches. */
-    e_emit_instruction(cc, E_OPCODE_JMP, E_ATTR_NONE); // skip remaining elseifs and else
+    e_emit_instruction(cc, E_OPCODE_JMP); // skip remaining elseifs and else
     e_emit_u32(cc, end_label);
   }
 
@@ -810,7 +827,7 @@ compile_if_statement(struct e_compiler* cc, int node)
   e_emit_label(cc, end_label);
 
   /* Pop scope. */
-  e_emit_instruction(cc, E_OPCODE_POP_VARIABLES, E_ATTR_NONE);
+  e_emit_instruction(cc, E_OPCODE_POP_VARIABLES);
 
   /* for the compieler too */
   e_stack_pop_frame(cc->stack);
@@ -821,8 +838,13 @@ compile_if_statement(struct e_compiler* cc, int node)
 static int
 compile_while_statement(struct e_compiler* cc, int node)
 {
+  /**
+   * Push frame for the stack
+   */
+  e_stack_push_frame(cc->stack);
+
   /* Push a new scope */
-  e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES, E_ATTR_NONE);
+  e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES);
 
   /* Computes the condition and jumps to the end label (breaks) if condition is false */
   const u32 pre_condition_label = make_label_id(cc);
@@ -849,7 +871,7 @@ compile_while_statement(struct e_compiler* cc, int node)
   if (e) return e;
 
   // Break out of loop if condition is false.
-  e_emit_instruction(cc, E_OPCODE_JZ, E_ATTR_NONE);
+  e_emit_instruction(cc, E_OPCODE_JZ);
   e_emit_u32(cc, end_label);
 
   // WHILE BODY
@@ -859,14 +881,19 @@ compile_while_statement(struct e_compiler* cc, int node)
   }
 
   /* Jump to condition, body is done executing */
-  e_emit_instruction(cc, E_OPCODE_JMP, E_ATTR_NONE);
+  e_emit_instruction(cc, E_OPCODE_JMP);
   e_emit_u32(cc, pre_condition_label);
 
   // End label.
   e_emit_label(cc, end_label);
 
   // Pop the scope
-  e_emit_instruction(cc, E_OPCODE_POP_VARIABLES, E_ATTR_NONE);
+  e_emit_instruction(cc, E_OPCODE_POP_VARIABLES);
+
+  /**
+   * Pop frame for the stack
+   */
+  e_stack_pop_frame(cc->stack);
 
   // swap the old loop metadata back in
   cc->loop = last;
@@ -881,7 +908,7 @@ compile_for_statement(struct e_compiler* cc, int node)
   int condition    = -1;
 
   /* Push a new scope */
-  e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES, E_ATTR_NONE);
+  e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES);
   /* For the compiler too */
   e_stack_push_frame(cc->stack);
 
@@ -937,7 +964,7 @@ compile_for_statement(struct e_compiler* cc, int node)
   }
 
   // JZ END_LABEL
-  e_emit_instruction(cc, E_OPCODE_JZ, E_ATTR_NONE);
+  e_emit_instruction(cc, E_OPCODE_JZ);
   e_emit_u32(cc, end_label);
 
   // BODY
@@ -964,14 +991,14 @@ compile_for_statement(struct e_compiler* cc, int node)
   }
 
   // JMP TOP_LABEL
-  e_emit_instruction(cc, E_OPCODE_JMP, E_ATTR_NONE);
+  e_emit_instruction(cc, E_OPCODE_JMP);
   e_emit_u32(cc, top_label);
 
   // END_LABEL
   e_emit_label(cc, end_label);
 
   // Pop scope
-  e_emit_instruction(cc, E_OPCODE_POP_VARIABLES, E_ATTR_NONE);
+  e_emit_instruction(cc, E_OPCODE_POP_VARIABLES);
   // For the compiler too
   e_stack_pop_frame(cc->stack);
 
@@ -992,7 +1019,7 @@ e_compile_member_access(e_compiler* cc, int node)
   int e = compile(cc, left);
   if (e) return e;
 
-  e_emit_instruction(cc, E_OPCODE_MEMBER_ACCESS, E_ATTR_NONE);
+  e_emit_instruction(cc, E_OPCODE_MEMBER_ACCESS);
   e_emit_u32(cc, e_hash_fnv(right, strlen(right)));
 
   return 0;
@@ -1069,16 +1096,19 @@ compile(struct e_compiler* cc, int node)
         if (e) { return e; }
       }
 
-      const u32 main_id = e_hash_fnv("main", strlen("main"));
+      const char* custom_entry_point = cc->info->custom_entry_point;
 
-      /* Find main and ensure it doesn't ask for any arguments. */
+      u32 entry_point_hash = e_hash_fnv("main", strlen("main"));
+      if (custom_entry_point != nullptr) { entry_point_hash = e_hash_fnv(custom_entry_point, strlen(custom_entry_point)); }
+
+      /* Find entry point and ensure it doesn't ask for any arguments. */
       bool found = false;
       for (u32 i = 0; i < cc->nfunctions; i++) {
-        if (cc->functions[i].name_hash == main_id) {
+        if (cc->functions[i].name_hash == entry_point_hash) {
           found = true;
 
           if (cc->functions[i].nargs != 0) {
-            cerror(root->common.span, "main can not accept any arguments!\n");
+            cerror(root->common.span, "Entry point can not accept any arguments!\n");
             return -1;
           }
 
@@ -1087,14 +1117,14 @@ compile(struct e_compiler* cc, int node)
       }
 
       if (!found) {
-        cerror(root->common.span, "main undefined\n");
+        cerror(root->common.span, "Entry point undefined\n");
         return -1;
       }
 
       /* CALL to main */
-      e_emit_instruction(cc, E_OPCODE_CALL, E_ATTR_NONE);
+      e_emit_instruction(cc, E_OPCODE_CALL);
+      e_emit_u32(cc, entry_point_hash);
       e_emit_u16(cc, 0); // no arguments to main
-      e_emit_u32(cc, main_id);
 
       return 0;
     }
@@ -1136,6 +1166,8 @@ compile(struct e_compiler* cc, int node)
 
       u32 struct_name_hash = e_hash_fnv(struct_name, strlen(struct_name));
 
+      exit(-1);
+
       e_compiler copy;
       compiler_make_fork(cc, &copy);
 
@@ -1165,7 +1197,7 @@ compile(struct e_compiler* cc, int node)
       e = compile(cc, E_GET_NODE(cc->ast, node)->index.index);
       if (e < 0) return e;
 
-      e_emit_instruction(cc, E_OPCODE_INDEX, E_ATTR_NONE);
+      e_emit_instruction(cc, E_OPCODE_INDEX);
       return 0;
     }
 
@@ -1198,7 +1230,7 @@ compile(struct e_compiler* cc, int node)
         cerror(E_GET_NODE(cc->ast, node)->common.span, "break used outside loop\n");
         return -1;
       }
-      e_emit_instruction(cc, E_OPCODE_JMP, E_ATTR_NONE);
+      e_emit_instruction(cc, E_OPCODE_JMP);
       e_emit_u32(cc, cc->loop->break_label);
       return 0;
     }
@@ -1208,7 +1240,7 @@ compile(struct e_compiler* cc, int node)
         cerror(E_GET_NODE(cc->ast, node)->common.span, "continue used outside loop\n");
         return -1;
       }
-      e_emit_instruction(cc, E_OPCODE_JMP, E_ATTR_NONE);
+      e_emit_instruction(cc, E_OPCODE_JMP);
       e_emit_u32(cc, cc->loop->continue_label);
       return 0;
     }
@@ -1218,10 +1250,10 @@ compile(struct e_compiler* cc, int node)
         /* Compile the return value */
         compile(cc, E_GET_NODE(cc->ast, node)->ret.expr_id);
 
-        e_emit_instruction(cc, E_OPCODE_RETURN, E_ATTR_NONE);
+        e_emit_instruction(cc, E_OPCODE_RETURN);
         e_emit_u8(cc, true); // Specify that we're returning a value
       } else {
-        e_emit_instruction(cc, E_OPCODE_RETURN, E_ATTR_NONE);
+        e_emit_instruction(cc, E_OPCODE_RETURN);
         e_emit_u8(cc, false); /* Returning void! */
       }
       return 0;
@@ -1295,16 +1327,15 @@ compile(struct e_compiler* cc, int node)
       E_VAR_AS_INFO(r)->span          = E_GET_NODE(cc->ast, node)->common.span;
       E_VAR_AS_INFO(r)->is_const      = E_GET_NODE(cc->ast, node)->let.is_const;
 
-      int    e     = 0;
-      e_attr attrs = E_ATTR_NONE;
-      if (initializer >= 0) {
-        e = compile(cc, initializer);
-        attrs |= E_ATTR_COMPOUND; // Compound sets variable value to top of stack.
-      }
+      int e = 0;
+      if (initializer >= 0) { e = compile(cc, initializer); }
       if (e) return e;
 
-      e_emit_instruction(cc, E_OPCODE_INIT, attrs);
+      e_emit_instruction(cc, E_OPCODE_INIT);
       e_emit_u32(cc, hash);
+
+      // is_compound
+      e_emit_u8(cc, initializer >= 0);
 
       return 0;
     }
@@ -1365,7 +1396,7 @@ compile(struct e_compiler* cc, int node)
         compile(cc, elem_node);
       }
 
-      e_emit_instruction(cc, E_OPCODE_MK_LIST, E_ATTR_NONE);
+      e_emit_instruction(cc, E_OPCODE_MK_LIST);
       e_emit_u32(cc, nelems);
 
       return 0;
@@ -1380,7 +1411,7 @@ compile(struct e_compiler* cc, int node)
         compile(cc, val);
       }
 
-      e_emit_instruction(cc, E_OPCODE_MK_MAP, E_ATTR_NONE);
+      e_emit_instruction(cc, E_OPCODE_MK_MAP);
       e_emit_u32(cc, nelems);
 
       return 0;
@@ -1409,12 +1440,21 @@ e_compile_function(e_compiler* cc, int node)
 }
 
 int
-e_compile(e_arena* arena, struct e_ast* ast, int root_node, e_compilation_result* result)
+e_compile(const ecc_info* info, e_compilation_result* result)
 {
   const u32 init_code_capacity       = 256;
   const u32 init_literal_capacity    = 64;
   const u32 init_function_capacity   = 64;
   const u32 init_namespaces_capacity = 16;
+
+  e_arena* arena = info->arena;
+
+  e_arena fallback;
+  bool    using_fallback_arena;
+  if (!info->arena) {
+    if (e_arena_init(4, &fallback)) return -1;
+    using_fallback_arena = true;
+  }
 
   ecc_namespace_stack ns = {
     .namespaces  = e_arnalloc(arena, sizeof(char*) * init_namespaces_capacity),
@@ -1431,7 +1471,8 @@ e_compile(e_arena* arena, struct e_ast* ast, int root_node, e_compilation_result
 
   e_compiler cc = {
     .arena              = arena,
-    .ast                = ast,
+    .ast                = info->ast,
+    .info               = info,
     .loop               = NULL,
     .literals           = (e_var*)e_arnalloc(arena, sizeof(e_var) * init_literal_capacity),
     .literal_hashes     = (u16*)e_arnalloc(arena, sizeof(u16) * init_literal_capacity),
@@ -1452,7 +1493,7 @@ e_compile(e_arena* arena, struct e_ast* ast, int root_node, e_compilation_result
 
   if (e_stack_init(256, 32, 32, &stack) < 0) return -1;
 
-  int e = compile(&cc, root_node);
+  int e = compile(&cc, info->root);
   if (e) return e;
 
   /* Resolve all labels after compilation. Ensure this is the last optimization / cleanup function called! */
@@ -1469,6 +1510,8 @@ e_compile(e_arena* arena, struct e_ast* ast, int root_node, e_compilation_result
   }
 
   e_stack_free(&stack);
+
+  if (using_fallback_arena) { e_arena_free(&fallback); }
 
   // e_print_instruction_stream(cc.emit, cc.emitted);
 
