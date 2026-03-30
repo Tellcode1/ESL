@@ -27,7 +27,7 @@
 #include <string.h>
 
 int
-e_list_init(e_var* vars, u64 nvars, struct e_list* list)
+e_list_init(e_var* vars, u32 nvars, struct e_list* list)
 {
   if (!list) return -1;
 

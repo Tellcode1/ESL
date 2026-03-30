@@ -60,7 +60,7 @@ typedef enum e_ast_nodetype {
   // x.y
   E_AST_NODE_MEMBER_ACCESS,
 
-  E_AST_NODE_NAMESPACE_DECL,
+  E_AST_NODE_STRUCT_DECL,
 
   E_AST_NODE_CALL,
   E_AST_NODE_INT,
@@ -200,7 +200,8 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    int*            kvpairs;
+    int*            keys;
+    int*            values;
     u32             npairs;
   } map;
 
@@ -260,6 +261,15 @@ typedef union e_ast_node_val {
     int*  stmts; // All statements in namespace
     u32   nstmts;
   } namespace_decl;
+
+  struct {
+    e_ast_node_type type;
+    e_filespan      span;
+
+    char* name;  // structure name
+    int*  stmts; // All statements in structure decl
+    u32   nstmts;
+  } struct_decl;
 
   struct {
     e_ast_node_type type;

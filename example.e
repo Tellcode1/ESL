@@ -30,6 +30,11 @@ fn never_return_because_im_evil()
   while (true) {}
 }
 
+// struct vec2 {
+//   let x;
+//   let y;
+// };
+
 fn update()
 {
   println("Running 100 iterations of free fall test (Results are for after 100 seconds):");
@@ -66,22 +71,32 @@ namespace gaming
   let hidden_var = 0;
 };
 
+fn maptest()
+{
+  let map = #{ 1 : "One!", 2 : "Two!", 3 : "Three!", 4 : "Four!", 5 : "Five!" };
+  for (let i = 1; i < len(map)+1; i++)
+  {
+    print(i, ": ");
+    println(map[i]);
+  }
+}
+
 fn main() {
   println("Im gaming rn");
-  println(32);
-  println(16.0);
-  println(false);
+  println("println(32) = ", 32);
+  println("println(16.0) = ", 16.0);
+  println("println(false) = ", false);
 
-  println(5 * 2);
-  println(5 + 2);
-  println(5 / 2);
-  println(5.0 / 2.0);
+  println("Should be 10: ", 5 * 2);
+  println("Should be 7: ", 5 + 2);
+  println("Should be 2: ", 5 / 2);
+  println("Should be 2.5: ", 5.0 / 2.0);
 
-  println(!!!!!!!!!!true);
+  println("Should be true: ", !!!!!!!!!!true);
 
-  println(10 > 2);
-  println(10 < 2);
-  println(10 % 4);
+  println("Should be true: ", 10 > 2);
+  println("Should be false: ", 10 < 2);
+  println("Should be 2: ", 10 % 4);
 
   if (3 > 2) {
     println("Scientific breakthrough: 3 is greater than 2");
@@ -299,6 +314,8 @@ fn main() {
     z *= 2;
     println(x, ", ", y, ", ", z);
   }
+
+  maptest();
 }
 
 fn file_test()

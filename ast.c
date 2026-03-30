@@ -863,6 +863,68 @@ err:
 }
 
 static int
+parse_map(e_ast* p, int node)
+{
+  // if (e_ast_expect(p, E_TOKEN_TYPE_OPEN_BRACE)) {
+  //   asterror(prev(p)->span, "Expected '{' after '#' [map literal]\n");
+  //   return -1;
+  // }
+
+  u32 capacity = 8;
+  u32 npairs   = 0;
+
+  int* keys   = e_arnalloc(p->arena, sizeof(int) * capacity);
+  int* values = e_arnalloc(p->arena, sizeof(int) * capacity);
+
+  if (!keys || !values) return -1;
+
+  while (peek(p) && peek(p)->type != E_TOKEN_TYPE_CLOSEBRACE) {
+    // key
+    int key = e_ast_expr(p, 0);
+    if (key < 0) return -1;
+
+    if (e_ast_expect(p, E_TOKEN_TYPE_COLON)) {
+      asterror(prev(p)->span, "Expected ':' [map literal]\n");
+      return -1;
+    }
+
+    // value
+    int value = e_ast_expr(p, 0);
+    if (value < 0) return -1;
+
+    if (npairs >= capacity) {
+      u32 newcap = capacity * 2;
+      keys       = e_arnrealloc(p->arena, keys, sizeof(int) * newcap);
+      values     = e_arnrealloc(p->arena, values, sizeof(int) * newcap);
+      capacity   = newcap;
+    }
+
+    keys[npairs]   = key;
+    values[npairs] = value;
+    npairs++;
+
+    if (peek(p)->type == E_TOKEN_TYPE_CLOSEBRACE) break;
+
+    if (e_ast_expect(p, E_TOKEN_TYPE_COMMA)) {
+      asterror(prev(p)->span, "Expected ',' or '}' [map literal]\n");
+      return -1;
+    }
+  }
+
+  if (e_ast_expect(p, E_TOKEN_TYPE_CLOSEBRACE)) {
+    asterror(prev(p)->span, "Expected '}' [map literal]\n");
+    return -1;
+  }
+
+  E_GET_NODE(p, node)->type       = E_AST_NODE_MAP;
+  E_GET_NODE(p, node)->map.keys   = keys;
+  E_GET_NODE(p, node)->map.values = values;
+  E_GET_NODE(p, node)->map.npairs = npairs;
+
+  return node;
+}
+
+static int
 parse_namespace_decleration(e_ast* p, int node)
 {
   if (!peek(p) || peek(p)->type != E_TOKEN_TYPE_IDENT) {
@@ -882,18 +944,29 @@ parse_namespace_decleration(e_ast* p, int node)
 
   if (parse_braces(p, &stmts, &nstmts)) { return -1; }
 
-  for (int i = 0; i < nstmts; i++) {
+  for (u32 i = 0; i < nstmts; i++) {
     e_ast_node_type type = E_GET_NODE(p, stmts[i])->common.type;
     e_filespan      span = E_GET_NODE(p, stmts[i])->common.span;
 
-    if (type != E_AST_NODE_FUNCTION_DEFINITION && type != E_AST_NODE_NAMESPACE_DECL && type != E_AST_NODE_VARIABLE_DECL) {
+    if (type == E_AST_NODE_STATEMENT_LIST) {
+      u32  list_nstmts = E_GET_NODE(p, stmts[i])->stmts.nstmts;
+      int* list_stmts  = E_GET_NODE(p, stmts[i])->stmts.stmts;
+      for (u32 j = 0; j < list_nstmts; j++) {
+        type = E_GET_NODE(p, list_stmts[j])->common.type;
+        if (type != E_AST_NODE_FUNCTION_DEFINITION && type != E_AST_NODE_STRUCT_DECL && type != E_AST_NODE_VARIABLE_DECL) {
+          asterror(span, "Expected only function definitions, variable declerations or namespace declerations in namespace scope\n");
+
+          return -1;
+        }
+      }
+    } else if (type != E_AST_NODE_FUNCTION_DEFINITION && type != E_AST_NODE_STRUCT_DECL && type != E_AST_NODE_VARIABLE_DECL) {
       asterror(span, "Expected only function definitions, variable declerations or namespace declerations in namespace scope\n");
 
       return -1;
     }
   }
 
-  E_GET_NODE(p, node)->type                  = E_AST_NODE_NAMESPACE_DECL;
+  E_GET_NODE(p, node)->type                  = E_AST_NODE_STRUCT_DECL;
   E_GET_NODE(p, node)->namespace_decl.name   = e_arnstrdup(p->arena, name_tk->val.ident);
   E_GET_NODE(p, node)->namespace_decl.stmts  = stmts;
   E_GET_NODE(p, node)->namespace_decl.nstmts = nstmts;
@@ -984,6 +1057,56 @@ parse_namespace_access(e_ast* p, int leftidx, int node)
   return node;
 }
 
+static int
+parse_struct_decleration(e_ast* p, int node)
+{
+  if (!peek(p) || peek(p)->type != E_TOKEN_TYPE_IDENT) {
+    asterror(peek(p)->span, "Expected structure name, got '%s' [structure decleration]\n", e_token_type_to_string(prev(p)->type));
+    return -1;
+  }
+
+  e_token* name_tk = next(p);
+
+  if (e_ast_expect(p, E_TOKEN_TYPE_OPENBRACE)) {
+    asterror(prev(p)->span, "Expected '{' after structure name, got '%s' [structure decleration]\n", e_token_type_to_string(prev(p)->type));
+    return -1;
+  }
+
+  int* stmts  = NULL;
+  u32  nstmts = 0;
+
+  if (parse_braces(p, &stmts, &nstmts)) { return -1; }
+
+  for (u32 i = 0; i < nstmts; i++) {
+    e_ast_node_type type = E_GET_NODE(p, stmts[i])->common.type;
+    e_filespan      span = E_GET_NODE(p, stmts[i])->common.span;
+
+    const char* s = "Expected only function definitions or variable declerations in structure decleration scope\n";
+
+    if (type == E_AST_NODE_STATEMENT_LIST) {
+      u32  list_nstmts = E_GET_NODE(p, stmts[i])->stmts.nstmts;
+      int* list_stmts  = E_GET_NODE(p, stmts[i])->stmts.stmts;
+      for (u32 j = 0; j < list_nstmts; j++) {
+        type = E_GET_NODE(p, list_stmts[j])->common.type;
+        if (type != E_AST_NODE_FUNCTION_DEFINITION && type != E_AST_NODE_VARIABLE_DECL) {
+          asterror(span, "%s", s);
+          return -1;
+        }
+      }
+    } else if (type != E_AST_NODE_FUNCTION_DEFINITION && type != E_AST_NODE_VARIABLE_DECL) {
+      asterror(span, "%s", s);
+      return -1;
+    }
+  }
+
+  E_GET_NODE(p, node)->type               = E_AST_NODE_STRUCT_DECL;
+  E_GET_NODE(p, node)->struct_decl.name   = e_arnstrdup(p->arena, name_tk->val.ident);
+  E_GET_NODE(p, node)->struct_decl.stmts  = stmts;
+  E_GET_NODE(p, node)->struct_decl.nstmts = nstmts;
+
+  return node;
+}
+
 int
 e_ast_nud(e_ast* p, e_token* tk)
 {
@@ -1019,6 +1142,12 @@ e_ast_nud(e_ast* p, e_token* tk)
     /* List declerator ([elem1,elem2,]) */
     case E_TOKEN_TYPE_OPENBRACKET: {
       if (parse_list(p, node) < 0) { return -1; }
+      return node;
+    }
+
+    /* Map declerator */
+    case E_TOKEN_TYPE_HASH_OPENBRACE: {
+      if (parse_map(p, node) < 0) { return -1; }
       return node;
     }
 
@@ -1123,6 +1252,11 @@ e_ast_nud(e_ast* p, e_token* tk)
       }
 
       if (parse_variable_decleration(p, is_const, node) < 0) { return -1; }
+      return node;
+    }
+
+    case E_TOKEN_TYPE_STRUCT: {
+      if (parse_struct_decleration(p, node) < 0) { return -1; }
       return node;
     }
 
@@ -1411,7 +1545,7 @@ e_ast_parse(e_ast* p, int* out_root_node)
     }
 
     e_ast_node_type type = E_GET_NODE(p, node)->type;
-    if (type != E_AST_NODE_FUNCTION_DEFINITION && type != E_AST_NODE_NAMESPACE_DECL && type != E_AST_NODE_VARIABLE_DECL) {
+    if (type != E_AST_NODE_FUNCTION_DEFINITION && type != E_AST_NODE_STRUCT_DECL && type != E_AST_NODE_VARIABLE_DECL) {
       // asterror(take_span, "Expected function definition or variable declerations in global scope\n");
       asterror(take_span, "Expected only function definitions, variable declerations or namespace declerations in global scope\n");
       goto err;

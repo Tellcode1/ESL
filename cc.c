@@ -92,6 +92,47 @@ static int        compile_binary_op(struct e_compiler* cc, int node);
 static int        compile_unary_op(struct e_compiler* cc, int node);
 static int        compile(struct e_compiler* cc, int node);
 
+static inline int
+compiler_make_fork(const e_compiler* old_c, e_compiler* new_c)
+{
+  const u32 init_code_capacity = 256;
+  *new_c                       = (e_compiler){
+    .arena              = old_c->arena,
+    .ast                = old_c->ast,
+    .loop               = nullptr, // reset loop on function.
+    .literals           = old_c->literals,
+    .literal_hashes     = old_c->literal_hashes,
+    .nliterals          = old_c->nliterals,
+    .cliterals          = old_c->cliterals,
+    .ns                 = old_c->ns,
+    .stack              = old_c->stack,
+    .emit               = (u8*)e_arnalloc(old_c->arena, init_code_capacity),
+    .emitted            = 0,
+    .code_capacity      = init_code_capacity,
+    .functions          = old_c->functions,
+    .functions_capacity = old_c->functions_capacity,
+    .functions_count    = old_c->functions_count,
+    .builtin_var_hashes = old_c->builtin_var_hashes,
+    .nbuiltin_vars      = old_c->nbuiltin_vars,
+    .builtin_vars       = old_c->builtin_vars,
+  };
+  return new_c->emit ? 0 : -1;
+}
+
+static inline void
+compiler_join_fork(const e_compiler* copy, e_compiler* cc)
+{
+  cc->literals           = copy->literals;
+  cc->literal_hashes     = copy->literal_hashes;
+  cc->nliterals          = copy->nliterals;
+  cc->cliterals          = copy->cliterals;
+  cc->functions          = copy->functions;
+  cc->ns                 = copy->ns;
+  cc->functions_count    = copy->functions_count;
+  cc->functions_capacity = copy->functions_capacity;
+  /* Can't modify builtin variable count */
+}
+
 static inline u32
 make_label_id(e_compiler* cc)
 { return cc->next_label++; }
@@ -445,28 +486,8 @@ compile_function_definition(struct e_compiler* cc, int node)
     }
   }
 
-  const u32 init_code_capacity = 256;
-
-  struct e_compiler copy = {
-    .arena              = cc->arena,
-    .ast                = cc->ast,
-    .loop               = nullptr, // reset loop on function.
-    .literals           = cc->literals,
-    .literal_hashes     = cc->literal_hashes,
-    .nliterals          = cc->nliterals,
-    .cliterals          = cc->cliterals,
-    .ns                 = cc->ns,
-    .stack              = cc->stack,
-    .emit               = (u8*)e_arnalloc(cc->arena, init_code_capacity),
-    .emitted            = 0,
-    .code_capacity      = init_code_capacity,
-    .functions          = cc->functions,
-    .functions_capacity = cc->functions_capacity,
-    .functions_count    = cc->functions_count,
-    .builtin_var_hashes = cc->builtin_var_hashes,
-    .nbuiltin_vars      = cc->nbuiltin_vars,
-    .builtin_vars       = cc->builtin_vars,
-  };
+  e_compiler copy;
+  compiler_make_fork(cc, &copy);
 
   int e = e_compile_function(&copy, node);
 
@@ -474,15 +495,7 @@ compile_function_definition(struct e_compiler* cc, int node)
   e_emit_instruction(&copy, E_OPCODE_RETURN, E_ATTR_NONE);
   e_emit_u8(&copy, false);
 
-  cc->literals           = copy.literals;
-  cc->literal_hashes     = copy.literal_hashes;
-  cc->nliterals          = copy.nliterals;
-  cc->cliterals          = copy.cliterals;
-  cc->functions          = copy.functions;
-  cc->ns                 = copy.ns;
-  cc->functions_count    = copy.functions_count;
-  cc->functions_capacity = copy.functions_capacity;
-  /* Can't modify builtin variable count */
+  compiler_join_fork(&copy, cc);
 
   e_function f = {
     .code      = copy.emit,
@@ -1087,7 +1100,7 @@ compile(struct e_compiler* cc, int node)
       return 0;
     }
 
-    case E_AST_NODE_NAMESPACE_DECL: {
+    case E_AST_NODE_STRUCT_DECL: {
       const char* name = E_GET_NODE(cc->ast, node)->namespace_decl.name;
 
       if (strcmp(name, "math") == 0) {
@@ -1311,8 +1324,7 @@ compile(struct e_compiler* cc, int node)
     case E_AST_NODE_CHAR:
     case E_AST_NODE_BOOL:
     case E_AST_NODE_STRING:
-    case E_AST_NODE_FLOAT:
-    case E_AST_NODE_MAP: {
+    case E_AST_NODE_FLOAT: {
       return compile_literal(cc, node);
     }
 
@@ -1324,6 +1336,21 @@ compile(struct e_compiler* cc, int node)
       }
 
       e_emit_instruction(cc, E_OPCODE_MK_LIST, E_ATTR_NONE);
+      e_emit_u32(cc, nelems);
+
+      return 0;
+    }
+
+    case E_AST_NODE_MAP: {
+      u32 nelems = E_GET_NODE(cc->ast, node)->map.npairs;
+      for (u32 i = 0; i < nelems; i++) {
+        int key = E_GET_NODE(cc->ast, node)->map.keys[i];
+        int val = E_GET_NODE(cc->ast, node)->map.values[i];
+        compile(cc, key);
+        compile(cc, val);
+      }
+
+      e_emit_instruction(cc, E_OPCODE_MK_MAP, E_ATTR_NONE);
       e_emit_u32(cc, nelems);
 
       return 0;

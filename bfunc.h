@@ -116,46 +116,10 @@ eb_len(e_var* args, u32 nargs)
     len = (int)strlen(E_VAR_AS_STRING(&args[0])->s);
   } else if (args[0].type == E_VARTYPE_LIST) {
     len = (int)E_VAR_AS_LIST(&args[0])->size;
+  } else if (args[0].type == E_VARTYPE_MAP) {
+    len = (int)E_VAR_AS_MAP(&args[0])->size;
   }
   return (e_var){ .type = E_VARTYPE_INT, .val = { .i = len } };
-}
-
-/**
- * Allow all arguments.
- */
-static inline bool
-eb_argval_passthrough(const e_var* args, u32 nargs, const struct e_filespan* span, FILE* errf)
-{
-  (void)args;
-  (void)nargs;
-  (void)span;
-  (void)errf;
-  return false;
-}
-
-static inline bool
-eb_argval_scalars_only(const e_var* args, u32 nargs, const struct e_filespan* span, FILE* errf)
-{
-  for (u32 i = 0; i < nargs; i++) {
-    if (args[i].type == E_VARTYPE_MAP || args[i].type == E_VARTYPE_STRING || args[i].type == E_VARTYPE_LIST) {
-      fprintf(errf, "[%s:%i:%i] Function only expects scalar types (%s given)\n", span->file, span->line, span->col, e_var_type_to_string(args[i].type));
-      return true;
-    }
-  }
-  return false;
-}
-
-static inline bool
-eb_argval_primitives_only(const e_var* args, u32 nargs, const struct e_filespan* span, FILE* errf)
-{
-  for (u32 i = 0; i < nargs; i++) {
-    if (args[i].type == E_VARTYPE_MAP || args[i].type == E_VARTYPE_LIST) {
-      fprintf(errf, "[%s:%i:%i] Function only expects primitive types\n", span->file, span->line, span->col);
-
-      return true;
-    }
-  }
-  return false;
 }
 
 static inline void
@@ -193,10 +157,10 @@ static const e_builtin_func eb_funcs[] = {
   { "bool", E_VARTYPE_INT | E_VARTYPE_CHAR | E_VARTYPE_BOOL | E_VARTYPE_FLOAT | E_VARTYPE_STRING, 1, 1, eb_cast_bool },
   { "float", E_VARTYPE_INT | E_VARTYPE_CHAR | E_VARTYPE_BOOL | E_VARTYPE_FLOAT | E_VARTYPE_STRING, 1, 1, eb_cast_float },
 
-  /* Anything can be added as an element to a list */
+  /* Anything can be added as an element to a list, even void */
   { "list", 0xFFFFFF, 1, UINT32_MAX, eb_cast_list },
 
-  { "len", E_VARTYPE_STRING | E_VARTYPE_LIST, 1, 1, eb_len },
+  { "len", E_VARTYPE_STRING | E_VARTYPE_LIST | E_VARTYPE_MAP, 1, 1, eb_len },
 
   /* Math builtins */
   { "math::sin", E_VARTYPE_FLOAT, 1, 1, eb_sin },

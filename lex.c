@@ -57,7 +57,7 @@ __advance(const char** s, int* line, int* col)
 static inline char*
 parse_backslash_sequences(const char* s, size_t max)
 {
-  char*  news = strdup(s);
+  char*  news = malloc(max + 1);
   size_t r    = 0;
   size_t w    = 0;
 
@@ -374,6 +374,11 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
         advance(s, line, col);
       } else if (s[0] == '|' && s[1] == '|') {
         type        = E_TOKEN_TYPE_OR;
+        is_compound = false;
+        advance(s, line, col);
+        advance(s, line, col);
+      } else if (s[0] == '#' && s[1] == '{') {
+        type        = E_TOKEN_TYPE_HASH_OPENBRACE;
         is_compound = false;
         advance(s, line, col);
         advance(s, line, col);

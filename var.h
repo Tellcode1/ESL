@@ -112,8 +112,13 @@ void   e_var_print(const struct e_var* v, FILE* f);
 void   e_var_to_string(const struct e_var* v, char* buffer, size_t buffer_size);
 size_t e_var_to_string_size(const struct e_var* v);
 
-int  e_list_init(e_var* vars, u64 nvars, struct e_list* list);
+int  e_list_init(e_var* vars, u32 nvars, struct e_list* list);
 void e_list_free(struct e_list* list);
+
+int  e_map_init(e_var* vars, u32 nvars, e_map* map);
+void e_map_free(e_map* map);
+
+e_var* e_map_find(e_map* map, const e_var* key);
 
 e_var* e_list_index(struct e_list* list, u64 index);
 int    e_list_append(e_var* v, struct e_list* list);
@@ -217,8 +222,12 @@ e_var_equal(const e_var* a, const e_var* b)
       }
       return true;
     case E_VARTYPE_MAP:
-      exit(-1); /* TODO: Implement */
-      return false;
+      if (E_VAR_AS_MAP(a)->size != E_VAR_AS_MAP(b)->size) return false;
+      for (u32 i = 0; i < E_VAR_AS_MAP(a)->size; i++) {
+        if (!e_var_equal(&E_VAR_AS_MAP(a)->keys[i], &E_VAR_AS_MAP(b)->keys[i])) return false;
+        if (!e_var_equal(&E_VAR_AS_MAP(a)->vals[i], &E_VAR_AS_MAP(b)->vals[i])) return false;
+      }
+      return true;
   }
   return false;
 }

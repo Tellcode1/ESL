@@ -336,6 +336,34 @@ e_exec(const e_exec_info* info)
         break;
       }
 
+      case E_OPCODE_MK_MAP: {
+        u32 npairs = e_read_u32(&ip);
+
+        e_refdobj* obj = e_refdobj_pool_acquire(&ge_pool);
+
+        // Convert the object
+        e_map* map = E_OBJ_AS_MAP(obj);
+
+        e_var new_map = {
+          .type    = E_VARTYPE_MAP,
+          .val.map = obj,
+        };
+
+        e_var* stack      = info->stack->stack;
+        size_t stack_size = info->stack->size;
+
+        e_var* elems = &stack[stack_size - (npairs * 2)];
+        e_map_init(elems, npairs, map); // acquires the elements.
+
+        // Release variables from the stack.
+        for (u32 i = 0; i < npairs; i++) { e_var_release(&stack[stack_size - npairs + i]); }
+        info->stack->size -= npairs;
+
+        TRY_V(e_stack_push(info->stack, &new_map));
+
+        break;
+      }
+
       case E_OPCODE_ADD:
       case E_OPCODE_SUB:
       case E_OPCODE_MUL:
@@ -463,15 +491,32 @@ e_exec(const e_exec_info* info)
         e_var* stack      = info->stack->stack;
         size_t stack_size = info->stack->size;
 
-        int     idx  = to_int(stack[stack_size - 1]);
-        e_list* list = stack[stack_size - 2].type == E_VARTYPE_LIST ? E_VAR_AS_LIST(&stack[stack_size - 2]) : NULL;
+        e_vartype left_type = stack[stack_size - 2].type;
+        if (left_type == E_VARTYPE_LIST) {
+          e_list* list = stack[stack_size - 2].type == E_VARTYPE_LIST ? E_VAR_AS_LIST(&stack[stack_size - 2]) : NULL;
 
-        e_stack_pop(info->stack); // pop index
-        e_stack_pop(info->stack); // pop base
+          int idx = to_int(stack[stack_size - 1]);
 
-        if (list && idx >= 0 && (u64)idx < list->size) {
-          e_var_acquire(&list->vars[idx]);
-          TRY_V(e_stack_push(info->stack, &list->vars[idx]));
+          e_stack_pop(info->stack); // pop index
+          e_stack_pop(info->stack); // pop base
+
+          if (list && idx >= 0 && (u64)idx < list->size) {
+            e_var_acquire(&list->vars[idx]);
+            TRY_V(e_stack_push(info->stack, &list->vars[idx]));
+          }
+        } else if (left_type == E_VARTYPE_MAP) {
+          e_var* map_var = &stack[stack_size - 2];
+          e_map* map     = E_VAR_AS_MAP(map_var);
+          e_var  key     = stack[stack_size - 1];
+
+          e_var* find = e_map_find(map, &key);
+
+          e_var_acquire(find);
+
+          e_stack_pop(info->stack); // pop index
+          e_stack_pop(info->stack); // pop base
+
+          TRY_V(e_stack_push(info->stack, find));
         }
         break;
       }

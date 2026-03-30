@@ -35,6 +35,7 @@ typedef enum e_token_type {
   E_TOKEN_TYPE_DOUBLE_COLON,
   E_TOKEN_TYPE_COMMA,
   E_TOKEN_TYPE_DOT,
+  E_TOKEN_TYPE_HASH_OPENBRACE, // #{
   E_TOKEN_TYPE_OPENBRACE,
   E_TOKEN_TYPE_CLOSEBRACE,
   E_TOKEN_TYPE_OPENBRACKET,
@@ -50,6 +51,7 @@ typedef enum e_token_type {
 
   E_TOKEN_TYPE_FN,     // fn keyword for functions, no value
   E_TOKEN_TYPE_EXTERN, // local function
+  E_TOKEN_TYPE_STRUCT, // structure declerations.
   E_TOKEN_TYPE_LET,    // let keyword for variable declerations, no value.
   E_TOKEN_TYPE_CONST,  // const qualifier
   E_TOKEN_TYPE_IF,
@@ -138,6 +140,7 @@ e_token_type_to_string(e_token_type e)
     case E_TOKEN_TYPE_DIVIDE: return "/";
     case E_TOKEN_TYPE_EXPONENT: return "**";
     case E_TOKEN_TYPE_MOD: return "%";
+    case E_TOKEN_TYPE_HASH_OPENBRACE: return "#";
     case E_TOKEN_TYPE_AND: return "&&";
     case E_TOKEN_TYPE_OR: return "||";
     case E_TOKEN_TYPE_EQUAL: return "=";
@@ -150,6 +153,7 @@ e_token_type_to_string(e_token_type e)
     case E_TOKEN_TYPE_CONST: return "const";
     case E_TOKEN_TYPE_CHAR: return "char";
     case E_TOKEN_TYPE_BOOL: return "bool";
+    case E_TOKEN_TYPE_STRUCT: return "struct";
     case E_TOKEN_TYPE_IF: return "if";
     case E_TOKEN_TYPE_ELSE: return "else";
     case E_TOKEN_TYPE_WHILE: return "while";
