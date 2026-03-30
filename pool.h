@@ -27,6 +27,7 @@
 
 #include "refcount.h"
 #include "stdafx.h"
+#include "var.h"
 
 /**
  * Must be a power of 2!
@@ -36,8 +37,7 @@
 /**
  * Size of a leaf, excluding the reference counter.
  */
-#define E_REFLEAVE_SIZE 40
-
+#define E_REFLEAVE_SIZE MAX(sizeof(e_list), MAX(sizeof(e_map), sizeof(e_string)))
 struct e_refdobj;
 struct e_refdobj_branch;
 struct e_refdobj_pool;

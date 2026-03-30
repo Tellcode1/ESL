@@ -68,11 +68,51 @@ e_var_deep_cpy(const e_var* var, e_var* dst)
     case E_VARTYPE_LIST: {
       return e_list_init(E_VAR_AS_LIST(var)->vars, E_VAR_AS_LIST(var)->size, E_VAR_AS_LIST(dst));
     }
-    case E_VARTYPE_MAP:
+    case E_VARTYPE_MAP: {
+      e_var* flattened = malloc(sizeof(e_var) * 2 * E_VAR_AS_MAP(var)->size);
+      memcpy(flattened, E_VAR_AS_MAP(var)->keys, sizeof(e_var) * E_VAR_AS_MAP(var)->size);
+      memcpy(flattened + E_VAR_AS_MAP(var)->size, E_VAR_AS_MAP(var)->vals, sizeof(e_var) * E_VAR_AS_MAP(var)->size);
+      int e = e_map_init(flattened, E_VAR_AS_MAP(var)->size, E_VAR_AS_MAP(dst));
+      free(flattened);
+      return e;
+    }
+
     case E_VARTYPE_ERROR: break;
   }
 
   return 0;
+}
+
+i32
+e_var_acquire(e_var* v)
+{
+  e_refc* refc = nullptr;
+  switch (v->type) {
+    case E_VARTYPE_MAP: refc = &v->val.map->refc; break;
+    case E_VARTYPE_LIST: refc = &v->val.list->refc; break;
+    case E_VARTYPE_STRING: refc = &v->val.s->refc; break;
+    default: refc = nullptr; break;
+  }
+
+  if (refc == nullptr) return -1;
+  return e_refc_acquire(refc);
+}
+
+void
+e_var_release(e_var* v)
+{
+  e_refc* refc = nullptr;
+  switch (v->type) {
+    case E_VARTYPE_MAP: refc = &v->val.map->refc; break;
+    case E_VARTYPE_LIST: refc = &v->val.list->refc; break;
+    case E_VARTYPE_STRING: refc = &v->val.s->refc; break;
+    default: refc = nullptr; break;
+  }
+
+  if (refc == nullptr) return;
+
+  e_refc_release(refc);
+  if (refc->ctr <= 0) e_var_free(v);
 }
 
 void
@@ -202,4 +242,53 @@ e_var_to_string_size(const struct e_var* v)
     }
   }
   return total;
+}
+
+u32
+e_var_hash(const e_var* var)
+{
+  switch (var->type) {
+    case E_VARTYPE_VOID:
+    case E_VARTYPE_ERROR:
+    case E_VARTYPE_INT: return e_hash_fnv(&var->val.i, sizeof(var->val.i));
+    case E_VARTYPE_BOOL: return e_hash_fnv(&var->val.b, sizeof(bool));
+    case E_VARTYPE_CHAR: return e_hash_fnv(&var->val.c, sizeof(char));
+    case E_VARTYPE_FLOAT: return e_hash_fnv(&var->val.f, sizeof(var->val.f));
+    case E_VARTYPE_STRING: return e_hash_fnv(E_VAR_AS_STRING(var)->s, strlen(E_VAR_AS_STRING(var)->s));
+    case E_VARTYPE_LIST: return e_combine_hash((const void**)E_VAR_AS_LIST(var)->vars, E_VAR_AS_LIST(var)->size, sizeof(e_var));
+    case E_VARTYPE_MAP:
+      return e_combine_hash((const void**)(E_VAR_AS_MAP(var)->keys), (E_VAR_AS_MAP(var)->size), sizeof(e_var))
+          + 13 * e_combine_hash((const void**)(E_VAR_AS_MAP(var)->vals), (E_VAR_AS_MAP(var)->size), sizeof(e_var));
+    default: return e_hash_fnv(&var->val, sizeof(var->val));
+  }
+}
+
+bool
+e_var_equal(const e_var* a, const e_var* b)
+{
+  if (a->type != b->type) return false;
+
+  switch (a->type) {
+    case E_VARTYPE_VOID:
+    case E_VARTYPE_ERROR:
+    case E_VARTYPE_INT: return a->val.i == b->val.i;
+    case E_VARTYPE_BOOL: return a->val.b == b->val.b;
+    case E_VARTYPE_CHAR: return a->val.c == b->val.c;
+    case E_VARTYPE_FLOAT: return a->val.f == b->val.f;
+    case E_VARTYPE_STRING: return strcmp(E_VAR_AS_STRING(a)->s, E_VAR_AS_STRING(b)->s) == 0;
+    case E_VARTYPE_LIST:
+      if (E_VAR_AS_LIST(a)->size != E_VAR_AS_LIST(b)->size) return false;
+      for (size_t i = 0; i < E_VAR_AS_LIST(a)->size; i++) {
+        if (!e_var_equal(&E_VAR_AS_LIST(a)->vars[i], &E_VAR_AS_LIST(b)->vars[i])) return false;
+      }
+      return true;
+    case E_VARTYPE_MAP:
+      if (E_VAR_AS_MAP(a)->size != E_VAR_AS_MAP(b)->size) return false;
+      for (u32 i = 0; i < E_VAR_AS_MAP(a)->size; i++) {
+        if (!e_var_equal(&E_VAR_AS_MAP(a)->keys[i], &E_VAR_AS_MAP(b)->keys[i])) return false;
+        if (!e_var_equal(&E_VAR_AS_MAP(a)->vals[i], &E_VAR_AS_MAP(b)->vals[i])) return false;
+      }
+      return true;
+  }
+  return false;
 }

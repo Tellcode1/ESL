@@ -79,6 +79,25 @@ fn maptest()
     print(i, ": ");
     println(map[i]);
   }
+
+  let reverse = #{
+    "One!"   : 1,
+    "Two!"   : 2,
+    "Three!" : 3,
+    "Four!"  : 4,
+    "Five!"  : 5 
+  };
+  let index_table = [
+    "One!",
+    "Two!",
+    "Three!",
+    "Four!",
+    "Five!",
+  ];
+  for (let i = 0; i < len(map); i++)
+  {
+    println("Look up of ", index_table[i], " : ", reverse[index_table[i]]);
+  }
 }
 
 fn main() {
