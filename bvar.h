@@ -27,6 +27,8 @@
 
 #include "var.h"
 
+#include <float.h>
+#include <stdint.h>
 #include <math.h>
 
 /**
@@ -47,17 +49,23 @@ typedef struct e_builtin_var {
  */
 static const e_builtin_var eb_vars[] = {
   { .name = "math::PI", .type = E_VARTYPE_FLOAT, .value = { .f = M_PI } },
-  { .name = "math::PIby2", .type = E_VARTYPE_FLOAT, .value = { .f = M_PI_2 } },
-  { .name = "math::PIby4", .type = E_VARTYPE_FLOAT, .value = { .f = M_PI_4 } },
-  { .name = "math::PIx2", .type = E_VARTYPE_FLOAT, .value = { .f = M_PI * 2.0 } },
-  { .name = "math::tau", .type = E_VARTYPE_FLOAT, .value = { .f = M_PI * 2.0 } },
-  { .name = "math::phi", .type = E_VARTYPE_FLOAT, .value = { .f = 1.6180339887498948 } }, // golden ratio
+  { .name = "math::PIBY2", .type = E_VARTYPE_FLOAT, .value = { .f = M_PI_2 } },
+  { .name = "math::PIBY4", .type = E_VARTYPE_FLOAT, .value = { .f = M_PI_4 } },
+  { .name = "math::PIX2", .type = E_VARTYPE_FLOAT, .value = { .f = M_PI * 2.0 } },
+  { .name = "math::TAU", .type = E_VARTYPE_FLOAT, .value = { .f = M_PI * 2.0 } },
+  { .name = "math::PHI", .type = E_VARTYPE_FLOAT, .value = { .f = 1.6180339887498948 } }, // golden ratio
   { .name = "math::e", .type = E_VARTYPE_FLOAT, .value = { .f = M_E } },
-  { .name = "math::root2", .type = E_VARTYPE_FLOAT, .value = { .f = M_SQRT2 } },
-  { .name = "math::root3", .type = E_VARTYPE_FLOAT, .value = { .f = 1.7320508075688772 } },
-  { .name = "math::root5", .type = E_VARTYPE_FLOAT, .value = { .f = 2.2360679774997896 } },
-  { .name = "math::ln2", .type = E_VARTYPE_FLOAT, .value = { .f = M_LN2 } },
-  { .name = "math::ln10", .type = E_VARTYPE_FLOAT, .value = { .f = M_LN10 } },
+  { .name = "math::ROOT2", .type = E_VARTYPE_FLOAT, .value = { .f = 1.4142135623730950 } },
+  { .name = "math::ROOT3", .type = E_VARTYPE_FLOAT, .value = { .f = 1.7320508075688772 } },
+  { .name = "math::ROOT5", .type = E_VARTYPE_FLOAT, .value = { .f = 2.2360679774997896 } },
+  { .name = "math::LN2", .type = E_VARTYPE_FLOAT, .value = { .f = M_LN2 } },
+  { .name = "math::LN10", .type = E_VARTYPE_FLOAT, .value = { .f = M_LN10 } },
+
+  { .name = "int::MAX", .type = E_VARTYPE_INT, .value = { .i = INT32_MAX} },
+  { .name = "int::MIN", .type = E_VARTYPE_INT, .value = { .i = INT32_MIN} },
+
+  { .name = "float::MAX", .type = E_VARTYPE_FLOAT, .value = { .f = FLT_MAX} },
+  { .name = "float::MIN", .type = E_VARTYPE_FLOAT, .value = { .f = FLT_MIN} },
 };
 
 #endif // E_BUILTIN_VARIABLES_H
