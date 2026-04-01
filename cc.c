@@ -97,25 +97,18 @@ compiler_make_fork(const e_compiler* old_c, e_compiler* new_c)
 {
   const u32 init_code_capacity = 256;
   *new_c                       = (e_compiler){
-    .arena              = old_c->arena,
-    .ast                = old_c->ast,
-    .info               = old_c->info,
-    .loop               = nullptr, // reset loop on function.
-    .literals           = old_c->literals,
-    .literal_hashes     = old_c->literal_hashes,
-    .nliterals          = old_c->nliterals,
-    .cliterals          = old_c->cliterals,
-    .ns                 = old_c->ns,
-    .stack              = old_c->stack,
-    .emit               = (u8*)e_arnalloc(old_c->arena, init_code_capacity),
-    .emitted            = 0,
-    .emit_capacity      = init_code_capacity,
-    .functions          = old_c->functions,
-    .functions_capacity = old_c->functions_capacity,
-    .nfunctions         = old_c->nfunctions,
-    .builtin_var_hashes = old_c->builtin_var_hashes,
-    .nbuiltin_vars      = old_c->nbuiltin_vars,
-    .builtin_vars       = old_c->builtin_vars,
+    .arena             = old_c->arena,
+    .ast               = old_c->ast,
+    .info              = old_c->info,
+    .loop              = nullptr, // reset loop on function.
+    .lit_table         = old_c->lit_table,
+    .builtin_var_table = old_c->builtin_var_table,
+    .function_table    = old_c->function_table,
+    .ns                = old_c->ns,
+    .stack             = old_c->stack,
+    .emit              = (u8*)e_arnalloc(old_c->arena, init_code_capacity),
+    .num_bytes_emitted = 0,
+    .emit_capacity     = init_code_capacity,
   };
   return new_c->emit ? 0 : -1;
 }
@@ -123,14 +116,17 @@ compiler_make_fork(const e_compiler* old_c, e_compiler* new_c)
 static inline void
 compiler_join_fork(const e_compiler* copy, e_compiler* cc)
 {
-  cc->literals           = copy->literals;
-  cc->literal_hashes     = copy->literal_hashes;
-  cc->nliterals          = copy->nliterals;
-  cc->cliterals          = copy->cliterals;
-  cc->functions          = copy->functions;
-  cc->ns                 = copy->ns;
-  cc->nfunctions         = copy->nfunctions;
-  cc->functions_capacity = copy->functions_capacity;
+  /* The tables are stored on the main compile function stack. Their address SHOULD NOT change. */
+  if (cc->lit_table != copy->lit_table || cc->builtin_var_table != copy->builtin_var_table || cc->function_table != copy->function_table) {
+    puts("Compiler structure corrupted");
+    abort();
+  }
+
+  cc->lit_table         = copy->lit_table;
+  cc->builtin_var_table = copy->builtin_var_table;
+  cc->function_table    = copy->function_table;
+
+  cc->ns = copy->ns;
   /* Can't modify builtin variable count */
 }
 
@@ -154,6 +150,10 @@ emit_lvalue_assign_prologue(e_compiler* cc, e_lval lv)
     if (e < 0) return e;
 
     return 0;
+  } else if (lv.type == E_LVAL_MEMBER) {
+    int left = lv.val.member.base;
+    int e    = compile(cc, left);
+    if (e) return e;
   }
 
   return -1;
@@ -171,6 +171,9 @@ emit_lvalue_assign_epilogue(e_compiler* cc, e_lval lv)
   else if (lv.type == E_LVAL_INDEX) {
     e_emit_instruction(cc, E_OPCODE_INDEX_ASSIGN);
     return 0;
+  } else if (lv.type == E_LVAL_MEMBER) {
+    e_emit_instruction(cc, E_OPCODE_MEMBER_ASSIGN);
+    e_emit_u32(cc, e_hash_fnv(lv.val.member.member, strlen(lv.val.member.member)));
   }
   return -1;
 }
@@ -277,6 +280,15 @@ e_make_value(e_compiler* cc, int node)
       return l;
     }
 
+    case E_AST_NODE_MEMBER_ACCESS: {
+      e_lval l;
+      l.span              = &E_GET_NODE(cc->ast, node)->common.span;
+      l.type              = E_LVAL_MEMBER;
+      l.val.member.base   = E_GET_NODE(cc->ast, node)->member_access.left;
+      l.val.member.member = E_GET_NODE(cc->ast, node)->member_access.right;
+      return l;
+    }
+
     default:
       cerror(E_GET_NODE(cc->ast, node)->common.span, "%i can not be represented as a value (it is %u)\n", node, E_GET_NODE(cc->ast, node)->type);
       exit(-1);
@@ -319,6 +331,19 @@ e_emit_lvalue_load(e_compiler* cc, e_lval lv)
     if (e < 0) return e;
 
     e_emit_instruction(cc, E_OPCODE_INDEX);
+
+    return 0;
+  } else if (lv.type == E_LVAL_MEMBER) {
+    int         left  = lv.val.member.base;
+    const char* right = lv.val.member.member;
+
+    int e = compile(cc, left);
+    if (e) return e;
+
+    e_emit_instruction(cc, E_OPCODE_MEMBER_ACCESS);
+    e_emit_u32(cc, e_hash_fnv(right, strlen(right)));
+
+    return 0;
   }
 
   return -1;
@@ -370,28 +395,29 @@ mk_name(const e_compiler* cc, const char* name)
 static inline int
 compile_literal_variable(e_compiler* cc, e_var v)
 {
-  if (cc->nliterals >= cc->cliterals) {
-    size_t new_c              = cc->cliterals * 2;
-    e_var* new_literals       = e_arnrealloc(cc->arena, cc->literals, sizeof(e_var) * new_c);
-    u16*   new_literal_hashes = e_arnrealloc(cc->arena, cc->literal_hashes, sizeof(u16) * new_c);
+  ecc_literal_table* literals = cc->lit_table;
+  if (literals->literals_count >= literals->literals_capacity) {
+    size_t new_c              = literals->literals_capacity * 2;
+    e_var* new_literals       = e_arnrealloc(cc->arena, literals->literals, sizeof(e_var) * new_c);
+    u16*   new_literal_hashes = e_arnrealloc(cc->arena, literals->literal_hashes, sizeof(u16) * new_c);
     if (!new_literals || !new_literal_hashes) {
       // free(new_literals); // free(NULL) = noop
       // free(new_literal_hashes);
       return -1;
     }
 
-    cc->literals       = new_literals;
-    cc->literal_hashes = new_literal_hashes;
-    cc->cliterals      = new_c;
+    literals->literals          = new_literals;
+    literals->literal_hashes    = new_literal_hashes;
+    literals->literals_capacity = new_c;
   }
 
   bool found = false;
-  u16  id    = cc->nliterals;
+  u16  id    = literals->literals_count;
 
   /* Search for the literal in our table. */
   u16 hash = (u16)e_var_hash(&v);
-  for (u32 i = 0; i < cc->nliterals; i++) {
-    if (cc->literal_hashes[i] == hash && e_var_equal(&v, &cc->literals[i])) {
+  for (u32 i = 0; i < literals->literals_count; i++) {
+    if (literals->literal_hashes[i] == hash && e_var_equal(&v, &literals->literals[i])) {
       id    = i;
       found = true;
       break;
@@ -400,11 +426,11 @@ compile_literal_variable(e_compiler* cc, e_var v)
 
   if (!found) {
     // Add it to our list
-    id = cc->nliterals;
+    id = literals->literals_count;
 
-    cc->literals[id]       = v;
-    cc->literal_hashes[id] = e_var_hash(&v);
-    cc->nliterals++;
+    literals->literals[id]       = v;
+    literals->literal_hashes[id] = e_var_hash(&v);
+    literals->literals_count++;
   } else {
     // e_var_free(pool, &v); // free discarded variable
     if (v.type == E_VARTYPE_STRING) {
@@ -441,19 +467,19 @@ compile_literal(e_compiler* cc, int node)
 }
 
 static int
-add_function_entry(e_compiler* cc, const e_function* func)
+add_function_entry(e_arena* a, ecc_function_table* funcs, const e_function* func)
 {
-  if (cc->nfunctions >= cc->functions_capacity) {
-    u32         new_capacity  = cc->functions_capacity * 2;
-    e_function* new_functions = e_arnrealloc(cc->arena, cc->functions, sizeof(e_function) * new_capacity);
+  if (funcs->functions_count >= funcs->functions_capacity) {
+    u32         new_capacity  = funcs->functions_capacity * 2;
+    e_function* new_functions = e_arnrealloc(a, funcs->functions, sizeof(e_function) * new_capacity);
     if (!new_functions) return -1;
 
-    cc->functions          = new_functions;
-    cc->functions_capacity = new_capacity;
+    funcs->functions          = new_functions;
+    funcs->functions_capacity = new_capacity;
   }
 
-  cc->functions[cc->nfunctions] = *func;
-  cc->nfunctions++;
+  funcs->functions[funcs->functions_count] = *func;
+  funcs->functions_count++;
 
   return 0;
 }
@@ -474,8 +500,10 @@ compile_function_definition(struct e_compiler* cc, int node)
   e_stack_push_frame(cc->stack);
 
   /* Ensure it doesn't already exist */
-  for (u32 i = 0; i < cc->nfunctions; i++) {
-    if (cc->functions[i].name_hash == hash) {
+  const ecc_function_table* func_table = cc->function_table;
+  for (u32 i = 0; i < func_table->functions_count; i++) {
+    e_function* func = &func_table->functions[i];
+    if (func->name_hash == hash) {
       cerror(E_GET_NODE(cc->ast, node)->common.span, "Multiple definitions of function \"%s\"\n", function_name);
       return -1;
     }
@@ -521,13 +549,13 @@ compile_function_definition(struct e_compiler* cc, int node)
 
   e_function f = {
     .code      = copy.emit,
-    .code_size = copy.emitted,
+    .code_size = copy.num_bytes_emitted,
     .arg_slots = arg_slots,
     .name_hash = hash,
     .nargs     = nargs,
   };
 
-  e = add_function_entry(cc, &f);
+  e = add_function_entry(cc->arena, cc->function_table, &f);
   if (e) return e;
 
   e_stack_pop_frame(cc->stack);
@@ -721,10 +749,11 @@ compile_function_call(struct e_compiler* cc, int node)
   }
   // Find the function (user defined) and check if the argument count matches
   else {
-    e_function* func = nullptr;
-    for (u32 i = 0; i < cc->nfunctions; i++) {
-      if (cc->functions[i].name_hash == hash) {
-        func = &cc->functions[i];
+    e_function*         func       = nullptr;
+    ecc_function_table* func_table = cc->function_table;
+    for (u32 i = 0; i < func_table->functions_count; i++) {
+      if (func_table->functions[i].name_hash == hash) {
+        func = &func_table->functions[i];
         break;
       }
     }
@@ -1013,16 +1042,8 @@ err:
 static int
 e_compile_member_access(e_compiler* cc, int node)
 {
-  int   left  = E_GET_NODE(cc->ast, node)->member_access.left;
-  char* right = E_GET_NODE(cc->ast, node)->member_access.right;
-
-  int e = compile(cc, left);
-  if (e) return e;
-
-  e_emit_instruction(cc, E_OPCODE_MEMBER_ACCESS);
-  e_emit_u32(cc, e_hash_fnv(right, strlen(right)));
-
-  return 0;
+  e_lval lv = e_make_value(cc, node);
+  return e_emit_lvalue_load(cc, lv);
 }
 
 static int
@@ -1042,11 +1063,13 @@ compile_assign(e_compiler* cc, int node)
 
   e_lval lv = e_make_value(cc, left);
 
+  ecc_builtin_variables_table* builtin_vars_table = cc->builtin_var_table;
+
   e_var* exists = e_stack_find(cc->stack, lv.val.var.id);
   if (!exists) {
     /* Check if the user is trying to modify a builtin variable. */
-    for (u32 i = 0; i < cc->nbuiltin_vars; i++) {
-      if (lv.val.var.id == cc->builtin_var_hashes[i]) {
+    for (u32 i = 0; i < builtin_vars_table->builtin_vars_count; i++) {
+      if (lv.val.var.id == builtin_vars_table->builtin_var_hashes[i]) {
         cerror(E_GET_NODE(cc->ast, left)->common.span, "Attempting to modify builtin constant '%s'\n", lv.val.var.name);
         e_free_value(&lv);
         return -1;
@@ -1068,6 +1091,85 @@ compile_assign(e_compiler* cc, int node)
   e_free_value(&lv);
 
   if (e) return e;
+
+  return 0;
+}
+
+static int
+append_struct_decleration(const char* name, ecc_struct_information* deposit)
+{
+  char* dup  = strdup(name);
+  u32   hash = e_hash_fnv(name, strlen(name));
+
+  if (deposit->fields_count >= deposit->field_capacity) {
+    u32    field_cap_new    = deposit->field_capacity * 2;
+    char** fields_new       = (char**)realloc(deposit->fields, field_cap_new * sizeof(char**));
+    u32*   field_hashes_new = (u32*)realloc(deposit->field_hashes, field_cap_new * sizeof(u32));
+
+    if (!fields_new) return -1;
+
+    deposit->fields         = fields_new;
+    deposit->field_capacity = field_cap_new;
+    deposit->field_hashes   = field_hashes_new;
+  }
+
+  deposit->fields[deposit->fields_count]       = dup;
+  deposit->field_hashes[deposit->fields_count] = hash;
+
+  deposit->fields_count++;
+
+  return 0;
+}
+
+static int
+collect_struct_declerations(e_compiler* cc, int* stmts, u32 nstmts, ecc_struct_information* deposit)
+{
+  for (u32 i = 0; i < nstmts; i++) {
+    e_ast_node_type type = E_GET_NODE(cc->ast, stmts[i])->type;
+    if (type == E_AST_NODE_STATEMENT_LIST) {
+      int* list_stmts  = E_GET_NODE(cc->ast, stmts[i])->stmts.stmts;
+      u32  list_nstmts = E_GET_NODE(cc->ast, stmts[i])->stmts.nstmts;
+      int  e           = collect_struct_declerations(cc, list_stmts, list_nstmts, deposit);
+      if (e) return e;
+    } else if (type == E_AST_NODE_VARIABLE_DECL) {
+      bool is_const = E_GET_NODE(cc->ast, stmts[i])->let.is_const;
+      if (is_const) {
+        cerror(E_GET_NODE(cc->ast, stmts[i])->let.span, "A member of a struct cannot be declared 'const' [unsupported]\n");
+        return -1;
+      }
+
+      const char* name = E_GET_NODE(cc->ast, stmts[i])->let.name;
+      append_struct_decleration(name, deposit);
+    } else {
+      cerror(E_GET_NODE(cc->ast, stmts[i])->let.span, "%u is not allowed in a struct\n", i);
+      return -1;
+    }
+  }
+
+  return 0;
+}
+
+static int
+compile_struct_decleration(e_compiler* cc, int node)
+{
+  const char* struct_name        = E_GET_NODE(cc->ast, node)->struct_decl.name;
+  int*        struct_decl_stmts  = E_GET_NODE(cc->ast, node)->struct_decl.stmts;
+  u32         struct_decl_nstmts = E_GET_NODE(cc->ast, node)->struct_decl.nstmts;
+  u32         struct_name_hash   = e_hash_fnv(struct_name, strlen(struct_name));
+
+  const u32 init_capacity = 16;
+
+  ecc_struct_information struct_data = {
+    .name           = strdup(struct_name),
+    .name_hash      = struct_name_hash,
+    .fields         = (char**)malloc(init_capacity * sizeof(char*)),
+    .field_hashes   = (u32*)malloc(init_capacity * sizeof(u32)),
+    .field_capacity = init_capacity,
+    .fields_count   = 0,
+  };
+  collect_struct_declerations(cc, struct_decl_stmts, struct_decl_nstmts, &struct_data);
+
+  /* TODO: Add struct to stack or something? */
 
   return 0;
 }
@@ -1102,12 +1204,14 @@ compile(struct e_compiler* cc, int node)
       if (custom_entry_point != nullptr) { entry_point_hash = e_hash_fnv(custom_entry_point, strlen(custom_entry_point)); }
 
       /* Find entry point and ensure it doesn't ask for any arguments. */
+      ecc_function_table* func_table = cc->function_table;
+
       bool found = false;
-      for (u32 i = 0; i < cc->nfunctions; i++) {
-        if (cc->functions[i].name_hash == entry_point_hash) {
+      for (u32 i = 0; i < func_table->functions_count; i++) {
+        if (func_table->functions[i].name_hash == entry_point_hash) {
           found = true;
 
-          if (cc->functions[i].nargs != 0) {
+          if (func_table->functions[i].nargs != 0) {
             cerror(root->common.span, "Entry point can not accept any arguments!\n");
             return -1;
           }
@@ -1160,34 +1264,8 @@ compile(struct e_compiler* cc, int node)
     }
 
     case E_AST_NODE_STRUCT_DECL: {
-      const char* struct_name        = E_GET_NODE(cc->ast, node)->struct_decl.name;
-      int*        struct_decl_stmts  = E_GET_NODE(cc->ast, node)->struct_decl.stmts;
-      u32         struct_decl_nstmts = E_GET_NODE(cc->ast, node)->struct_decl.nstmts;
-
-      u32 struct_name_hash = e_hash_fnv(struct_name, strlen(struct_name));
-
-      exit(-1);
-
-      e_compiler copy;
-      compiler_make_fork(cc, &copy);
-
-      for (u32 i = 0; i < struct_decl_nstmts; i++) {
-        int e = compile(&copy, struct_decl_stmts[i]);
-        if (e) { return e; }
-      }
-
-      compiler_join_fork(&copy, cc);
-
-      e_function f = {
-        .code      = copy.emit,
-        .code_size = copy.emitted,
-        .arg_slots = nullptr,
-        .name_hash = struct_name_hash,
-        .nargs     = 0, // no arguments to constructor
-      };
-      add_function_entry(cc, &f);
-
-      return 0;
+      int e = compile_struct_decleration(cc, node);
+      return e;
     }
 
     case E_AST_NODE_INDEX: {
@@ -1263,12 +1341,15 @@ compile(struct e_compiler* cc, int node)
       char* full = mk_name(cc, E_GET_NODE(cc->ast, node)->ident.ident);
       u32   hash = e_hash_fnv(full, strlen(full));
 
-      for (u32 i = 0; i < cc->nbuiltin_vars; i++) {
-        if (cc->builtin_var_hashes[i] == hash) {
+      for (u32 i = 0; i < cc->builtin_var_table->builtin_vars_count; i++) {
+        const e_builtin_var* builtin_var      = &cc->builtin_var_table->builtin_vars[i];
+        u32                  builtin_var_hash = cc->builtin_var_table->builtin_var_hashes[i];
+
+        if (builtin_var_hash == hash) {
           /* Instantiate a builtin variable only if it is used. */
           e_var v = {
-            .type = cc->builtin_vars[i].type,
-            .val  = cc->builtin_vars[i].value,
+            .type = builtin_var->type,
+            .val  = builtin_var->value,
           };
           compile_literal_variable(cc, v);
 
@@ -1449,7 +1530,7 @@ e_compile(const ecc_info* info, e_compilation_result* result)
 
   e_arena* arena = info->arena;
 
-  e_arena fallback;
+  e_arena fallback = { 0 };
   bool    using_fallback_arena;
   if (!info->arena) {
     if (e_arena_init(4, &fallback)) return -1;
@@ -1467,28 +1548,40 @@ e_compile(const ecc_info* info, e_compilation_result* result)
 
   for (u32 i = 0; i < E_ARRLEN(eb_vars); i++) { builtin_variable_hashes[i] = e_hash_fnv(eb_vars[i].name, strlen(eb_vars[i].name)); }
 
-  e_stack stack;
+  e_stack stack = { 0 };
+
+  ecc_literal_table lit_table = {
+    .literals          = (e_var*)e_arnalloc(arena, sizeof(e_var) * init_literal_capacity),
+    .literal_hashes    = (u16*)e_arnalloc(arena, sizeof(u16) * init_literal_capacity),
+    .literals_count    = 0,
+    .literals_capacity = init_literal_capacity,
+  };
+
+  ecc_builtin_variables_table builtin_var_table = {
+    .builtin_var_hashes = builtin_variable_hashes,
+    .builtin_vars_count = E_ARRLEN(eb_vars),
+    .builtin_vars       = eb_vars,
+  };
+
+  ecc_function_table func_table = {
+    .functions          = e_arnalloc(arena, sizeof(e_function) * init_function_capacity),
+    .functions_capacity = init_function_capacity,
+    .functions_count    = 0,
+  };
 
   e_compiler cc = {
-    .arena              = arena,
-    .ast                = info->ast,
-    .info               = info,
-    .loop               = NULL,
-    .literals           = (e_var*)e_arnalloc(arena, sizeof(e_var) * init_literal_capacity),
-    .literal_hashes     = (u16*)e_arnalloc(arena, sizeof(u16) * init_literal_capacity),
-    .nliterals          = 0,
-    .ns                 = &ns,
-    .stack              = &stack,
-    .cliterals          = init_literal_capacity,
-    .emit               = (u8*)e_arnalloc(arena, init_code_capacity),
-    .emitted            = 0,
-    .emit_capacity      = init_code_capacity,
-    .functions_capacity = init_function_capacity,
-    .nfunctions         = 0,
-    .functions          = e_arnalloc(arena, sizeof(e_function) * init_function_capacity),
-    .builtin_var_hashes = builtin_variable_hashes,
-    .nbuiltin_vars      = E_ARRLEN(eb_vars),
-    .builtin_vars       = eb_vars,
+    .arena             = arena,
+    .ast               = info->ast,
+    .info              = info,
+    .loop              = NULL,
+    .ns                = &ns,
+    .stack             = &stack,
+    .lit_table         = &lit_table,
+    .builtin_var_table = &builtin_var_table,
+    .function_table    = &func_table,
+    .emit              = (u8*)e_arnalloc(arena, init_code_capacity),
+    .num_bytes_emitted = 0,
+    .emit_capacity     = init_code_capacity,
   };
 
   if (e_stack_init(256, 32, 32, &stack) < 0) return -1;
@@ -1497,15 +1590,17 @@ e_compile(const ecc_info* info, e_compilation_result* result)
   if (e) return e;
 
   /* Resolve all labels after compilation. Ensure this is the last optimization / cleanup function called! */
-  e_resolve_labels(cc.emit, cc.emitted);
-  for (size_t i = 0; i < cc.nfunctions; i++) { e_resolve_labels(cc.functions[i].code, cc.functions[i].code_size); } // resolve all function labels
+  e_resolve_labels(cc.emit, cc.num_bytes_emitted);
+  for (size_t i = 0; i < cc.function_table->functions_count; i++) {
+    e_resolve_labels(cc.function_table->functions[i].code, cc.function_table->functions[i].code_size);
+  } // resolve all function labels
 
   if (result) {
-    result->literals      = cc.literals;
-    result->nliterals     = cc.nliterals;
-    result->functions     = cc.functions;
-    result->nfunctions    = cc.nfunctions;
-    result->ninstructions = cc.emitted;
+    result->literals      = cc.lit_table->literals;
+    result->nliterals     = cc.lit_table->literals_count;
+    result->functions     = func_table.functions;
+    result->nfunctions    = func_table.functions_count;
+    result->ninstructions = cc.num_bytes_emitted;
     result->instructions  = cc.emit;
   }
 

@@ -81,14 +81,44 @@ typedef struct ecc_struct_information {
   char*  name;
   char** fields;
   u32*   field_hashes;
-  u32    nfields;
+  u32    fields_count;
+  u32    field_capacity;
   u32    name_hash;
 } ecc_struct_information;
+
+typedef struct {
+  ecc_struct_information* structs;
+  u32                     structs_count;
+  u32                     structs_capacity;
+} ecc_struct_table;
+
+typedef struct ecc_literal_table {
+  e_var* literals;
+  u16*   literal_hashes;
+  u32    literals_count;
+  u32    literals_capacity;
+} ecc_literal_table;
+
+typedef struct ecc_builtin_variables_table {
+  const e_builtin_var* builtin_vars;
+  const u32*           builtin_var_hashes;
+  u32                  builtin_vars_count;
+} ecc_builtin_variables_table;
+
+typedef struct ecc_function_table {
+  e_function* functions;
+  u32         functions_count;
+  u32         functions_capacity;
+} ecc_function_table;
 
 typedef struct e_compiler {
   e_arena* arena;
 
   const ecc_info* info;
+
+  ecc_literal_table*           lit_table;
+  ecc_builtin_variables_table* builtin_var_table;
+  ecc_function_table*          function_table;
 
   struct e_ast*        ast;
   ecc_loop_location*   loop;
@@ -97,22 +127,9 @@ typedef struct e_compiler {
   /* Stack for storing information about variables during compilation. */
   e_stack* stack;
 
-  e_var* literals;
-  u16*   literal_hashes;
-  u32    nliterals;
-  u32    cliterals;
-
-  const e_builtin_var* builtin_vars;
-  const u32*           builtin_var_hashes;
-  u32                  nbuiltin_vars;
-
   u8* emit;
-  u32 emitted;
+  u32 num_bytes_emitted;
   u32 emit_capacity;
-
-  e_function* functions;
-  u32         nfunctions;
-  u32         functions_capacity;
 
   u32 next_label;
 } e_compiler;

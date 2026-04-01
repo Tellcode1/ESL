@@ -73,6 +73,7 @@ static inline int
 e_arena_init(u32 npages, e_arena* arena)
 {
   npages = MAX(npages, 1);
+  memset(arena, 0, sizeof(*arena));
 
   int e = 0;
   for (u32 i = 0; i < npages; i++) {

@@ -46,8 +46,8 @@ typedef union e_lval_value {
     char* name; // allocated
   } var;
   struct {
-    const char* name;
-    u32         struct_hash;
+    int         base;
+    const char* member;
   } member;
   struct {
     int left_node;  // Compile to get LHS of index. For vec[16], it will push vec to stack.
@@ -65,8 +65,8 @@ static inline bool
 e_can_make_value(const e_ast* ast, int node)
 {
   if (ast == nullptr || node < 0) return false;
-  return E_GET_NODE(ast, node)->type == E_AST_NODE_VARIABLE || E_GET_NODE(ast, node)->type == E_AST_NODE_INDEX || E_GET_NODE(ast, node)->type == E_AST_NODE_INDEX_ASSIGN
-      || E_GET_NODE(ast, node)->type == E_AST_NODE_INDEX_COMPOUND_OP;
+  return E_GET_NODE(ast, node)->type == E_AST_NODE_VARIABLE || E_GET_NODE(ast, node)->type == E_AST_NODE_INDEX
+      || E_GET_NODE(ast, node)->type == E_AST_NODE_INDEX_ASSIGN || E_GET_NODE(ast, node)->type == E_AST_NODE_INDEX_COMPOUND_OP;
 }
 
 e_lval e_make_value(e_compiler* cc, int node);

@@ -33,14 +33,17 @@
 #define E_OBJ_AS_STRING(obj) ((e_string*)((obj)->data))
 #define E_OBJ_AS_LIST(obj) ((e_list*)((obj)->data))
 #define E_OBJ_AS_MAP(obj) ((e_map*)((obj)->data))
+#define E_OBJ_AS_STRUCT(obj) ((e_struct*)((obj)->data))
 
 #define E_VAR_AS_STRING(var) ((e_string*)((var)->val.s->data))
 #define E_VAR_AS_LIST(var) ((e_list*)((var)->val.list->data))
 #define E_VAR_AS_MAP(var) ((e_map*)((var)->val.map->data))
+#define E_VAR_AS_STRUCT(var) ((e_struct*)((var)->val.map->data))
 
 struct e_var;
 struct e_list;
 struct e_map;
+struct e_struct;
 struct e_refdobj_pool;
 
 /**
@@ -65,24 +68,9 @@ typedef enum e_vartype {
 } e_vartype;
 // typedef u32 e_vartype;
 
-typedef struct e_list {
-  struct e_var* vars;
-  u32           size;
-  u32           capacity;
-} e_list;
-
-typedef struct e_map {
-  struct e_var* keys;
-  struct e_var* vals;
-  u32*          hashes; // hashes of keys
-  u32           size;
-  u32           capacity;
-} e_map;
-
-typedef struct e_string {
-  char* s;
-} e_string;
-
+/**
+ * Variable payload
+ */
 typedef union e_varval {
   int  i;
   char c;
@@ -92,9 +80,10 @@ typedef union e_varval {
   /* No 32 bit floats :) */
   double f;
 
-  struct e_refdobj* s;    // Use E_VAR_AS_STRING to access as e_string*
-  struct e_refdobj* list; // Use E_VAR_AS_LIST to access as e_list*
-  struct e_refdobj* map;  // Use E_VAR_AS_MAP to access as e_map*
+  struct e_refdobj* s;     // Use E_VAR_AS_STRING to access as e_string*
+  struct e_refdobj* list;  // Use E_VAR_AS_LIST to access as e_list*
+  struct e_refdobj* map;   // Use E_VAR_AS_MAP to access as e_map*
+  struct e_refdobj* struc; // Use E_VAR_AS_STRUCT to access as e_struct*
 
   /* Compiler info for variables, not stored in runtime. */
   struct e_refdobj* compinfo;
@@ -111,21 +100,6 @@ int e_var_deep_cpy(const e_var* var, e_var* dst);
 void   e_var_print(const struct e_var* v, FILE* f);
 void   e_var_to_string(const struct e_var* v, char* buffer, size_t buffer_size);
 size_t e_var_to_string_size(const struct e_var* v);
-
-int  e_list_init(e_var* vars, u32 nvars, struct e_list* list);
-void e_list_free(struct e_list* list);
-
-int  e_map_init(e_var* vars, u32 nvars, e_map* map);
-void e_map_free(e_map* map);
-
-e_var* e_map_find(e_map* map, const e_var* key);
-
-e_var* e_list_index(struct e_list* list, u32 index);
-void   e_list_append(e_var* v, struct e_list* list);
-void   e_list_pop(struct e_list* list);
-void   e_list_insert(u32 index, e_var* v, struct e_list* list);
-void   e_list_remove(u32 index, struct e_list* list);
-int    e_list_reserve(u32 new_capacity, struct e_list* list);
 
 i32  e_var_acquire(e_var* v);
 void e_var_release(e_var* v);

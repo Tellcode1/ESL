@@ -46,7 +46,7 @@
         E_GEN_READ_FUNCTION(u16)
         E_GEN_READ_FUNCTION(u8)
 
-#define E_GEN_EMIT_FN(type) static inline void e_emit_##type(e_compiler* cc, type value) { if (cc->emitted + sizeof(type) > cc->emit_capacity) ecc_stream_resize(cc, MAX(cc->emitted + sizeof(type), cc->emit_capacity * 2)); memcpy((type*)((uchar*)cc->emit + cc->emitted), &value, sizeof(value)); cc->emitted += sizeof(type); }
+#define E_GEN_EMIT_FN(type) static inline void e_emit_##type(e_compiler* cc, type value) { if (cc->num_bytes_emitted + sizeof(type) > cc->emit_capacity) ecc_stream_resize(cc, MAX(cc->num_bytes_emitted + sizeof(type), cc->emit_capacity * 2)); memcpy((type*)((uchar*)cc->emit + cc->num_bytes_emitted), &value, sizeof(value)); cc->num_bytes_emitted += sizeof(type); }
         E_GEN_EMIT_FN(u32)
         E_GEN_EMIT_FN(u64)
         E_GEN_EMIT_FN(u16)

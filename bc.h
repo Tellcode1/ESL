@@ -155,8 +155,8 @@ typedef enum e_opcode_bck {
    * If the COMPOUND attr is used, the top of the stack is assigned to the variable.
    * If the VARIABLE attr is used, the value of the variable ID operand is SHALLOW copied.
    * If the MULTIPLE attr is used, 1st operand specifies the number of variables to push. Each variable will be initialized to VOID.
-   * If both the MULTIPLE and COMPOUND attres are used, the values are pushed off of the stack and stored to the variable in reverse order (First variable gets top, second
-   * gets top - 1, etc).
+   * If both the MULTIPLE and COMPOUND attres are used, the values are pushed off of the stack and stored to the variable in reverse order (First
+   * variable gets top, second gets top - 1, etc).
    * !!! The MULTIPLE attr cannot be used with the VARIABLE attr.
    */
   E_OPCODE_INIT,
@@ -249,10 +249,22 @@ typedef enum e_opcode_bck {
   E_OPCODE_POP_VARIABLES,
 
   /**
+   * Make a struct with a set number of members
+   * MK_STRUCT [nMembers : u32]
+   */
+  E_OPCODE_MK_STRUCT,
+
+  /**
    * Access a member by name from a variable.
-   * Usage(noattr) MEMBER_ACCESS, Stack is Top=MemberName, Top-1 = Namespace/Struct
+   * Usage(noattr) MEMBER_ACCESS [MemberNameHashed : u32], Top = Namespace/Struct
    */
   E_OPCODE_MEMBER_ACCESS,
+
+  /**
+   * Assign to a member of a struct by name.
+   * * Usage(noattr) MEMBER_ACCESS [MemberNameHashed : u32], Top=Value, Top-1 = Namespace/Struct
+   */
+  E_OPCODE_MEMBER_ASSIGN,
 
   /**
    * Exit the program with the code specified in 1st operand.

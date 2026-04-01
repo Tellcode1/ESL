@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 /**
  * MIT License
  *
@@ -22,6 +23,9 @@
  * SOFTWARE.
  */
 
+=======
+#include "map.h"
+>>>>>>> d67ccd2 (Add more bones to structure skeleton; Make compiler fields into structs for modularization; Add skeleton for filesystem namespace (builtin);)
 
 #include "var.h"
 

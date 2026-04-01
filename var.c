@@ -69,6 +69,10 @@ e_var_deep_cpy(const e_var* var, e_var* dst)
       return e_list_init(E_VAR_AS_LIST(var)->vars, E_VAR_AS_LIST(var)->size, E_VAR_AS_LIST(dst));
     }
     case E_VARTYPE_MAP: {
+      /**
+        * Create an array of all key value pairs as a map
+        * And use it to create the map.
+      */
       e_var* flattened = malloc(sizeof(e_var) * 2 * E_VAR_AS_MAP(var)->size);
       memcpy(flattened, E_VAR_AS_MAP(var)->keys, sizeof(e_var) * E_VAR_AS_MAP(var)->size);
       memcpy(flattened + E_VAR_AS_MAP(var)->size, E_VAR_AS_MAP(var)->vals, sizeof(e_var) * E_VAR_AS_MAP(var)->size);
@@ -101,6 +105,7 @@ e_var_acquire(e_var* v)
 void
 e_var_release(e_var* v)
 {
+  if (!v) return;
   e_refc* refc = nullptr;
   switch (v->type) {
     case E_VARTYPE_MAP: refc = &v->val.map->refc; break;
@@ -118,6 +123,8 @@ e_var_release(e_var* v)
 void
 e_var_free(e_var* var)
 {
+  if (!var) return;
+
   switch (var->type) {
     case E_VARTYPE_VOID:
     case E_VARTYPE_INT:

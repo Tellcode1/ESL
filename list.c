@@ -22,6 +22,8 @@
  * SOFTWARE.
  */
 
+#include "list.h"
+
 #include "var.h"
 
 #include <string.h>

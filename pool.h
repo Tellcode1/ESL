@@ -25,8 +25,11 @@
 #ifndef E_POOL_H
 #define E_POOL_H
 
+#include "list.h"
+#include "map.h"
 #include "refcount.h"
 #include "stdafx.h"
+#include "string.h"
 #include "var.h"
 
 /**

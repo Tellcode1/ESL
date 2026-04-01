@@ -28,8 +28,8 @@
 #include "var.h"
 
 #include <float.h>
-#include <stdint.h>
 #include <math.h>
+#include <stdint.h>
 
 /**
  * Builtin variables structure.
@@ -61,11 +61,16 @@ static const e_builtin_var eb_vars[] = {
   { .name = "math::LN2", .type = E_VARTYPE_FLOAT, .value = { .f = M_LN2 } },
   { .name = "math::LN10", .type = E_VARTYPE_FLOAT, .value = { .f = M_LN10 } },
 
-  { .name = "int::MAX", .type = E_VARTYPE_INT, .value = { .i = INT32_MAX} },
-  { .name = "int::MIN", .type = E_VARTYPE_INT, .value = { .i = INT32_MIN} },
+  { .name = "int::MAX", .type = E_VARTYPE_INT, .value = { .i = INT32_MAX } },
+  { .name = "int::MIN", .type = E_VARTYPE_INT, .value = { .i = INT32_MIN } },
 
-  { .name = "float::MAX", .type = E_VARTYPE_FLOAT, .value = { .f = FLT_MAX} },
-  { .name = "float::MIN", .type = E_VARTYPE_FLOAT, .value = { .f = FLT_MIN} },
+  { .name = "float::MAX", .type = E_VARTYPE_FLOAT, .value = { .f = DBL_MAX } },
+  { .name = "float::MIN", .type = E_VARTYPE_FLOAT, .value = { .f = DBL_MIN } },
+
+  { .name = "fs::FILE", .type = E_VARTYPE_INT, .value = { .i = 0 } },
+  { .name = "fs::LINK", .type = E_VARTYPE_INT, .value = { .i = 1 } },
+  { .name = "fs::DIRECTORY", .type = E_VARTYPE_INT, .value = { .i = 2 } },
+  { .name = "fs::UNKNOWN", .type = E_VARTYPE_INT, .value = { .i = -1 } },
 };
 
 #endif // E_BUILTIN_VARIABLES_H

@@ -340,6 +340,22 @@ fn main() {
   let lo = str::len(s);
   println("len(s) = ", lo);
 
+  let s1 = "I'm equal to the 2nd string!";
+  let s2 = "I'm equal to the 2nd string!";
+  if (str::equal(s1,s2))
+  {
+    println("Strings are expectedly equal!");
+  } else {
+    println("str::equal is wrong!");
+  }
+
+  s1 = string(x + 1 - 1 + 1);
+  s2 = string(x + 1);
+  if (str::equal(s1,s2))
+  {
+    println("Strings are, again, expectedly equal!");
+  } 
+
   let to_repeat = "Repeat";
   let repeated = str::repeat(to_repeat, 5);
   println("repeat(s, 5) = ", repeated);
@@ -349,7 +365,8 @@ fn main() {
   println("list::find(l,5) returns: ", list::find(advanced_listing, 5));
 
   list::remove(advanced_listing, list::find(advanced_listing, 5));
-  
+  println("Removed 5, I don't like it");
+
   println("Our new list is: ", advanced_listing, " And our query is for 5");
   println("list::find(l,5) returns: ", list::find(advanced_listing, 5));
 
@@ -362,12 +379,13 @@ fn main() {
   println("Our new list is: ", advanced_listing);
 
   println("Ehh.. I kinda don't like the new list. I'm popping the last 5 elements");
-  for (let i = 0; i < 5; i++)
-  {
-    list::pop(advanced_listing);
-  }
+  for (let i = 0; i < 5; i++) list::pop(advanced_listing);
 
   println("Perfect! Now I have: ", advanced_listing);
+
+  let items_to_get_from_store = "Bread, Butter, Cheese, Cheese, Cheese, Ketchup, Milk, Cheese, Jam";
+  let split_items = str::split(items_to_get_from_store, ", ");
+  println("We'll need to get these items from the store: ", split_items);
 }
 
 fn file_test()

@@ -109,11 +109,18 @@ static inline e_var eb_hypot(e_var*args, u32 nargs) { (void)nargs; return (e_var
 
 // Form a string from a list of characters
 e_var eb_str_from_list(e_var* args, u32 nargs);
+static inline e_var
+eb_str_equal(e_var* args, u32 nargs)
+{
+  (void)(nargs);
+  return (e_var){ .type = E_VARTYPE_BOOL, .val = { .b = strcmp(E_VAR_AS_STRING(&args[0])->s, E_VAR_AS_STRING(&args[1])->s)==0 } };
+}
 e_var eb_str_append(e_var* args, u32 nargs);
 e_var eb_str_substr(e_var* args, u32 nargs); // substring: string, int start, int length
 e_var eb_str_repeat(e_var* args, u32 nargs); // repeat: string, int times
 e_var eb_str_lstrip(e_var* args, u32 nargs);
 e_var eb_str_rstrip(e_var* args, u32 nargs);
+e_var eb_str_split(e_var* args, u32 nargs); // Get list of strings partition by args[1] (string)
 static inline e_var
 eb_str_strip(e_var* args, u32 nargs)
 {
@@ -124,12 +131,26 @@ e_var eb_str_len(e_var* args, u32 nargs);
 
 // Make list from elements
 e_var eb_list_make(e_var* args, u32 nargs);
+
+// append(list, value)
 e_var eb_list_append(e_var* args, u32 nargs);
+
+// pop(list)
 e_var eb_list_pop(e_var* args, u32 nargs);     // fast
+
+// remove(list, index)
 e_var eb_list_remove(e_var* args, u32 nargs);  // expensive
+
+// insert(list, index, value)
 e_var eb_list_insert(e_var* args, u32 nargs);  // Replaces value if it exists!
+
+// find(list, value) => -1 if non existent
 e_var eb_list_find(e_var* args, u32 nargs);    // Returns index, -1 if it doesn't exist.
+
+// reserve(list, elements_to_reserve)
 e_var eb_list_reserve(e_var* args, u32 nargs); // number of new variables to reserve
+
+// len(list)
 e_var eb_list_len(e_var* args, u32 nargs);
 
 static inline e_var
@@ -217,22 +238,32 @@ static const e_builtin_func eb_funcs[] = {
   { "math::abs", E_VARTYPE_FLOAT, 1, 1, eb_abs },
   { "math::hypot", E_VARTYPE_FLOAT, 1, 1, eb_hypot },
 
+  { "str::equal", E_VARTYPE_STRING, 2, 2, eb_str_equal },
   { "str::append", E_VARTYPE_STRING, 1, UINT32_MAX, eb_str_append },
   { "str::substr", E_VARTYPE_STRING, 1, 3, eb_str_substr },
   { "str::repeat", E_VARTYPE_STRING, 1, 2, eb_str_repeat },
   { "str::lstrip", E_VARTYPE_STRING, 1, 1, eb_str_lstrip },
   { "str::rstrip", E_VARTYPE_STRING, 1, 1, eb_str_rstrip },
   { "str::strip", E_VARTYPE_STRING, 1, 1, eb_str_strip },
+  { "str::split", E_VARTYPE_STRING, 2, 2, eb_str_split },
   { "str::len", E_VARTYPE_STRING, 1, 1, eb_str_len }, // equivalent to len()
 
   { "list::make", E_ALL_TYPES, 1, UINT32_MAX, eb_list_make },
   { "list::append", E_ALL_TYPES, 2, 2, eb_list_append },
   { "list::pop", E_ALL_TYPES, 1, 1, eb_list_pop },
-  { "list::remove", E_ALL_TYPES, 2, 2, eb_list_remove },
-  { "list::insert", E_ALL_TYPES, 2, 2, eb_list_insert },
+  { "list::remove", E_VARTYPE_LIST | E_VARTYPE_INT, 2, 2, eb_list_remove },
+  { "list::insert", E_ALL_TYPES, 3, 3, eb_list_insert },
   { "list::find", E_ALL_TYPES, 2, 2, eb_list_find },
-  { "list::reserve", E_ALL_TYPES, 2, 2, eb_list_reserve },
-  { "list::len", E_ALL_TYPES, 1, 1, eb_list_len },
+  { "list::reserve", E_VARTYPE_LIST | E_VARTYPE_INT, 2, 2, eb_list_reserve },
+  { "list::len", E_VARTYPE_LIST, 1, 1, eb_list_len },
+
+  { "fs::exists" },
+  { "fs::type" },  // See bvar.h list constants (list::FILE,list::LINK,list::DIR)
+  { "fs::write" }, // Write entire string contents to file
+  { "fs::read" },  // retrieve entire contents of file as a string.
+  { "fs::get_cwd" },
+  { "fs::path_resolve" }, // make path absolute
+  { "fs::list_directory" },
 };
 
 #endif // E_BUILTIN_FUNCTIONS_H

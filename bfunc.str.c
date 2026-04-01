@@ -33,6 +33,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+static inline e_var
+make_var_from_string(char* s)
+{
+  e_var ret                = { .type = E_VARTYPE_STRING };
+  ret.val.s                = e_refdobj_pool_acquire(&ge_pool);
+  E_VAR_AS_STRING(&ret)->s = s; // we just allocated
+  return ret;
+}
+
 e_var
 eb_str_append(e_var* args, u32 nargs)
 {
@@ -44,11 +53,7 @@ eb_str_append(e_var* args, u32 nargs)
   char* big_s = calloc(total_len + 1, 1);
   for (u32 i = 0; i < nargs; i++) { strlcat(big_s, E_VAR_AS_STRING(&args[0])->s, total_len + 1); }
 
-  e_var ret                = { .type = E_VARTYPE_STRING };
-  ret.val.s                = e_refdobj_pool_acquire(&ge_pool);
-  E_VAR_AS_STRING(&ret)->s = big_s; // we just allocated
-
-  return ret;
+  return make_var_from_string(big_s);
 }
 
 e_var
@@ -68,11 +73,7 @@ eb_str_substr(e_var* args, u32 nargs)
   char* new_s = malloc(copy_len + 1);
   strlcpy(new_s, s + start, copy_len + 1);
 
-  e_var ret                = { .type = E_VARTYPE_STRING };
-  ret.val.s                = e_refdobj_pool_acquire(&ge_pool);
-  E_VAR_AS_STRING(&ret)->s = new_s; // we just allocated
-
-  return ret;
+  return make_var_from_string(new_s);
 }
 
 e_var
@@ -88,13 +89,7 @@ eb_str_repeat(e_var* args, u32 nargs)
   char* new_s = calloc(new_len + 1, 1);
   for (int i = 0; i < times; i++) { strlcat(new_s, s, new_len + 1); }
 
-  e_var ret = {
-    .type  = E_VARTYPE_STRING,
-    .val.s = e_refdobj_pool_acquire(&ge_pool),
-  };
-  E_VAR_AS_STRING(&ret)->s = new_s; // we just allocated
-
-  return ret;
+  return make_var_from_string(new_s);
 }
 
 e_var
@@ -107,32 +102,24 @@ eb_str_lstrip(e_var* args, u32 nargs)
   while (*s && isspace(*s)) { s++; }
   char* new_s = strdup(s);
 
-  e_var ret = {
-    .type  = E_VARTYPE_STRING,
-    .val.s = e_refdobj_pool_acquire(&ge_pool),
-  };
-  E_VAR_AS_STRING(&ret)->s = new_s; // we just allocated
-
-  return ret;
+  return make_var_from_string(new_s);
 }
 
 e_var
 eb_str_rstrip(e_var* args, u32 nargs)
 {
-  exit((int)nargs);
+  (void)nargs;
 
   const char* s = E_VAR_AS_STRING(&args[0])->s;
 
-  while (*s && isspace(*s)) { s++; }
-  char* new_s = strdup(s);
+  const char* end = s + strlen(s) - 1;
+  while (end >= s && isspace(*end)) { end--; }
 
-  e_var ret = {
-    .type  = E_VARTYPE_STRING,
-    .val.s = e_refdobj_pool_acquire(&ge_pool),
-  };
-  E_VAR_AS_STRING(&ret)->s = new_s; // we just allocated
+  size_t len   = (end - s);
+  char*  new_s = malloc(len + 1);
+  strlcpy(new_s, s, len + 1);
 
-  return ret;
+  return make_var_from_string(new_s);
 }
 
 e_var
@@ -140,4 +127,33 @@ eb_str_len(e_var* args, u32 nargs)
 {
   (void)nargs;
   return (e_var){ .type = E_VARTYPE_INT, .val.i = (int)strlen(E_VAR_AS_STRING(&args[0])->s) };
+}
+
+e_var
+eb_str_split(e_var* args, u32 nargs)
+{
+  (void)(nargs);
+
+  const char* to_split = E_VAR_AS_STRING(&args[0])->s;
+  const char* split_by = E_VAR_AS_STRING(&args[1])->s;
+
+  e_var returned_list = {
+    .type     = E_VARTYPE_LIST,
+    .val.list = e_refdobj_pool_acquire(&ge_pool),
+  };
+
+  e_list_init(NULL, 0, E_VAR_AS_LIST(&returned_list));
+
+  char* to_split_copy = strdup(to_split);
+  char* tok           = strtok(to_split_copy, split_by);
+
+  while (tok) {
+    e_var s = make_var_from_string(strdup(tok));
+    e_list_append(&s, E_VAR_AS_LIST(&returned_list));
+
+    tok = strtok(NULL, split_by);
+  }
+
+  free(to_split_copy);
+  return returned_list;
 }

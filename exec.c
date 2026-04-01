@@ -27,11 +27,15 @@
 #include "bc.h"
 #include "bfunc.h"
 #include "fn.h"
+#include "list.h"
+#include "map.h"
 #include "perr.h"
 #include "pool.h"
 #include "rwhelp.h"
 #include "stack.h"
 #include "stdafx.h"
+#include "string.h"
+#include "struct.h"
 #include "var.h"
 
 #include <assert.h>
@@ -42,22 +46,24 @@
 
 #define PASTE(x, y) x##y
 
-#define TRY(expr)                                                                                                                                                             \
-  do {                                                                                                                                                                        \
-    int PASTE(__e__, __LINE__) = 0;                                                                                                                                           \
-    if ((PASTE(__e__, __LINE__) = (expr))) { return PASTE(__e__, __LINE__); }                                                                                                 \
+#define TRY(expr)                                                                                                                                    \
+  do {                                                                                                                                               \
+    int PASTE(__e__, __LINE__) = 0;                                                                                                                  \
+    if ((PASTE(__e__, __LINE__) = (expr))) { return PASTE(__e__, __LINE__); }                                                                        \
   } while (0)
-#define TRY_V(expr)                                                                                                                                                           \
-  do {                                                                                                                                                                        \
-    int PASTE(__e__, __LINE__) = (expr);                                                                                                                                      \
-    if (PASTE(__e__, __LINE__)) { return (e_var){ .type = E_VARTYPE_ERROR, .val.errcode = PASTE(__e__, __LINE__) }; }                                                         \
+#define TRY_V(expr)                                                                                                                                  \
+  do {                                                                                                                                               \
+    int PASTE(__e__, __LINE__) = (expr);                                                                                                             \
+    if (PASTE(__e__, __LINE__)) { return (e_var){ .type = E_VARTYPE_ERROR, .val.errcode = PASTE(__e__, __LINE__) }; }                                \
   } while (0)
 
-#define BINOP(l, r, op)                                                                                                                                                       \
-  (l.type == E_VARTYPE_FLOAT || r.type == E_VARTYPE_FLOAT) ? (e_var){ .type = E_VARTYPE_FLOAT, .val.f = (double)l.val.f op(double) r.val.f } : (e_var)                        \
+#define BINOP(l, r, op)                                                                                                                              \
+  (l.type == E_VARTYPE_FLOAT || r.type == E_VARTYPE_FLOAT) ? (e_var){ .type = E_VARTYPE_FLOAT, .val.f = (double)l.val.f op(double) r.val.f }         \
+                                                           : (e_var)                                                                                 \
   { .type = E_VARTYPE_INT, .val.i = l.val.i op r.val.i }
-#define BOOLEAN_BINOP(l, r, op)                                                                                                                                               \
-  (l.type == E_VARTYPE_FLOAT || r.type == E_VARTYPE_FLOAT) ? (e_var){ .type = E_VARTYPE_BOOL, .val.b = (double)l.val.f op(double) r.val.f } : (e_var)                         \
+#define BOOLEAN_BINOP(l, r, op)                                                                                                                      \
+  (l.type == E_VARTYPE_FLOAT || r.type == E_VARTYPE_FLOAT) ? (e_var){ .type = E_VARTYPE_BOOL, .val.b = (double)l.val.f op(double) r.val.f }          \
+                                                           : (e_var)                                                                                 \
   { .type = E_VARTYPE_BOOL, .val.b = l.val.i op r.val.i }
 
 static inline double
@@ -100,11 +106,13 @@ static inline bool
 is_float(e_var v)
 { return v.type == E_VARTYPE_FLOAT; }
 
-#define COERCE_BINOP(l, r, op)                                                                                                                                                \
-  (is_float(l) || is_float(r)) ? (e_var){ .type = E_VARTYPE_FLOAT, .val.f = to_float(l) op to_float(r) } : (e_var) { .type = E_VARTYPE_INT, .val.i = to_int(l) op to_int(r) }
+#define COERCE_BINOP(l, r, op)                                                                                                                       \
+  (is_float(l) || is_float(r)) ? (e_var){ .type = E_VARTYPE_FLOAT, .val.f = to_float(l) op to_float(r) } : (e_var)                                   \
+  { .type = E_VARTYPE_INT, .val.i = to_int(l) op to_int(r) }
 
-#define COERCE_BOOLEAN_BINOP(l, r, op)                                                                                                                                        \
-  (is_float(l) || is_float(r)) ? (e_var){ .type = E_VARTYPE_BOOL, .val.b = to_float(l) op to_float(r) } : (e_var) { .type = E_VARTYPE_BOOL, .val.b = to_int(l) op to_int(r) }
+#define COERCE_BOOLEAN_BINOP(l, r, op)                                                                                                               \
+  (is_float(l) || is_float(r)) ? (e_var){ .type = E_VARTYPE_BOOL, .val.b = to_float(l) op to_float(r) } : (e_var)                                    \
+  { .type = E_VARTYPE_BOOL, .val.b = to_int(l) op to_int(r) }
 
 static inline e_var
 operate(e_var l, e_var r, e_opcode op)
@@ -271,7 +279,9 @@ e_exec(const e_exec_info* info)
   const u8* ip  = info->code;
   const u8* end = info->code + info->code_size;
 
-  while (ip < end) {
+  while (true) {
+    if (ip >= end) { goto _RETURN; }
+
     e_opcode opcode;
     memcpy(&opcode, ip, sizeof(opcode)); // faster for some reason?
 
@@ -359,6 +369,19 @@ e_exec(const e_exec_info* info)
         info->stack->size -= (npairs * 2);
 
         TRY_V(e_stack_push(info->stack, &new_map));
+
+        break;
+      }
+
+      case E_OPCODE_MK_STRUCT: {
+        u32 nmembers = e_read_u32(&ip);
+
+        e_var* stack      = info->stack->stack;
+        size_t stack_size = info->stack->size;
+
+        // Release variables from the stack.
+        for (u32 i = 0; i < nmembers; i++) { e_var_release(&stack[stack_size - nmembers + i]); }
+        info->stack->size -= nmembers;
 
         break;
       }
@@ -550,7 +573,7 @@ e_exec(const e_exec_info* info)
         u32    id   = e_read_u32(&ip);
         e_var* slot = get_variable_from_id(info->stack, id);
 
-        e_var_release(slot); // free old value in slot
+        if (slot) e_var_release(slot); // free old value in slot
 
         /**
          * Copy it. We need the variable on the stack to support.
@@ -582,15 +605,15 @@ e_exec(const e_exec_info* info)
         break;
       }
 
-      // case E_OPCODE_LOAD_REFERENCE:
-      default: printf("Unknown instruction\n"); exit(-1);
+        // case E_OPCODE_LOAD_REFERENCE:
 
       // Non fatal return
       case E_OPCODE_HALT: goto _RETURN;
-
-      case E_OPCODE_COUNT: printf("Illegal instruction"); exit(-1);
     }
   }
+
+  printf("Illegal instruction\n");
+  exit(-1);
 
 _RETURN:
   /**
