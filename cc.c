@@ -31,7 +31,6 @@
 #include "bvar.h"
 #include "cerr.h"
 #include "fn.h"
-#include "label.h"
 #include "lval.h"
 #include "pool.h"
 #include "rwhelp.h"
@@ -92,6 +91,120 @@ static int        compile_binary_op(struct e_compiler* cc, int node);
 static int        compile_unary_op(struct e_compiler* cc, int node);
 static int        compile(struct e_compiler* cc, int node);
 
+/**
+ * Returns UINT32_MAX on no find.
+ */
+static inline u32
+label_find(u32 label_id, const ecc_label_table* table)
+{
+  for (u32 i = 0; i < table->labels_count; i++) {
+    if (table->labels[i].label_id == label_id) { return i; }
+  }
+  return UINT32_MAX;
+}
+
+static inline ecc_label_jumps_table*
+append_label_entry(e_arena* a, u32 label_id, ecc_label_table* table)
+{
+  if (table->labels_count >= table->labels_capacity) {
+    size_t                 new_c     = table->labels_capacity * 2;
+    ecc_label_jumps_table* new_table = e_arnrealloc(a, table->labels, new_c * sizeof(ecc_label_jumps_table));
+    if (!new_table) return nullptr;
+
+    table->labels          = new_table;
+    table->labels_capacity = new_c;
+  }
+
+  u32 index = label_find(label_id, table);
+
+  ecc_label_jumps_table* end = nullptr;
+  if (index == UINT32_MAX) {
+    // Add the entry at the end
+    end = &table->labels[table->labels_count];
+    memset(end, 0, sizeof(*end)); // zero it out for safe
+
+    table->labels_count++;
+  } else {
+    end = &table->labels[index];
+  }
+
+  return end;
+}
+
+/**
+ * Add the jump to the label's stream.
+ * opcode is needed because there are multiple
+ * jump instructions (JMP,JE,JNE,JZ,JNZ,etc.)
+ */
+static inline void
+emit_and_record_jmp(e_compiler* cc, e_opcode opcode, u32 label_id)
+{
+  ecc_label_jumps_table* label = append_label_entry(cc->arena, label_id, cc->label_table);
+
+  if (!label->jumps_target_offsets) {
+    *label = (ecc_label_jumps_table){
+      .label_id             = label_id,
+      .defined              = false,
+      .label_offset         = 0,
+      .jumps_count          = 0,
+      .jumps_capacity       = 64,
+      .jumps_target_offsets = e_arnalloc(cc->arena, sizeof(u32) * 64),
+    };
+  }
+
+  e_emit_instruction(cc, opcode);
+
+  u32 patch_offset = cc->num_bytes_emitted;
+
+  if (label->defined) {
+    e_emit_u32(cc, label->label_offset);
+  } else {
+    if (label->jumps_count >= label->jumps_capacity) {
+      size_t new_c                = label->jumps_capacity * 2;
+      label->jumps_target_offsets = e_arnrealloc(cc->arena, label->jumps_target_offsets, sizeof(u32) * new_c);
+      label->jumps_capacity       = new_c;
+    }
+
+    label->jumps_target_offsets[label->jumps_count++] = patch_offset;
+
+    e_emit_u32(cc, 0xDEADBEEF);
+  }
+}
+
+static inline void
+define_and_emit_label(e_compiler* cc, u32 label_id)
+{
+  e_emit_u8(cc, E_OPCODE_LABEL);
+  e_emit_u32(cc, label_id);
+
+  u32 destination_offset = cc->num_bytes_emitted;
+
+  ecc_label_jumps_table* label = append_label_entry(cc->arena, label_id, cc->label_table);
+
+  if (!label->jumps_target_offsets) {
+    *label = (ecc_label_jumps_table){
+      .label_id             = label_id,
+      .defined              = true,
+      .label_offset         = destination_offset,
+      .jumps_count          = 0,
+      .jumps_capacity       = 64,
+      .jumps_target_offsets = e_arnalloc(cc->arena, sizeof(u32) * 64),
+    };
+    return;
+  }
+
+  label->defined      = true;
+  label->label_offset = destination_offset;
+
+  for (u32 i = 0; i < label->jumps_count; i++) {
+    u32 patch_offset = label->jumps_target_offsets[i];
+    memcpy(cc->emit + patch_offset, &destination_offset, sizeof(u32));
+  }
+
+  // patched every jump up.
+  label->jumps_count = 0;
+}
+
 static inline int
 compiler_make_fork(const e_compiler* old_c, e_compiler* new_c)
 {
@@ -104,6 +217,8 @@ compiler_make_fork(const e_compiler* old_c, e_compiler* new_c)
     .lit_table         = old_c->lit_table,
     .builtin_var_table = old_c->builtin_var_table,
     .function_table    = old_c->function_table,
+    .label_table       = old_c->label_table,
+    .next_label        = old_c->next_label,
     .ns                = old_c->ns,
     .stack             = old_c->stack,
     .emit              = (u8*)e_arnalloc(old_c->arena, init_code_capacity),
@@ -125,6 +240,8 @@ compiler_join_fork(const e_compiler* copy, e_compiler* cc)
   cc->lit_table         = copy->lit_table;
   cc->builtin_var_table = copy->builtin_var_table;
   cc->function_table    = copy->function_table;
+
+  cc->next_label = copy->next_label;
 
   cc->ns = copy->ns;
   /* Can't modify builtin variable count */
@@ -527,7 +644,7 @@ compile_function_definition(struct e_compiler* cc, int node)
       e_var* r = e_stack_push_variable(arg_hash, cc->stack);
 
       /* Acquire a refdobj */
-      r->val.compinfo                 = e_refdobj_pool_acquire(&ge_pool);
+      r->val.var_info                 = e_refdobj_pool_acquire(&ge_pool);
       E_VAR_AS_INFO(r)->initializer   = -1; // Arguments aren't initialized.
       E_VAR_AS_INFO(r)->current_value = -1; // Or initialized to void if you think about it.
       E_VAR_AS_INFO(r)->name_hash     = arg_hash;
@@ -681,7 +798,7 @@ compile_unary_op(struct e_compiler* cc, int node)
 
     /* Emit operator */
     e_emit_instruction(cc, opcode);
-    e_emit_u8(cc, true); // is_compound flag
+    e_emit_u8(cc, false); // is_compound flag
   }
 
   return 0;
@@ -799,9 +916,8 @@ compile_if_statement(struct e_compiler* cc, int node)
   if (e) return e;
 
   // condition failed :<
-  e_emit_instruction(cc, E_OPCODE_JZ); // Jump to the next in chain
-                                       // Possibly else if or else
-  e_emit_u32(cc, next_in_chain_label);
+  emit_and_record_jmp(cc, E_OPCODE_JZ, next_in_chain_label); // Jump to the next in chain
+                                                             // Possibly else if or else
 
   // BODY OF ROOT IF STATEMENT
   for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->if_stmt.nstmts; i++) {
@@ -811,13 +927,12 @@ compile_if_statement(struct e_compiler* cc, int node)
 
   // Still inside the body, JMP over all other branches
   // since we're done executing the body of the if statement
-  e_emit_instruction(cc, E_OPCODE_JMP); // JUMP!
-  e_emit_u32(cc, end_label);
+  emit_and_record_jmp(cc, E_OPCODE_JMP, end_label); // JUMP!
 
   // ELSE IFS
   for (u32 else_if = 0; else_if < E_GET_NODE(cc->ast, node)->if_stmt.nelse_ifs; else_if++) {
     // Emit the next in chain label for instructions to jump to.
-    e_emit_label(cc, next_in_chain_label);
+    define_and_emit_label(cc, next_in_chain_label);
     next_in_chain_label = make_label_id(cc);
 
     // dont worry about it dont worry about it dont worry about it dont worry about it
@@ -828,8 +943,7 @@ compile_if_statement(struct e_compiler* cc, int node)
     if (e) return e;
 
     /* Failed. Jump to the next in chain. */
-    e_emit_instruction(cc, E_OPCODE_JZ);
-    e_emit_u32(cc, next_in_chain_label);
+    emit_and_record_jmp(cc, E_OPCODE_JZ, next_in_chain_label);
 
     /* Condition true! Execute the body */
     for (u32 i = 0; i < if_stmt->nstmts; i++) {
@@ -838,12 +952,11 @@ compile_if_statement(struct e_compiler* cc, int node)
     }
 
     /* JMP over all other branches. */
-    e_emit_instruction(cc, E_OPCODE_JMP); // skip remaining elseifs and else
-    e_emit_u32(cc, end_label);
+    emit_and_record_jmp(cc, E_OPCODE_JMP, end_label); // skip remaining elseifs and else
   }
 
   /* Emit the final next in chain label for the else statement. */
-  e_emit_label(cc, next_in_chain_label); // BAM!
+  define_and_emit_label(cc, next_in_chain_label); // BAM!
   /* ELSE BODY */
   for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->if_stmt.nelse_stmts; i++) {
     e = compile(cc, E_GET_NODE(cc->ast, node)->if_stmt.else_body[i]);
@@ -853,7 +966,7 @@ compile_if_statement(struct e_compiler* cc, int node)
   }
 
   /* END LABEL. There's still one instruction after this and it's to ensure we always pop our variables. */
-  e_emit_label(cc, end_label);
+  define_and_emit_label(cc, end_label);
 
   /* Pop scope. */
   e_emit_instruction(cc, E_OPCODE_POP_VARIABLES);
@@ -892,7 +1005,7 @@ compile_while_statement(struct e_compiler* cc, int node)
   cc->loop                = &loop;
 
   //
-  e_emit_label(cc, pre_condition_label);
+  define_and_emit_label(cc, pre_condition_label);
   //
 
   /* CONDITION */
@@ -900,8 +1013,7 @@ compile_while_statement(struct e_compiler* cc, int node)
   if (e) return e;
 
   // Break out of loop if condition is false.
-  e_emit_instruction(cc, E_OPCODE_JZ);
-  e_emit_u32(cc, end_label);
+  emit_and_record_jmp(cc, E_OPCODE_JZ, end_label);
 
   // WHILE BODY
   for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->while_stmt.nstmts; i++) {
@@ -910,11 +1022,10 @@ compile_while_statement(struct e_compiler* cc, int node)
   }
 
   /* Jump to condition, body is done executing */
-  e_emit_instruction(cc, E_OPCODE_JMP);
-  e_emit_u32(cc, pre_condition_label);
+  emit_and_record_jmp(cc, E_OPCODE_JMP, pre_condition_label);
 
   // End label.
-  e_emit_label(cc, end_label);
+  define_and_emit_label(cc, end_label);
 
   // Pop the scope
   e_emit_instruction(cc, E_OPCODE_POP_VARIABLES);
@@ -977,7 +1088,7 @@ compile_for_statement(struct e_compiler* cc, int node)
   }
 
   // TOP_LABEL
-  e_emit_label(cc, top_label);
+  define_and_emit_label(cc, top_label);
 
   // CONDITION
   condition = E_GET_NODE(cc->ast, node)->for_stmt.condition;
@@ -993,8 +1104,7 @@ compile_for_statement(struct e_compiler* cc, int node)
   }
 
   // JZ END_LABEL
-  e_emit_instruction(cc, E_OPCODE_JZ);
-  e_emit_u32(cc, end_label);
+  emit_and_record_jmp(cc, E_OPCODE_JZ, end_label);
 
   // BODY
   u32 nstmts = E_GET_NODE(cc->ast, node)->for_stmt.nstmts;
@@ -1007,7 +1117,7 @@ compile_for_statement(struct e_compiler* cc, int node)
   }
 
   // ITERATOR_LABEL
-  e_emit_label(cc, iterator_label);
+  define_and_emit_label(cc, iterator_label);
 
   // ITERATORS
   u32  niterators = E_GET_NODE(cc->ast, node)->for_stmt.niterators;
@@ -1020,11 +1130,10 @@ compile_for_statement(struct e_compiler* cc, int node)
   }
 
   // JMP TOP_LABEL
-  e_emit_instruction(cc, E_OPCODE_JMP);
-  e_emit_u32(cc, top_label);
+  emit_and_record_jmp(cc, E_OPCODE_JMP, top_label);
 
   // END_LABEL
-  e_emit_label(cc, end_label);
+  define_and_emit_label(cc, end_label);
 
   // Pop scope
   e_emit_instruction(cc, E_OPCODE_POP_VARIABLES);
@@ -1058,9 +1167,6 @@ compile_assign(e_compiler* cc, int node)
     return -1;
   }
 
-  int e = compile(cc, right);
-  if (e) return e;
-
   e_lval lv = e_make_value(cc, left);
 
   ecc_builtin_variables_table* builtin_vars_table = cc->builtin_var_table;
@@ -1087,7 +1193,7 @@ compile_assign(e_compiler* cc, int node)
     return -1;
   }
 
-  e = e_emit_lvalue_assign(cc, right, lv);
+  int e = e_emit_lvalue_assign(cc, right, lv);
   e_free_value(&lv);
 
   if (e) return e;
@@ -1096,14 +1202,14 @@ compile_assign(e_compiler* cc, int node)
 }
 
 static int
-append_struct_decleration(const char* name, ecc_struct_information* deposit)
+append_struct_decleration(e_arena* a, const char* name, ecc_struct_information* deposit)
 {
-  char* dup  = strdup(name);
+  char* dup  = e_arnstrdup(a, name);
   u32   hash = e_hash_fnv(name, strlen(name));
 
   if (deposit->fields_count >= deposit->field_capacity) {
     u32    field_cap_new    = deposit->field_capacity * 2;
-    char** fields_new       = (char**)realloc(deposit->fields, field_cap_new * sizeof(char**));
+    char** fields_new       = (char**)realloc(deposit->fields, field_cap_new * sizeof(char*));
     u32*   field_hashes_new = (u32*)realloc(deposit->field_hashes, field_cap_new * sizeof(u32));
 
     if (!fields_new) return -1;
@@ -1129,7 +1235,8 @@ collect_struct_declerations(e_compiler* cc, int* stmts, u32 nstmts, ecc_struct_i
     if (type == E_AST_NODE_STATEMENT_LIST) {
       int* list_stmts  = E_GET_NODE(cc->ast, stmts[i])->stmts.stmts;
       u32  list_nstmts = E_GET_NODE(cc->ast, stmts[i])->stmts.nstmts;
-      int  e           = collect_struct_declerations(cc, list_stmts, list_nstmts, deposit);
+      // RECURSE!
+      int e = collect_struct_declerations(cc, list_stmts, list_nstmts, deposit);
       if (e) return e;
     } else if (type == E_AST_NODE_VARIABLE_DECL) {
       bool is_const = E_GET_NODE(cc->ast, stmts[i])->let.is_const;
@@ -1139,9 +1246,10 @@ collect_struct_declerations(e_compiler* cc, int* stmts, u32 nstmts, ecc_struct_i
       }
 
       const char* name = E_GET_NODE(cc->ast, stmts[i])->let.name;
-      append_struct_decleration(name, deposit);
+      append_struct_decleration(cc->arena, name, deposit);
     } else {
-      cerror(E_GET_NODE(cc->ast, stmts[i])->let.span, "%u is not allowed in a struct\n", i);
+      const char* member_name = E_GET_NODE(cc->ast, stmts[i])->let.name;
+      cerror(E_GET_NODE(cc->ast, stmts[i])->let.span, "Member index %u, with name %s is not allowed in a struct\n", i, member_name);
       return -1;
     }
   }
@@ -1159,17 +1267,28 @@ compile_struct_decleration(e_compiler* cc, int node)
 
   const u32 init_capacity = 16;
 
+  /* Gather all information the user provided into one big structure. */
   ecc_struct_information struct_data = {
-    .name           = strdup(struct_name),
+    .name           = e_arnstrdup(cc->arena, struct_name),
     .name_hash      = struct_name_hash,
-    .fields         = (char**)malloc(init_capacity * sizeof(char*)),
-    .field_hashes   = (u32*)malloc(init_capacity * sizeof(u32)),
+    .fields         = (char**)e_arnalloc(cc->arena, init_capacity * sizeof(char*)),
+    .field_hashes   = (u32*)e_arnalloc(cc->arena, init_capacity * sizeof(u32)),
     .field_capacity = init_capacity,
     .fields_count   = 0,
   };
   collect_struct_declerations(cc, struct_decl_stmts, struct_decl_nstmts, &struct_data);
 
-  /* TODO: Add struct to stack or something? */
+  e_var* r = e_stack_push_variable(struct_name_hash, cc->stack);
+
+  /* Acquire a refdobj */
+  r->type            = E_VARTYPE_CC_STRUCT;
+  r->val.struct_info = e_refdobj_pool_acquire(&ge_pool);
+
+  /**
+   *  Copy entire struct information data to the variable.
+   *  BTW, this won't leak. We allocated everything on the arena.
+   */
+  *E_VAR_AS_STRUCT_INFO(r) = struct_data;
 
   return 0;
 }
@@ -1308,8 +1427,7 @@ compile(struct e_compiler* cc, int node)
         cerror(E_GET_NODE(cc->ast, node)->common.span, "break used outside loop\n");
         return -1;
       }
-      e_emit_instruction(cc, E_OPCODE_JMP);
-      e_emit_u32(cc, cc->loop->break_label);
+      emit_and_record_jmp(cc, E_OPCODE_JMP, cc->loop->break_label);
       return 0;
     }
 
@@ -1318,8 +1436,7 @@ compile(struct e_compiler* cc, int node)
         cerror(E_GET_NODE(cc->ast, node)->common.span, "continue used outside loop\n");
         return -1;
       }
-      e_emit_instruction(cc, E_OPCODE_JMP);
-      e_emit_u32(cc, cc->loop->continue_label);
+      emit_and_record_jmp(cc, E_OPCODE_JMP, cc->loop->continue_label);
       return 0;
     }
 
@@ -1401,7 +1518,8 @@ compile(struct e_compiler* cc, int node)
       e_var* r = e_stack_push_variable(hash, cc->stack);
 
       /* Acquire a refdobj */
-      r->val.compinfo                 = e_refdobj_pool_acquire(&ge_pool);
+      r->type                         = E_VARTYPE_CC_VARIABLE;
+      r->val.var_info                 = e_refdobj_pool_acquire(&ge_pool);
       E_VAR_AS_INFO(r)->initializer   = initializer;
       E_VAR_AS_INFO(r)->current_value = initializer; // current value is initializer, -1 if none
       E_VAR_AS_INFO(r)->name_hash     = hash;
@@ -1509,8 +1627,6 @@ compile(struct e_compiler* cc, int node)
 int
 e_compile_function(e_compiler* cc, int node)
 {
-  // THIS KEEPS HITTING FOR SOME REASON JR:LKJLKFSDJLS:KDJFLKJSDKF
-  // printf("%s\n", E_GET_NODE(cc->ast, node)->func.name);
   u32  nstmts = E_GET_NODE(cc->ast, node)->func.nstmts;
   int* stmts  = E_GET_NODE(cc->ast, node)->func.stmts;
   for (u32 i = 0; i < nstmts; i++) {
@@ -1527,13 +1643,15 @@ e_compile(const ecc_info* info, e_compilation_result* result)
   const u32 init_literal_capacity    = 64;
   const u32 init_function_capacity   = 64;
   const u32 init_namespaces_capacity = 16;
+  const u32 init_label_jump_capacity = 64;
 
   e_arena* arena = info->arena;
 
-  e_arena fallback = { 0 };
-  bool    using_fallback_arena;
+  e_arena fallback             = { 0 };
+  bool    using_fallback_arena = false;
   if (!info->arena) {
     if (e_arena_init(4, &fallback)) return -1;
+    arena                = &fallback;
     using_fallback_arena = true;
   }
 
@@ -1569,6 +1687,12 @@ e_compile(const ecc_info* info, e_compilation_result* result)
     .functions_count    = 0,
   };
 
+  ecc_label_table label_table = {
+    .labels_count    = 0,
+    .labels_capacity = init_label_jump_capacity,
+    .labels          = e_arnalloc(arena, sizeof(ecc_label_jumps_table) * init_label_jump_capacity),
+  };
+
   e_compiler cc = {
     .arena             = arena,
     .ast               = info->ast,
@@ -1579,6 +1703,7 @@ e_compile(const ecc_info* info, e_compilation_result* result)
     .lit_table         = &lit_table,
     .builtin_var_table = &builtin_var_table,
     .function_table    = &func_table,
+    .label_table       = &label_table,
     .emit              = (u8*)e_arnalloc(arena, init_code_capacity),
     .num_bytes_emitted = 0,
     .emit_capacity     = init_code_capacity,
@@ -1590,10 +1715,10 @@ e_compile(const ecc_info* info, e_compilation_result* result)
   if (e) return e;
 
   /* Resolve all labels after compilation. Ensure this is the last optimization / cleanup function called! */
-  e_resolve_labels(cc.emit, cc.num_bytes_emitted);
-  for (size_t i = 0; i < cc.function_table->functions_count; i++) {
-    e_resolve_labels(cc.function_table->functions[i].code, cc.function_table->functions[i].code_size);
-  } // resolve all function labels
+  // e_resolve_labels(cc.emit, cc.num_bytes_emitted);
+  // for (size_t i = 0; i < cc.function_table->functions_count; i++) {
+  //   e_resolve_labels(cc.function_table->functions[i].code, cc.function_table->functions[i].code_size);
+  // } // resolve all function labels
 
   if (result) {
     result->literals      = cc.lit_table->literals;

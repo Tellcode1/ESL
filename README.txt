@@ -3,7 +3,7 @@ E (working on the name) is a dynamically typed, simple scripting language.
 It is a language targeted at integration with game engines, offering
 great interopability with C/C++ (other languages will be worked on).
 
-It currently has 4 basic types: int, float, string and list.
+It currently has 5 basic types: int, float, strings, lists and (hash)maps.
 
 
 [PRINTING]
@@ -12,7 +12,78 @@ print(): prints all variables provided, in order, to the console.
 println(): Similar to print, but prints a newline after printing the arguments.
 
 
-[]
+[LISTS & REFERENCE COUNTED STRUCTURES]
+Lists are generic structures that store, well, a list of variables.
+Lists are a reference counted structure. All instances of a list (copied around)
+point to the same variable, which is freed when all its holders go out of scope.
+
+Sounds like gibberish? I agree.
+
+So, let nums = [ 0, 1, 2, 3, 4, 5 ];
+And, let nums_but_not = nums;
+nums_but_not now points to the original nums list.
+Lets try assigning to nums_but_not to see this in action and print it.
+
+nums_but_not[1] = 100;
+println(nums_but_not);
+
+This should print: [0, 100, 2, 3, 4, 5]
+Now, lets send nums_but_not to places nums will never
+get to go. Say we return it from a function. nums will die.
+But its cousin, nums_but_not lives on. And it carries his brother's value(s).
+
+And so when nums_but_not's time eventually comes, and it will go out of scope.
+The stack will consume them all.
+
+[LIST INDEXING]
+Like most sane programming languages, indexing in E starts from 0.
+To index a list of 5, and get 5 from it, we'll use the square brackets (to index it).
+
+let noom = [ 1, 2, 3, 4, 5 ];
+println(noom[4]); // << noom[4] is 5. Indexing starts from 0, remember?
+
+The syntax seems confusing at first, but you'll get used to it eventually.
+Most programming languages follow it... So it's not a skill wasted.
+
+As a test, Try to assign 30 to replace 3.
+
+
+[LIST BUILTINS]
+The list builtin namespace provides the following functions:
+i.  list::make
+=>  Make a list from the given elements.
+eg. list::make("Yes", "No", "Maybe"); // Returns ["Yes", "No", "Maybe"]
+
+ii. list::append
+=>  Append (push) a value to the end of the list.
+eg.
+let nums = [1, 2, 3];
+list::append(nums, 1234); // nums now contains [1, 2, 3, 1234]
+
+iii. list::pop
+=>  Pop (remove) the last element of the list.
+eg. list::pop(nums); // nums now contains [1, 2, 3]
+
+iv.  list::remove
+=>  Remove a value from the specified index, shifting all the leftover
+elements.
+eg. list::remove(nums, 2); // nums now contains [1,2]
+
+v.   list::insert
+=>  Assign a value to the specified index.
+eg. list::insert(nums, 4, 4); // nums now contains [1, 2, void, 4]
+
+vi.  list::find
+=>  Find an element in the list, and return its index. -1 if it does
+not exist in the list.
+eg. list::find(names, "John Johnington"); // Returns index of John in the list.
+
+vii.  list::reserve
+=>  Increase the capacity of the list to reduce further memory allocations
+eg. list::reserve(names, 1024); // Names now has space for 1024 more variables
+
+viii. list::len
+=>  Alias for len().
 
 
 [VARIABLE DECLERATION]

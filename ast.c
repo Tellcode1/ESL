@@ -132,8 +132,6 @@ parse_braces(e_ast* p, int** outstmts, u32* outnstmts)
       goto err;
     }
 
-    span = prev(p)->span;
-
     stmts[nstmts++] = stmt;
 
     if (!e_ast_is_limiter_exempt(E_GET_NODE(p, stmt)->type)) {
@@ -141,7 +139,7 @@ parse_braces(e_ast* p, int** outstmts, u32* outnstmts)
         /* we need to be expecting a semi colon a character after the last */
         span.col++;
         asterror(
-            span,
+            prev(p)->span,
             "Expected semi colon ';', got '%s' [braced statement list]\n",
             e_token_type_to_string(prev(p)->type)); // use older span, newer one is token after where semicolon should be
         goto err;
@@ -953,13 +951,16 @@ parse_namespace_decleration(e_ast* p, int node)
       int* list_stmts  = E_GET_NODE(p, stmts[i])->stmts.stmts;
       for (u32 j = 0; j < list_nstmts; j++) {
         type = E_GET_NODE(p, list_stmts[j])->common.type;
-        if (type != E_AST_NODE_FUNCTION_DEFINITION && type != E_AST_NODE_STRUCT_DECL && type != E_AST_NODE_NAMESPACE_DECL && type != E_AST_NODE_VARIABLE_DECL) {
+        if (type != E_AST_NODE_FUNCTION_DEFINITION && type != E_AST_NODE_STRUCT_DECL && type != E_AST_NODE_NAMESPACE_DECL
+            && type != E_AST_NODE_VARIABLE_DECL) {
           asterror(span, "Expected only function definitions, variable declerations or namespace declerations in namespace scope\n");
 
           return -1;
         }
       }
-    } else if (type != E_AST_NODE_FUNCTION_DEFINITION && type != E_AST_NODE_STRUCT_DECL && type != E_AST_NODE_NAMESPACE_DECL && type != E_AST_NODE_VARIABLE_DECL) {
+    } else if (
+        type != E_AST_NODE_FUNCTION_DEFINITION && type != E_AST_NODE_STRUCT_DECL && type != E_AST_NODE_NAMESPACE_DECL
+        && type != E_AST_NODE_VARIABLE_DECL) {
       asterror(span, "Expected only function definitions, variable declerations or namespace declerations in namespace scope\n");
 
       return -1;
@@ -1465,7 +1466,8 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
     case E_TOKEN_TYPE_GTE: {
       int left_bp = 0, right_bp = 0;
       if (!e_getbp(tk->type, &left_bp, &right_bp)) {
-        asterror(tk->span, "Operator %s doesn't have a binding power set in e_getbp! assuming 0 [binary operator]\n", e_token_type_to_string(tk->type));
+        asterror(
+            tk->span, "Operator %s doesn't have a binding power set in e_getbp! assuming 0 [binary operator]\n", e_token_type_to_string(tk->type));
         //
         // return -1;
       }
@@ -1545,9 +1547,11 @@ e_ast_parse(e_ast* p, int* out_root_node)
     }
 
     e_ast_node_type type = E_GET_NODE(p, node)->type;
-    if (type != E_AST_NODE_FUNCTION_DEFINITION && type != E_AST_NODE_NAMESPACE_DECL && type != E_AST_NODE_STRUCT_DECL && type != E_AST_NODE_VARIABLE_DECL) {
+    if (type != E_AST_NODE_FUNCTION_DEFINITION && type != E_AST_NODE_NAMESPACE_DECL && type != E_AST_NODE_STRUCT_DECL
+        && type != E_AST_NODE_VARIABLE_DECL) {
       // asterror(take_span, "Expected function definition or variable declerations in global scope\n");
-      asterror(take_span, "Expected only function definitions, variable declerations,  namespace declerations or struct declerations in global scope\n");
+      asterror(
+          take_span, "Expected only function definitions, variable declerations,  namespace declerations or struct declerations in global scope\n");
       goto err;
     }
 

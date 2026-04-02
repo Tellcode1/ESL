@@ -50,21 +50,19 @@ struct e_refdobj_pool;
  * Bitmask to allow functions to just check
  * the masks. No variable can have more than one
  * bit set though.
- *
- * Compiler Info doesn't have an entry in the
- * struct because it doesn't need one. Every
- * variable during compilation is stored as such.
  */
 typedef enum e_vartype {
-  E_VARTYPE_VOID   = 1 << 0, // invalid / unset
-  E_VARTYPE_INT    = 1 << 1,
-  E_VARTYPE_BOOL   = 1 << 2,
-  E_VARTYPE_CHAR   = 1 << 3,
-  E_VARTYPE_FLOAT  = 1 << 4,
-  E_VARTYPE_STRING = 1 << 5,
-  E_VARTYPE_LIST   = 1 << 6,
-  E_VARTYPE_MAP    = 1 << 7,
-  E_VARTYPE_ERROR  = 1 << 8, // use e_error_string to get string representation of the error.
+  E_VARTYPE_VOID        = 1 << 0, // invalid / unset
+  E_VARTYPE_INT         = 1 << 1,
+  E_VARTYPE_BOOL        = 1 << 2,
+  E_VARTYPE_CHAR        = 1 << 3,
+  E_VARTYPE_FLOAT       = 1 << 4,
+  E_VARTYPE_STRING      = 1 << 5,
+  E_VARTYPE_LIST        = 1 << 6,
+  E_VARTYPE_MAP         = 1 << 7,
+  E_VARTYPE_ERROR       = 1 << 8, // use e_error_string to get string representation of the error.
+  E_VARTYPE_CC_VARIABLE = 1 << 9,
+  E_VARTYPE_CC_STRUCT   = 1 << 10,
 } e_vartype;
 // typedef u32 e_vartype;
 
@@ -86,7 +84,8 @@ typedef union e_varval {
   struct e_refdobj* struc; // Use E_VAR_AS_STRUCT to access as e_struct*
 
   /* Compiler info for variables, not stored in runtime. */
-  struct e_refdobj* compinfo;
+  struct e_refdobj* var_info;
+  struct e_refdobj* struct_info;
 } e_varval;
 
 typedef struct e_var {
@@ -147,6 +146,8 @@ e_var_type_to_string(e_vartype type)
     case E_VARTYPE_LIST: return "list";
     case E_VARTYPE_MAP: return "map";
     case E_VARTYPE_ERROR: return "error";
+    case E_VARTYPE_CC_VARIABLE: return "var::compile_info";
+    case E_VARTYPE_CC_STRUCT: return "struct::compile_info";
   }
   return "unknown";
 }

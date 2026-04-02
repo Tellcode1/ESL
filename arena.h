@@ -35,12 +35,6 @@
  */
 #define E_PAGE_SIZE (4096 * 4)
 
-/**
- * When a page is more than this % full,
- * allocate another one, before it is used.
- */
-#define E_EARLY_ALLOCATION_THRESHOLD 0.9F
-
 /* Data is (uchar*)&page + sizeof(size_t) */
 typedef struct e_arena_page {
   struct e_arena_page* next;
@@ -50,6 +44,7 @@ typedef struct e_arena_page {
 
 typedef struct e_arena {
   struct e_arena_page* root;
+  struct e_arena_page* current;
 } e_arena;
 
 static inline int
@@ -60,11 +55,14 @@ e__create_and_link_page(size_t size, e_arena* arena)
   e_arena_page* next = arena->root;
 
   e_arena_page* page = (e_arena_page*)malloc(size);
-  page->size         = size - sizeof(e_arena_page);
-  page->head         = 0;
-  page->next         = next;
+  if (page == nullptr) return -1;
 
-  arena->root = page;
+  page->size = size - sizeof(e_arena_page);
+  page->head = 0;
+  page->next = next;
+
+  arena->root    = page;
+  arena->current = page;
 
   return 0;
 }
@@ -103,18 +101,20 @@ e_arnalloc(e_arena* a, size_t size)
 
     uchar* data = (uchar*)page + sizeof(*page);
     memcpy(data, &size, sizeof(size));
+
     return data + sizeof(size);
   }
 
-  e_arena_page* fits = a->root;
-  while ((fits->size - fits->head) < total) {
-    if (fits->next == nullptr) {
-      /* Add new page and recurse. */
-      e__create_and_link_page(E_PAGE_SIZE, a);
-      fits = a->root;
-    }
-    fits = fits->next;
-    // resize
+  /**
+   * Page with enough capacity.
+   */
+  e_arena_page* fits = a->current;
+
+  // If current page doesn't meet our requirements,
+  // Create an link a new one
+  if (fits == nullptr || (fits->size - fits->head) < total) {
+    e__create_and_link_page(E_PAGE_SIZE, a);
+    fits = a->current;
   }
 
   uchar* data = ((uchar*)fits + sizeof(*fits)) + fits->head;
@@ -132,8 +132,11 @@ e_arnalloc(e_arena* a, size_t size)
    * before we actually need it.
    * This generally improves performance by amortizing
    * malloc cost.
+   *
+   *
+   * Causing more problems than fixing! Removed it.
    */
-  if ((float)fits->head / (float)fits->size >= E_EARLY_ALLOCATION_THRESHOLD) { e__create_and_link_page(E_PAGE_SIZE, a); }
+  // if ((float)fits->head / (float)fits->size >= E_EARLY_ALLOCATION_THRESHOLD) { e__create_and_link_page(E_PAGE_SIZE, a); }
 
   return ptr;
 }

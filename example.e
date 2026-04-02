@@ -100,6 +100,14 @@ fn maptest()
   }
 }
 
+fn reference_test(lol)
+{
+  for (let i = 0; i < len(lol); i++)
+  {
+    lol[i] *= 2;
+  }
+}
+
 fn main() {
   println("Im gaming rn");
   println("println(32) = ", 32);
@@ -386,6 +394,13 @@ fn main() {
   let items_to_get_from_store = "Bread, Butter, Cheese, Cheese, Cheese, Ketchup, Milk, Cheese, Jam";
   let split_items = str::split(items_to_get_from_store, ", ");
   println("We'll need to get these items from the store: ", split_items);
+
+  let numbers = [1,2,3,4,5,6,7,8,9,10,];
+  println(reference_test(numbers));
+
+  let numbers_but_not = numbers;
+  numbers_but_not[1] = 100;
+  println(numbers_but_not);
 }
 
 fn file_test()
