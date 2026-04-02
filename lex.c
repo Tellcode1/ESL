@@ -139,7 +139,7 @@ tklist_append(struct tklist* toks, const e_token* tk)
   memcpy(&toks->toks[toks->ntoks++], tk, sizeof(e_token));
 }
 
-#define collectspan                                                                                                                                                           \
+#define collectspan                                                                                                                                  \
   (struct e_filespan) { .file = advertised_file, .line = line, .col = col }
 
 static inline void
@@ -273,10 +273,10 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
       advance(s, line, col);
 
       const char* snap = s;
-      while (*s && *s != '"') { advance(s, line, col); }
+      while (*s && *s != '"' && *s != '\n' && *s != '\r') { advance(s, line, col); }
 
       // reached end of file
-      if (!*s) {
+      if (!*s || *s == '\n' || *s == '\r') {
         lexerror("Unterminated string literal\n");
         goto err;
       }

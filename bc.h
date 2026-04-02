@@ -67,8 +67,8 @@ typedef enum e_opcode_bck {
   E_OPCODE_BOR,  // Bitwise OR
   E_OPCODE_XOR,  // Bitwise XOR (no boolean equivalent!)
   E_OPCODE_BNOT, // Bitwise NOT
-  E_OPCODE_EQL,
-  E_OPCODE_NEQ,
+  E_OPCODE_EQL,  // Equality
+  E_OPCODE_NEQ,  // Inequality
   E_OPCODE_LT,
   E_OPCODE_LTE,
   E_OPCODE_GT,

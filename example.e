@@ -412,6 +412,19 @@ fn main() {
   let numbers_but_not = numbers;
   numbers_but_not[1] = 100;
   println(numbers_but_not);
+
+  let out_of_bounds_access = numbers_but_not[69];
+  if (out_of_bounds_access == null)
+  {
+    println("Our out of bounds access was caught and handled :>");
+  }
+
+  let p = #{ "Poot" : "Dispenser", "Still need" : "Dispenser", "WHERE IS MY" : "Dispenser" };
+  if (p["NonExistentString"] == null)
+  {
+    println("Map invalid value access validated :3");
+  }
+  println("glooby");
 }
 
 fn file_test()

@@ -35,7 +35,6 @@
 #include "stack.h"
 #include "stdafx.h"
 #include "string.h"
-#include "struct.h"
 #include "var.h"
 
 #include <assert.h>
@@ -216,7 +215,8 @@ call(const e_exec_info* info, u32 hash, u32 nargs)
 
   fprintf(stderr, "Function %u not defined\n", hash);
 
-  return (e_var){ .type = E_VARTYPE_ERROR, .val.errcode = E_EUNDEFINED };
+  e_var null_var = { .type = E_VARTYPE_NULL };
+  return null_var;
 
 pop_and_ret:
   for (u32 i = 0; i < nargs; i++) e_stack_pop(info->stack);
@@ -470,6 +470,28 @@ e_exec(const e_exec_info* info)
         break;
       }
 
+      case E_OPCODE_JE: {
+        u32 target = e_read_u32(&ip); // always read the operand
+
+        e_var* top = e_stack_top(info->stack);
+        if (e_var_equal(top, top - 1)) ip = info->code + target;
+
+        e_stack_pop(info->stack); // remove conditions
+        e_stack_pop(info->stack);
+        break;
+      }
+
+      case E_OPCODE_JNE: {
+        u32 target = e_read_u32(&ip); // always read the operand
+
+        e_var* top = e_stack_top(info->stack);
+        if (!e_var_equal(top, top - 1)) ip = info->code + target;
+
+        e_stack_pop(info->stack); // remove conditions
+        e_stack_pop(info->stack);
+        break;
+      }
+
       case E_OPCODE_JMP:
         ip = info->code + e_read_u32(&ip);
         break;
@@ -506,6 +528,8 @@ e_exec(const e_exec_info* info)
       }
 
       case E_OPCODE_INDEX: {
+        e_var push = { .type = E_VARTYPE_NULL };
+
         e_var* stack      = info->stack->stack;
         size_t stack_size = info->stack->size;
 
@@ -515,12 +539,9 @@ e_exec(const e_exec_info* info)
 
           int idx = to_int(stack[stack_size - 1]);
 
-          e_stack_pop(info->stack); // pop index
-          e_stack_pop(info->stack); // pop base
-
           if (list && idx >= 0 && (u64)idx < list->size) {
             e_var_acquire(&list->vars[idx]);
-            TRY_V(e_stack_push(info->stack, &list->vars[idx]));
+            push = list->vars[idx];
           }
         } else if (left_type == E_VARTYPE_MAP) {
           e_var* map_var = &stack[stack_size - 2];
@@ -528,14 +549,17 @@ e_exec(const e_exec_info* info)
           e_var  key     = stack[stack_size - 1];
 
           e_var* find = e_map_find(map, &key);
+          if (find) {
+            e_var_acquire(find);
 
-          e_var_acquire(find);
-
-          e_stack_pop(info->stack); // pop index
-          e_stack_pop(info->stack); // pop base
-
-          TRY_V(e_stack_push(info->stack, find));
+            push = *find;
+          }
         }
+
+        e_stack_pop(info->stack); // pop index
+        e_stack_pop(info->stack); // pop base
+
+        e_stack_push(info->stack, &push);
         break;
       }
 
@@ -555,9 +579,9 @@ e_exec(const e_exec_info* info)
         e_stack_pop(info->stack); // pop base
 
         if (!list || idx >= list->size) {
-          e_var_release(&value);
-          fprintf(stderr, "List has size %u, but index is %u\n", list->size, idx);
-          goto _RETURN;
+          e_var null_var = { .type = E_VARTYPE_NULL };
+          TRY_V(e_stack_push(info->stack, &null_var));
+          break;
         }
 
         e_var_release(&list->vars[idx]);

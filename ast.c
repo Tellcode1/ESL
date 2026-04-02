@@ -98,6 +98,13 @@ conv_token_type_to_operator(e_token_type t)
   }
 }
 
+static inline bool
+is_op_compound_assignable(e_operator op)
+{
+  return (bool)(op == E_OPERATOR_ADD || op == E_OPERATOR_SUB || op == E_OPERATOR_MUL || op == E_OPERATOR_DIV || op == E_OPERATOR_MOD
+                || op == E_OPERATOR_EXP || op == E_OPERATOR_BAND || op == E_OPERATOR_BOR || op == E_OPERATOR_XOR);
+}
+
 /**
  * Single line if statements like if (x < 0) x = -x;
  * are handled by this because the expression parses consumes the semi colon itself,
@@ -1488,7 +1495,7 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
         return -1;
       }
 
-      if (E_GET_NODE(p, leftidx)->type == E_AST_NODE_INDEX) {
+      if (E_GET_NODE(p, leftidx)->type == E_AST_NODE_INDEX && is_op_compound_assignable(op)) {
         E_GET_NODE(p, node)->type                 = E_AST_NODE_INDEX_COMPOUND_OP;
         E_GET_NODE(p, node)->index_compound.op    = op;
         E_GET_NODE(p, node)->index_compound.base  = E_GET_NODE(p, leftidx)->index.base;

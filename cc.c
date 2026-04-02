@@ -908,6 +908,7 @@ compile_if_statement(struct e_compiler* cc, int node)
 
   /* Push a new scope before everything. */
   e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES);
+
   /* For the compiler too */
   e_stack_push_frame(cc->stack);
 
@@ -1319,6 +1320,7 @@ compile(struct e_compiler* cc, int node)
 
       const char* custom_entry_point = cc->info->custom_entry_point;
 
+      /* main if not specified. */
       u32 entry_point_hash = e_hash_fnv("main", strlen("main"));
       if (custom_entry_point != nullptr) { entry_point_hash = e_hash_fnv(custom_entry_point, strlen(custom_entry_point)); }
 
