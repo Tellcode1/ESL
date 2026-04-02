@@ -57,7 +57,7 @@ e_var
 eb_print(e_var* args, u32 nargs)
 {
   for (u32 i = 0; i < nargs; i++) e_var_print(&args[i], stdout);
-  return (e_var){ .type = E_VARTYPE_VOID };
+  return (e_var){ .type = E_VARTYPE_NULL };
 }
 
 e_var

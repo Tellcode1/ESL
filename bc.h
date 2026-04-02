@@ -150,7 +150,7 @@ typedef enum e_opcode_bck {
 
   /**
    * Push a variable to the stack, and set its ID on the variable table.
-   * The initial value of the variable will be VOID.
+   * The initial value of the variable will be NULL.
    * If an explicit type for the variable is defined, but no initializer was specified, the initial value of the variable will be zeroed.
    * If the COMPOUND attr is used, the top of the stack is assigned to the variable.
    * If the VARIABLE attr is used, the value of the variable ID operand is SHALLOW copied.

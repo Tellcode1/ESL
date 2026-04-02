@@ -492,9 +492,7 @@ e_ast_make_node(e_ast* p)
 
 static inline bool
 e_ast_is_limiter_exempt(e_ast_node_type t)
-{
-  return t == E_AST_NODE_IF || t == E_AST_NODE_WHILE || t == E_AST_NODE_FOR || t == E_AST_NODE_FUNCTION_DEFINITION || t == E_AST_NODE_STATEMENT_LIST;
-}
+{ return t == E_AST_NODE_IF || t == E_AST_NODE_WHILE || t == E_AST_NODE_FOR || t == E_AST_NODE_FUNCTION_DEFINITION; }
 
 int e_ast_parse(e_ast* p, int* root_nodeID);
 int e_ast_nud(e_ast* p, e_token* token);

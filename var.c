@@ -56,6 +56,8 @@ e_var_deep_cpy(const e_var* var, e_var* dst)
   dst->type = var->type;
 
   switch (var->type) {
+    case E_VARTYPE_NULL: break;
+
     case E_VARTYPE_VOID:
     case E_VARTYPE_INT:
     case E_VARTYPE_BOOL:
@@ -70,9 +72,9 @@ e_var_deep_cpy(const e_var* var, e_var* dst)
     }
     case E_VARTYPE_MAP: {
       /**
-        * Create an array of all key value pairs as a map
-        * And use it to create the map.
-      */
+       * Create an array of all key value pairs as a map
+       * And use it to create the map.
+       */
       e_var* flattened = malloc(sizeof(e_var) * 2 * E_VAR_AS_MAP(var)->size);
       memcpy(flattened, E_VAR_AS_MAP(var)->keys, sizeof(e_var) * E_VAR_AS_MAP(var)->size);
       memcpy(flattened + E_VAR_AS_MAP(var)->size, E_VAR_AS_MAP(var)->vals, sizeof(e_var) * E_VAR_AS_MAP(var)->size);
@@ -157,6 +159,7 @@ void
 e_var_print(const struct e_var* v, FILE* f)
 {
   switch (v->type) {
+    case E_VARTYPE_NULL: fprintf(f, "null"); break;
     case E_VARTYPE_VOID: fprintf(f, "void"); break;
     case E_VARTYPE_INT: fprintf(f, "%i", v->val.i); break;
     case E_VARTYPE_CHAR: fprintf(f, "%c", v->val.c); break;
@@ -184,6 +187,7 @@ void
 e_var_to_string(const struct e_var* v, char* buffer, size_t buffer_size)
 {
   switch (v->type) {
+    case E_VARTYPE_NULL: strlcpy(buffer, "null", buffer_size); break;
     case E_VARTYPE_VOID: strlcpy(buffer, "void", buffer_size); break;
     case E_VARTYPE_INT: snprintf(buffer, buffer_size, "%i", v->val.i); break;
     case E_VARTYPE_CHAR: snprintf(buffer, buffer_size, "%c", v->val.c); break;
@@ -223,6 +227,7 @@ e_var_to_string_size(const struct e_var* v)
 {
   size_t total = 0;
   switch (v->type) {
+    case E_VARTYPE_NULL: total += strlen("null"); break;
     case E_VARTYPE_VOID: total += strlen("void"); break;
     case E_VARTYPE_INT: total += snprintf(nullptr, 0, "%i", v->val.i); break;
     case E_VARTYPE_CHAR: total += snprintf(nullptr, 0, "%c", v->val.c); break;
@@ -251,6 +256,7 @@ u32
 e_var_hash(const e_var* var)
 {
   switch (var->type) {
+    case E_VARTYPE_NULL: return 0;
     case E_VARTYPE_VOID:
     case E_VARTYPE_ERROR:
     case E_VARTYPE_INT: return e_hash_fnv(&var->val.i, sizeof(var->val.i));
@@ -272,7 +278,10 @@ e_var_equal(const e_var* a, const e_var* b)
   if (a->type != b->type) return false;
 
   switch (a->type) {
+    /* Type is equal, so it must be equal */
     case E_VARTYPE_VOID:
+    case E_VARTYPE_NULL: return true;
+
     case E_VARTYPE_ERROR:
     case E_VARTYPE_INT: return a->val.i == b->val.i;
     case E_VARTYPE_BOOL: return a->val.b == b->val.b;

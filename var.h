@@ -52,17 +52,18 @@ struct e_refdobj_pool;
  * bit set though.
  */
 typedef enum e_vartype {
-  E_VARTYPE_VOID        = 1 << 0, // invalid / unset
-  E_VARTYPE_INT         = 1 << 1,
-  E_VARTYPE_BOOL        = 1 << 2,
-  E_VARTYPE_CHAR        = 1 << 3,
-  E_VARTYPE_FLOAT       = 1 << 4,
-  E_VARTYPE_STRING      = 1 << 5,
-  E_VARTYPE_LIST        = 1 << 6,
-  E_VARTYPE_MAP         = 1 << 7,
-  E_VARTYPE_ERROR       = 1 << 8, // use e_error_string to get string representation of the error.
-  E_VARTYPE_CC_VARIABLE = 1 << 9,
-  E_VARTYPE_CC_STRUCT   = 1 << 10,
+  E_VARTYPE_NULL        = 1 << 0, // unset
+  E_VARTYPE_VOID        = 1 << 1,
+  E_VARTYPE_INT         = 1 << 2,
+  E_VARTYPE_BOOL        = 1 << 3,
+  E_VARTYPE_CHAR        = 1 << 4,
+  E_VARTYPE_FLOAT       = 1 << 5,
+  E_VARTYPE_STRING      = 1 << 6,
+  E_VARTYPE_LIST        = 1 << 7,
+  E_VARTYPE_MAP         = 1 << 8,
+  E_VARTYPE_ERROR       = 1 << 9, // use e_error_string to get string representation of the error.
+  E_VARTYPE_CC_VARIABLE = 1 << 10,
+  E_VARTYPE_CC_STRUCT   = 1 << 11,
 } e_vartype;
 // typedef u32 e_vartype;
 
@@ -148,6 +149,7 @@ e_var_type_to_string(e_vartype type)
     case E_VARTYPE_ERROR: return "error";
     case E_VARTYPE_CC_VARIABLE: return "var::compile_info";
     case E_VARTYPE_CC_STRUCT: return "struct::compile_info";
+    case E_VARTYPE_NULL: return "null";
   }
   return "unknown";
 }

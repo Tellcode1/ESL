@@ -170,7 +170,7 @@ get_builtin_func_hashed(u32 hash)
 static e_var
 call(const e_exec_info* info, u32 hash, u32 nargs)
 {
-  e_var return_value = { .type = E_VARTYPE_VOID };
+  e_var return_value = { .type = E_VARTYPE_NULL };
 
   // builtins
   const e_builtin_func* builtin = get_builtin_func_hashed(hash);
@@ -274,7 +274,7 @@ e_exec(const e_exec_info* info)
     *slot = v;
   }
 
-  e_var retval = { .type = E_VARTYPE_VOID };
+  e_var retval = { .type = E_VARTYPE_NULL };
 
   const u8* ip  = info->code;
   const u8* end = info->code + info->code_size;
@@ -300,7 +300,7 @@ e_exec(const e_exec_info* info)
         if (r.type == E_VARTYPE_ERROR) { return r; }
 
         /* Push the return value only after popping the arguments. */
-        if (r.type != E_VARTYPE_VOID) { TRY_V(e_stack_push(info->stack, &r)); }
+        TRY_V(e_stack_push(info->stack, &r));
         break;
       }
 
@@ -615,9 +615,10 @@ e_exec(const e_exec_info* info)
   printf("Illegal instruction\n");
   exit(-1);
 
-_RETURN:
+_RETURN: {
   /**
    * Everything is externally managed. Don't need to free anything.
    */
   return retval;
+}
 }

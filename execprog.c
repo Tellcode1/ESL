@@ -50,7 +50,7 @@ say_hello_from_c(e_var* args)
   (void)args;
   printf("And this function was called from C, from the script!!\n");
 
-  return (e_var){ .type = E_VARTYPE_VOID };
+  return (e_var){ .type = E_VARTYPE_NULL };
 }
 
 static e_var
@@ -74,7 +74,7 @@ file_close(e_var* args)
 
   fclose(f);
 
-  return (e_var){ .type = E_VARTYPE_VOID };
+  return (e_var){ .type = E_VARTYPE_NULL };
 }
 
 static e_var
@@ -144,17 +144,17 @@ main(int argc, char* argv[])
   u32         nfuncs          = 0;
   if (e_file_load(f, &root_allocation, &nins, &ins, &nlits, &lits, &nfuncs, &funcs)) { perror("eexec: Failed to open input file\n"); }
 
-#define include_fn(name)                                                                                                                                                      \
-  (e_extern_function){                                                                                                                                                        \
-    .hash  = e_hash_fnv(#name, strlen(#name)),                                                                                                                                \
-    .nargs = 0,                                                                                                                                                               \
-    .func  = name,                                                                                                                                                            \
+#define include_fn(name)                                                                                                                             \
+  (e_extern_function){                                                                                                                               \
+    .hash  = e_hash_fnv(#name, strlen(#name)),                                                                                                       \
+    .nargs = 0,                                                                                                                                      \
+    .func  = name,                                                                                                                                   \
   }
-#define include_fn_as(name, as)                                                                                                                                               \
-  (e_extern_function){                                                                                                                                                        \
-    .hash  = e_hash_fnv(as, strlen(as)),                                                                                                                                      \
-    .nargs = 0,                                                                                                                                                               \
-    .func  = name,                                                                                                                                                            \
+#define include_fn_as(name, as)                                                                                                                      \
+  (e_extern_function){                                                                                                                               \
+    .hash  = e_hash_fnv(as, strlen(as)),                                                                                                             \
+    .nargs = 0,                                                                                                                                      \
+    .func  = name,                                                                                                                                   \
   }
 
   e_extern_function externals[] = {

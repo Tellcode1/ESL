@@ -197,7 +197,7 @@ e_stack_push_variable(u32 id, e_stack* stack)
   stack->nvariables++;
 
   /* Initialized to VOID */
-  e_var void_var = (e_var){ .type = E_VARTYPE_VOID };
+  e_var void_var = (e_var){ .type = E_VARTYPE_NULL };
   e_stack_push(stack, &void_var);
 
   return e_stack_top(stack);

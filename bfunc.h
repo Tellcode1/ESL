@@ -69,7 +69,7 @@ eb_println(e_var* args, u32 nargs)
 {
   eb_print(args, nargs);
   fputc('\n', stdout);
-  return (e_var){ .type = E_VARTYPE_VOID };
+  return (e_var){ .type = E_VARTYPE_NULL };
 }
 
 e_var eb_cast_int(e_var* args, u32 nargs);
@@ -113,7 +113,7 @@ static inline e_var
 eb_str_equal(e_var* args, u32 nargs)
 {
   (void)(nargs);
-  return (e_var){ .type = E_VARTYPE_BOOL, .val = { .b = strcmp(E_VAR_AS_STRING(&args[0])->s, E_VAR_AS_STRING(&args[1])->s)==0 } };
+  return (e_var){ .type = E_VARTYPE_BOOL, .val = { .b = strcmp(E_VAR_AS_STRING(&args[0])->s, E_VAR_AS_STRING(&args[1])->s) == 0 } };
 }
 e_var eb_str_append(e_var* args, u32 nargs);
 e_var eb_str_substr(e_var* args, u32 nargs); // substring: string, int start, int length
@@ -136,16 +136,16 @@ e_var eb_list_make(e_var* args, u32 nargs);
 e_var eb_list_append(e_var* args, u32 nargs);
 
 // pop(list)
-e_var eb_list_pop(e_var* args, u32 nargs);     // fast
+e_var eb_list_pop(e_var* args, u32 nargs); // fast
 
 // remove(list, index)
-e_var eb_list_remove(e_var* args, u32 nargs);  // expensive
+e_var eb_list_remove(e_var* args, u32 nargs); // expensive
 
 // insert(list, index, value)
-e_var eb_list_insert(e_var* args, u32 nargs);  // Replaces value if it exists!
+e_var eb_list_insert(e_var* args, u32 nargs); // Replaces value if it exists!
 
 // find(list, value) => -1 if non existent
-e_var eb_list_find(e_var* args, u32 nargs);    // Returns index, -1 if it doesn't exist.
+e_var eb_list_find(e_var* args, u32 nargs); // Returns index, -1 if it doesn't exist.
 
 // reserve(list, elements_to_reserve)
 e_var eb_list_reserve(e_var* args, u32 nargs); // number of new variables to reserve

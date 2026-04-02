@@ -48,6 +48,7 @@ typedef struct e_builtin_var {
  * All variables must have constant, compile time (literal) values.
  */
 static const e_builtin_var eb_vars[] = {
+  { .name = "null", .type = E_VARTYPE_NULL, .value = { 0 } },
   { .name = "math::PI", .type = E_VARTYPE_FLOAT, .value = { .f = M_PI } },
   { .name = "math::PIBY2", .type = E_VARTYPE_FLOAT, .value = { .f = M_PI_2 } },
   { .name = "math::PIBY4", .type = E_VARTYPE_FLOAT, .value = { .f = M_PI_4 } },

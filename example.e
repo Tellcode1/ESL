@@ -100,6 +100,7 @@ fn maptest()
   }
 }
 
+// Shouldn't modify the actual value of lol
 fn reference_test(lol)
 {
   for (let i = 0; i < len(lol); i++)
@@ -396,7 +397,17 @@ fn main() {
   println("We'll need to get these items from the store: ", split_items);
 
   let numbers = [1,2,3,4,5,6,7,8,9,10,];
-  println(reference_test(numbers));
+  reference_test(numbers);
+  println(numbers);
+
+  let uninitialized,uninitialized1,uninitialized2;
+  println(uninitialized, ", ", uninitialized1, ", ", uninitialized2);
+
+  println(uninitialized==uninitialized1 && uninitialized1==uninitialized2);
+  if (uninitialized == null && uninitialized1 == null && uninitialized2 == null)
+  {
+    println("Riveting. All the uninitialized variables are null");
+  }
 
   let numbers_but_not = numbers;
   numbers_but_not[1] = 100;
