@@ -430,6 +430,11 @@ fn main() {
 fn file_test()
 {
   let file = file_open("file", "rb");
+  if (file == null)
+  {
+    println("Failed to load file: ", "file");
+    return null;
+  }
   let size = file_size(file);
   let contents = file_read(file);
   println(contents);

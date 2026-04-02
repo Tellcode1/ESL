@@ -1495,7 +1495,7 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
         return -1;
       }
 
-      if (E_GET_NODE(p, leftidx)->type == E_AST_NODE_INDEX && is_op_compound_assignable(op)) {
+      if (E_GET_NODE(p, leftidx)->type == E_AST_NODE_INDEX && tk->val.op.is_compound) {
         E_GET_NODE(p, node)->type                 = E_AST_NODE_INDEX_COMPOUND_OP;
         E_GET_NODE(p, node)->index_compound.op    = op;
         E_GET_NODE(p, node)->index_compound.base  = E_GET_NODE(p, leftidx)->index.base;
