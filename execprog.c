@@ -26,6 +26,7 @@
 #include "fn.h"
 #include "pool.h"
 #include "rwhelp.h"
+#include "stack.h"
 #include "var.h"
 
 #include <stdio.h>
@@ -181,7 +182,9 @@ main(int argc, char* argv[])
     .extern_funcs  = externals,
   };
 
+  e_stack_push_frame(&stack);
   e_var v = e_exec(&info);
+  e_stack_pop_frame(&stack);
 
   fclose(f);
   e_stack_free(&stack);

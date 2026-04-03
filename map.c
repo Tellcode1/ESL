@@ -80,3 +80,39 @@ e_map_find(e_map* map, const e_var* key)
   }
   return nullptr;
 }
+
+e_var*
+e_map_find_or_insert(e_map* map, struct e_var* key)
+{
+  u32 hash = e_var_hash(key);
+
+  for (u32 i = 0; i < map->size; i++) {
+    if (hash == map->hashes[i] && e_var_equal(key, &map->keys[i])) { return &map->vals[i]; }
+  }
+
+  if (map->size >= map->capacity) {
+    u32    new_capacity = map->capacity * 2;
+    e_var* new_keys     = (e_var*)realloc(map->keys, sizeof(e_var) * new_capacity);
+    e_var* new_vals     = (e_var*)realloc(map->vals, sizeof(e_var) * new_capacity);
+    u32*   new_hashes   = (u32*)realloc(map->hashes, sizeof(u32) * new_capacity);
+
+    map->keys   = new_keys;
+    map->vals   = new_vals;
+    map->hashes = new_hashes;
+  }
+
+  u32   j = map->size;
+  e_var v = { .type = E_VARTYPE_NULL };
+
+  e_var* ptr = &map->vals[j];
+
+  e_var_shallow_cpy(key, &map->keys[j]);
+  e_var_shallow_cpy(&v, &map->vals[j]);
+  e_var_acquire(&map->keys[j]);
+
+  map->hashes[j] = e_var_hash(key);
+
+  map->size++;
+
+  return ptr;
+}

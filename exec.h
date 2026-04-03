@@ -58,6 +58,9 @@ typedef struct e_exec_info {
  * Execute a bytecode stream.
  * You can hook external (C) functions to the program
  * using the extern_funcs member of info.
+ *
+ * Arguments can also be passed using the args member
+ * of info.
  */
 e_var e_exec(const e_exec_info* info);
 

@@ -100,10 +100,11 @@ void
 e_list_insert(u32 index, e_var* v, struct e_list* l)
 {
   e_var_release(&l->vars[index]);
-  e_var_acquire(v);
 
-  l->vars[index] = *v;
+  e_var_shallow_cpy(v, &l->vars[index]);
   l->size++;
+
+  e_var_acquire(&l->vars[index]);
 }
 
 int

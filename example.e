@@ -420,11 +420,14 @@ fn main() {
   }
 
   let p = #{ "Poot" : "Dispenser", "Still need" : "Dispenser", "WHERE IS MY" : "Dispenser" };
-  if (p["NonExistentString"] == null)
+  if (!p["NonExistentString"])
   {
     println("Map invalid value access validated :3");
   }
   println("glooby");
+
+  p["Goopy"] = "no goopy";
+  println(p["Goopy"]);
 }
 
 fn file_test()

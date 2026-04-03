@@ -33,6 +33,7 @@ static inline double
 to_float(e_var v)
 {
   switch (v.type) {
+    case E_VARTYPE_NULL: return 0.0;
     case E_VARTYPE_FLOAT: return v.val.f;
     case E_VARTYPE_INT: return (double)v.val.i;
     case E_VARTYPE_CHAR: return (double)v.val.c;
@@ -45,6 +46,7 @@ static inline int
 to_int(e_var v)
 {
   switch (v.type) {
+    case E_VARTYPE_NULL: return 0;
     case E_VARTYPE_INT: return v.val.i;
     case E_VARTYPE_FLOAT: return (int)v.val.f;
     case E_VARTYPE_CHAR: return (int)v.val.c;

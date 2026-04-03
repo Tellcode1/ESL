@@ -68,9 +68,11 @@ e_var_deep_cpy(const e_var* var, e_var* dst)
       E_VAR_AS_STRING(dst)->s = strdup(E_VAR_AS_STRING(var)->s);
       break;
     case E_VARTYPE_LIST: {
+      dst->val.list = e_refdobj_pool_acquire(&ge_pool);
       return e_list_init(E_VAR_AS_LIST(var)->vars, E_VAR_AS_LIST(var)->size, E_VAR_AS_LIST(dst));
     }
     case E_VARTYPE_MAP: {
+      dst->val.map = e_refdobj_pool_acquire(&ge_pool);
       /**
        * Create an array of all key value pairs as a map
        * And use it to create the map.

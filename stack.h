@@ -131,7 +131,7 @@ e_stack_pop_frame(e_stack* stack)
   const e_stack_frame* frame = &stack->frames[--stack->depth];
 
   /* Release the variables we're popping. */
-  for (size_t i = frame->stack_size; i < stack->size; i++) e_var_release(&stack->stack[i]);
+  for (size_t i = frame->stack_size; i < stack->size; i++) { e_var_release(&stack->stack[i]); }
 
   stack->size       = frame->stack_size;
   stack->nvariables = frame->variable_offset;
@@ -142,19 +142,20 @@ e_stack_pop_frame(e_stack* stack)
 static inline int
 e_stack_push(e_stack* stack, const e_var* v)
 {
-  {
-    if (stack->size >= stack->capacity) {
-      u32    new_cap   = stack->capacity * 2;
-      e_var* new_stack = (e_var*)realloc(stack->stack, new_cap * sizeof(e_var));
-      if (new_stack == nullptr) return E_EMALLOC;
+  if (stack->size >= stack->capacity) {
+    u32    new_cap   = stack->capacity * 2;
+    e_var* new_stack = (e_var*)realloc(stack->stack, new_cap * sizeof(e_var));
+    if (new_stack == nullptr) return E_EMALLOC;
 
-      stack->capacity = new_cap;
-      stack->stack    = new_stack;
-    }
-
-    stack->stack[stack->size] = *v;
-    stack->size++;
+    stack->capacity = new_cap;
+    stack->stack    = new_stack;
   }
+
+  e_var* slot = &stack->stack[stack->size];
+  e_var_shallow_cpy(v, slot);
+  e_var_acquire(slot);
+
+  stack->size++;
 
   return 0;
 }
@@ -210,11 +211,10 @@ e_stack_push_variable(u32 id, e_stack* stack)
 static inline e_var*
 e_stack_find(const e_stack* stack, u32 hash)
 {
-  u32 i = stack->nvariables - 1;
-  while (i < stack->nvariables) {
+  // Old ver broke for stack->nvariables = 0
+  for (u32 i = stack->nvariables; i-- > 0;) {
     u32 offset = stack->variables[i].offset_index;
     if (stack->variables[i].id == hash) return &stack->stack[offset];
-    i--;
   }
   return nullptr;
 }
@@ -226,14 +226,13 @@ e_stack_find(const e_stack* stack, u32 hash)
 static inline e_var*
 e_stack_find_in_current_scope(const e_stack* stack, u32 hash)
 {
-  u32 i     = stack->nvariables - 1;
   u32 depth = stack->depth;
-  while (i < stack->nvariables) {
+  // Old ver broke for stack->nvariables = 0
+  for (u32 i = stack->nvariables; i-- > 0;) {
     if (stack->variables[i].depth != depth) break;
 
     u32 offset = stack->variables[i].offset_index;
     if (stack->variables[i].id == hash) return &stack->stack[offset];
-    i--;
   }
   return nullptr;
 }
