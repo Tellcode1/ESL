@@ -27,6 +27,7 @@
 #include "pool.h"
 #include "rwhelp.h"
 #include "stack.h"
+#include "sysexpose.h"
 #include "var.h"
 
 #include <stdio.h>
@@ -127,7 +128,9 @@ file_size(e_var* args)
 int
 main(int argc, char* argv[])
 {
-  assert(argc == 2);
+  // assert(argc == 2);
+  e_argv = argv;
+  e_argc = argc;
 
   FILE* f = fopen(argv[1], "rb");
 
