@@ -65,70 +65,31 @@
                                                            : (e_var)                                                                                 \
   { .type = E_VARTYPE_BOOL, .val.b = l.val.i op r.val.i }
 
-static inline double
-to_float(e_var v)
-{
-  switch (v.type) {
-    case E_VARTYPE_NULL: return 0.0;
-    case E_VARTYPE_FLOAT: return v.val.f;
-    case E_VARTYPE_INT: return (double)v.val.i;
-    case E_VARTYPE_CHAR: return (double)v.val.c;
-    case E_VARTYPE_BOOL: return (double)v.val.b;
-    default: return 0.0;
-  }
-}
-
-static inline int
-to_int(e_var v)
-{
-  switch (v.type) {
-    case E_VARTYPE_NULL: return 0;
-    case E_VARTYPE_INT: return v.val.i;
-    case E_VARTYPE_FLOAT: return (int)v.val.f;
-    case E_VARTYPE_CHAR: return (int)v.val.c;
-    case E_VARTYPE_BOOL: return (int)v.val.b;
-    default: return 0;
-  }
-}
-
-static inline bool
-to_bool(e_var v)
-{
-  switch (v.type) {
-    case E_VARTYPE_NULL: return false;
-    case E_VARTYPE_INT: return (bool)v.val.i;
-    case E_VARTYPE_FLOAT: return (bool)v.val.f;
-    case E_VARTYPE_CHAR: return (bool)v.val.c;
-    case E_VARTYPE_BOOL: return (bool)v.val.b;
-    default: return false;
-  }
-}
-
 static inline bool
 is_float(e_var v)
 { return v.type == E_VARTYPE_FLOAT; }
 
 #define COERCE_BINOP(l, r, op)                                                                                                                       \
-  (is_float(l) || is_float(r)) ? (e_var){ .type = E_VARTYPE_FLOAT, .val.f = to_float(l) op to_float(r) } : (e_var)                                   \
-  { .type = E_VARTYPE_INT, .val.i = to_int(l) op to_int(r) }
+  (is_float(l) || is_float(r)) ? (e_var){ .type = E_VARTYPE_FLOAT, .val.f = evar_to_float(l) op evar_to_float(r) } : (e_var)                         \
+  { .type = E_VARTYPE_INT, .val.i = evar_to_int(l) op evar_to_int(r) }
 
 #define COERCE_BOOLEAN_BINOP(l, r, op)                                                                                                               \
-  (is_float(l) || is_float(r)) ? (e_var){ .type = E_VARTYPE_BOOL, .val.b = to_float(l) op to_float(r) } : (e_var)                                    \
-  { .type = E_VARTYPE_BOOL, .val.b = to_int(l) op to_int(r) }
+  (is_float(l) || is_float(r)) ? (e_var){ .type = E_VARTYPE_BOOL, .val.b = evar_to_float(l) op evar_to_float(r) } : (e_var)                          \
+  { .type = E_VARTYPE_BOOL, .val.b = evar_to_int(l) op evar_to_int(r) }
 
 static inline e_var
 operate(e_var l, e_var r, e_opcode op)
 {
-  if (op == E_OPCODE_NOT) return (e_var){ .type = E_VARTYPE_BOOL, .val.b = (bool)!to_bool(r) };
+  if (op == E_OPCODE_NOT) return (e_var){ .type = E_VARTYPE_BOOL, .val.b = (bool)!evar_to_bool(r) };
 
   switch (op) {
     case E_OPCODE_ADD: return COERCE_BINOP(l, r, +);
     case E_OPCODE_SUB: return COERCE_BINOP(l, r, -);
     case E_OPCODE_MUL: return COERCE_BINOP(l, r, *);
     case E_OPCODE_DIV: return COERCE_BINOP(l, r, /);
-    case E_OPCODE_MOD: return (e_var){ .type = E_VARTYPE_INT, .val.i = to_int(l) % to_int(r) };
-    case E_OPCODE_EQL: return COERCE_BOOLEAN_BINOP(l, r, ==);
-    case E_OPCODE_NEQ: return COERCE_BOOLEAN_BINOP(l, r, !=);
+    case E_OPCODE_MOD: return (e_var){ .type = E_VARTYPE_INT, .val.i = evar_to_int(l) % evar_to_int(r) };
+    case E_OPCODE_EQL: return (e_var){ .type = E_VARTYPE_BOOL, .val.b = e_var_equal(&l, &r) };
+    case E_OPCODE_NEQ: return (e_var){ .type = E_VARTYPE_BOOL, .val.b = (bool)!e_var_equal(&l, &r) };
     case E_OPCODE_LT: return COERCE_BOOLEAN_BINOP(l, r, <);
     case E_OPCODE_LTE: return COERCE_BOOLEAN_BINOP(l, r, <=);
     case E_OPCODE_GT: return COERCE_BOOLEAN_BINOP(l, r, >);
@@ -142,10 +103,10 @@ operate(e_var l, e_var r, e_opcode op)
         case E_VARTYPE_FLOAT: return (e_var){ .type = E_VARTYPE_FLOAT, .val.f = -r.val.f };
         default: break;
       }
-    case E_OPCODE_BNOT: return (e_var){ .type = E_VARTYPE_INT, .val.i = ~to_int(r) };
-    case E_OPCODE_BAND: return (e_var){ .type = E_VARTYPE_INT, .val.i = to_int(l) & to_int(r) };
-    case E_OPCODE_BOR: return (e_var){ .type = E_VARTYPE_INT, .val.i = to_int(l) | to_int(r) };
-    case E_OPCODE_XOR: return (e_var){ .type = E_VARTYPE_INT, .val.i = to_int(l) ^ to_int(r) };
+    case E_OPCODE_BNOT: return (e_var){ .type = E_VARTYPE_INT, .val.i = ~evar_to_int(r) };
+    case E_OPCODE_BAND: return (e_var){ .type = E_VARTYPE_INT, .val.i = evar_to_int(l) & evar_to_int(r) };
+    case E_OPCODE_BOR: return (e_var){ .type = E_VARTYPE_INT, .val.i = evar_to_int(l) | evar_to_int(r) };
+    case E_OPCODE_XOR: return (e_var){ .type = E_VARTYPE_INT, .val.i = evar_to_int(l) ^ evar_to_int(r) };
     default: break;
   }
   return (e_var){ 0 };
@@ -454,7 +415,10 @@ e_exec(const e_exec_info* info)
 
       case E_OPCODE_JZ: {
         u32 target = e_read_u32(&ip); // always read the operand
-        if (!to_bool(*e_stack_top(info->stack))) ip = info->code + target;
+
+        const e_var* cnd  = e_stack_top(info->stack);
+        bool         eval = evar_to_bool(*cnd);
+        if (!eval) ip = info->code + target;
 
         e_stack_pop(info->stack); // remove condition
         break;
@@ -462,7 +426,7 @@ e_exec(const e_exec_info* info)
 
       case E_OPCODE_JNZ: {
         u32 target = e_read_u32(&ip); // always read the operand
-        if (to_bool(*e_stack_top(info->stack))) ip = info->code + target;
+        if (evar_to_bool(*e_stack_top(info->stack))) ip = info->code + target;
 
         e_stack_pop(info->stack); // remove condition
         break;
@@ -534,7 +498,7 @@ e_exec(const e_exec_info* info)
         if (left_type == E_VARTYPE_LIST) {
           e_list* list = stack[stack_size - 2].type == E_VARTYPE_LIST ? E_VAR_AS_LIST(&stack[stack_size - 2]) : NULL;
 
-          int idx = to_int(stack[stack_size - 1]);
+          int idx = evar_to_int(stack[stack_size - 1]);
 
           if (list && idx >= 0 && (u64)idx < list->size) { push = list->vars[idx]; }
         } else if (left_type == E_VARTYPE_MAP) {

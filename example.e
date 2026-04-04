@@ -88,7 +88,7 @@ fn maptest()
     "Five!"  : 5 
   };
   let index_table = [
-    map[1],
+    map[1], // Uses the key to get the value for the map.
     map[2],
     map[3],
     map[4],
@@ -107,6 +107,13 @@ fn reference_test(lol)
   {
     lol[i] *= 2;
   }
+}
+
+fn outlive()
+{
+  let one = [1, 2, 3];
+  let two = [one, one, one];
+  return two;
 }
 
 fn main() {
@@ -428,6 +435,8 @@ fn main() {
 
   p["Goopy"] = "no goopy";
   println(p["Goopy"]);
+
+  println(outlive());
 }
 
 fn file_test()

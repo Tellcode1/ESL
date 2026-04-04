@@ -151,6 +151,9 @@ e_stack_push(e_stack* stack, const e_var* v)
     stack->stack    = new_stack;
   }
 
+  // printf("Pushed: ");
+  // eb_println((e_var*)v, 1);
+
   e_var* slot = &stack->stack[stack->size];
   e_var_shallow_cpy(v, slot);
   e_var_acquire(slot);
@@ -163,7 +166,10 @@ e_stack_push(e_stack* stack, const e_var* v)
 static inline void
 e_stack_pop(e_stack* stack)
 {
-  e_var_release(&stack->stack[stack->size - 1]);
+  e_var* top = &stack->stack[stack->size - 1];
+  // printf("Popped: ");
+  // eb_println((e_var*)top, 1);
+  e_var_release(top);
   stack->size--;
 }
 

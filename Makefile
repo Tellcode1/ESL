@@ -5,7 +5,7 @@ LDFLAGS ?= -g -lm
 SRC_DIR=.
 BUILD_DIR=build
 
-SOURCES=ast.c lex.c var.c list.c map.c bfunc.c bfunc.str.c bfunc.list.c pool.c
+SOURCES=ast.c ast.free.c lex.c var.c list.c map.c bfunc.c bfunc.str.c bfunc.list.c bfunc.io.c pool.c
 COMPILER_SOURCES=cc.c frontend.c $(SOURCES)
 DECOMPILER_SOURCES=dc.c $(SOURCES)
 RUNTIME_SOURCES=exec.c execprog.c $(SOURCES)

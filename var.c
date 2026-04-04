@@ -24,6 +24,7 @@
 
 #include "var.h"
 
+#include "bfunc.h"
 #include "pool.h"
 #include "stdafx.h"
 
@@ -56,7 +57,8 @@ e_var_deep_cpy(const e_var* var, e_var* dst)
   dst->type = var->type;
 
   switch (var->type) {
-    case E_VARTYPE_NULL: break;
+    case E_VARTYPE_NULL:
+    default: break;
 
     case E_VARTYPE_VOID:
     case E_VARTYPE_INT:
@@ -130,6 +132,8 @@ e_var_free(e_var* var)
   if (!var) return;
 
   switch (var->type) {
+    default:
+    case E_VARTYPE_NULL:
     case E_VARTYPE_VOID:
     case E_VARTYPE_INT:
     case E_VARTYPE_CHAR:
@@ -161,6 +165,7 @@ void
 e_var_print(const struct e_var* v, FILE* f)
 {
   switch (v->type) {
+    default:
     case E_VARTYPE_NULL: fprintf(f, "null"); break;
     case E_VARTYPE_VOID: fprintf(f, "void"); break;
     case E_VARTYPE_INT: fprintf(f, "%i", v->val.i); break;
@@ -189,15 +194,17 @@ void
 e_var_to_string(const struct e_var* v, char* buffer, size_t buffer_size)
 {
   switch (v->type) {
-    case E_VARTYPE_NULL: strlcpy(buffer, "null", buffer_size); break;
-    case E_VARTYPE_VOID: strlcpy(buffer, "void", buffer_size); break;
+    default:
+    case E_VARTYPE_NULL: strncpy(buffer, "null", buffer_size - 1); break;
+    case E_VARTYPE_VOID: strncpy(buffer, "void", buffer_size - 1); break;
     case E_VARTYPE_INT: snprintf(buffer, buffer_size, "%i", v->val.i); break;
     case E_VARTYPE_CHAR: snprintf(buffer, buffer_size, "%c", v->val.c); break;
     case E_VARTYPE_BOOL: snprintf(buffer, buffer_size, "%s", (int)v->val.b ? "true" : "false"); break;
     case E_VARTYPE_FLOAT: snprintf(buffer, buffer_size, "%g", v->val.f); break;
     case E_VARTYPE_STRING: snprintf(buffer, buffer_size, "%s", E_VAR_AS_STRING(v)->s); break;
     case E_VARTYPE_LIST: {
-      strlcpy(buffer, "[", buffer_size);
+      strncpy(buffer, "[", buffer_size - 1);
+      buffer[buffer_size] = 0;
 
       size_t offset = strlen(buffer);
 
@@ -207,12 +214,12 @@ e_var_to_string(const struct e_var* v, char* buffer, size_t buffer_size)
         offset = strlen(buffer);
 
         if (i < E_VAR_AS_LIST(v)->size - 1) {
-          strlcat(buffer, ", ", buffer_size);
+          _strlcat(buffer, ", ", buffer_size);
           offset = strlen(buffer);
         }
       }
 
-      strlcat(buffer, "]", buffer_size);
+      _strlcat(buffer, "]", buffer_size);
 
       break;
     }
@@ -229,6 +236,7 @@ e_var_to_string_size(const struct e_var* v)
 {
   size_t total = 0;
   switch (v->type) {
+    default:
     case E_VARTYPE_NULL: total += strlen("null"); break;
     case E_VARTYPE_VOID: total += strlen("void"); break;
     case E_VARTYPE_INT: total += snprintf(nullptr, 0, "%i", v->val.i); break;
@@ -258,8 +266,8 @@ u32
 e_var_hash(const e_var* var)
 {
   switch (var->type) {
-    case E_VARTYPE_NULL: return 0;
     case E_VARTYPE_VOID:
+    case E_VARTYPE_NULL: return 0;
     case E_VARTYPE_ERROR:
     case E_VARTYPE_INT: return e_hash_fnv(&var->val.i, sizeof(var->val.i));
     case E_VARTYPE_BOOL: return e_hash_fnv(&var->val.b, sizeof(bool));
@@ -277,26 +285,28 @@ e_var_hash(const e_var* var)
 bool
 e_var_equal(const e_var* a, const e_var* b)
 {
-  if (a->type != b->type) return false;
+  if (a->type == E_VARTYPE_NULL || b->type == E_VARTYPE_NULL) { return a->type == b->type; }
+  if (a->type == E_VARTYPE_VOID || b->type == E_VARTYPE_VOID) { return a->type == b->type; }
 
   switch (a->type) {
-    /* Type is equal, so it must be equal */
-    case E_VARTYPE_VOID:
-    case E_VARTYPE_NULL: return true;
+    default: assert(0);
 
     case E_VARTYPE_ERROR:
-    case E_VARTYPE_INT: return a->val.i == b->val.i;
-    case E_VARTYPE_BOOL: return a->val.b == b->val.b;
-    case E_VARTYPE_CHAR: return a->val.c == b->val.c;
-    case E_VARTYPE_FLOAT: return a->val.f == b->val.f;
+    case E_VARTYPE_INT: return evar_to_int(*a) == evar_to_int(*b);
+    case E_VARTYPE_BOOL: return evar_to_bool(*a) == evar_to_bool(*b);
+    case E_VARTYPE_CHAR: return (char)evar_to_int(*a) == (char)evar_to_int(*b);
+    case E_VARTYPE_FLOAT: return evar_to_float(*a) == evar_to_float(*b);
     case E_VARTYPE_STRING: return strcmp(E_VAR_AS_STRING(a)->s, E_VAR_AS_STRING(b)->s) == 0;
     case E_VARTYPE_LIST:
+      if (b->type != E_VARTYPE_LIST) return false;
       if (E_VAR_AS_LIST(a)->size != E_VAR_AS_LIST(b)->size) return false;
       for (size_t i = 0; i < E_VAR_AS_LIST(a)->size; i++) {
         if (!e_var_equal(&E_VAR_AS_LIST(a)->vars[i], &E_VAR_AS_LIST(b)->vars[i])) return false;
       }
       return true;
     case E_VARTYPE_MAP:
+      if (b->type != E_VARTYPE_MAP) return false;
+
       if (E_VAR_AS_MAP(a)->size != E_VAR_AS_MAP(b)->size) return false;
       for (u32 i = 0; i < E_VAR_AS_MAP(a)->size; i++) {
         if (!e_var_equal(&E_VAR_AS_MAP(a)->keys[i], &E_VAR_AS_MAP(b)->keys[i])) return false;
@@ -305,4 +315,14 @@ e_var_equal(const e_var* a, const e_var* b)
       return true;
   }
   return false;
+}
+
+e_var
+e_make_var_from_string(char* s)
+{
+  if (!s) { return (e_var){ .type = E_VARTYPE_NULL }; }
+  e_var ret                = { .type = E_VARTYPE_STRING };
+  ret.val.s                = e_refdobj_pool_acquire(&ge_pool);
+  E_VAR_AS_STRING(&ret)->s = s; // we just allocated
+  return ret;
 }

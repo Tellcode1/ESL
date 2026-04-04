@@ -26,6 +26,7 @@
 
 #include "cerr.h"
 #include "stdafx.h"
+#include "strint.h"
 
 #include <ctype.h>
 #include <stdarg.h>
@@ -154,7 +155,7 @@ _lexerror(const char* scriptfile, int script_line, int script_col, const char* t
 
   va_end(ap);
 }
-#define lexerror(...) _lexerror(advertised_file, line, col, __FILE__, __LINE__, __VA_ARGS__)
+#define lexerror(line, col, ...) _lexerror(advertised_file, line, col, __FILE__, __LINE__, __VA_ARGS__)
 
 /**
  * strndup is POSIX extension.
@@ -166,13 +167,14 @@ _strndup(const char* s, size_t n)
   size_t cp = MIN(l, n);
 
   char* new = malloc(cp + 1);
-  strlcpy(new, s, cp + 1);
+  strncpy(new, s, cp);
+  new[cp] = 0;
 
   return new;
 }
 
 int
-e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u32* ntoks)
+e_tokenize(const char* input, const char* advertised_file, e_str_interner* interner, e_token** outtoks, u32* ntoks)
 {
   int         e = 0;
   const char* s = input;
@@ -183,6 +185,8 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
   struct tklist toks;
   e = tklist_init(128, &toks);
   if (e) { return e; }
+
+  const char* interned_filename = e_str_intern(advertised_file, interner);
 
   while (*s) {
     while (isspace(*s) || *s == '\n') { advance(s, line, col); }
@@ -197,7 +201,7 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
     if (!*s) break;
 
 #if !E_LEX_NO_SPAN
-    const struct e_filespan span = { .file = strdup(advertised_file), .line = line, .col = col };
+    const struct e_filespan span = { .file = interned_filename, .line = line, .col = col };
 #endif
     if (isdigit(*s)) {
       char* end = NULL;
@@ -205,7 +209,7 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
       double f = strtod(s, &end);
 
       if (end == s) {
-        lexerror("Invalid numeric literal\n");
+        lexerror(span.line, span.col, "Invalid numeric literal\n");
         goto err;
       }
 
@@ -236,8 +240,7 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
       u32 len = (u32)(s - snap);
 
       e_token tk = { 0 };
-      /* TODO: Refactor. */
-      if (strncmp(snap, "fn", len) == 0) {
+      if (len == strlen("fn") && strncmp(snap, "fn", len) == 0) {
         tk = (e_token){ .type = E_TOKEN_TYPE_FN, .span = SPAN };
       } else if (len == strlen("let") && strncmp(snap, "let", len) == 0) {
         tk = (e_token){ .type = E_TOKEN_TYPE_LET, .span = SPAN };
@@ -270,6 +273,9 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
       }
       tklist_append(&toks, &tk);
     } else if (*s == '"') {
+      const int line_snap = line;
+      const int col_snap  = col;
+
       advance(s, line, col);
 
       const char* snap = s;
@@ -277,7 +283,7 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
 
       // reached end of file
       if (!*s || *s == '\n' || *s == '\r') {
-        lexerror("Unterminated string literal\n");
+        lexerror(line_snap, col_snap, "Unterminated string literal\n");
         goto err;
       }
 
@@ -343,7 +349,7 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
           case '!': type = E_TOKEN_TYPE_NOTEQUAL; break;
           case '<': type = E_TOKEN_TYPE_LTE; break;
           case '>': type = E_TOKEN_TYPE_GTE; break;
-          default: lexerror("Unrecognized sequence or character\n"); goto err;
+          default: lexerror(line, col, "Unrecognized sequence or character\n"); goto err;
         }
         advance(s, line, col);
         advance(s, line, col);
@@ -409,7 +415,7 @@ e_tokenize(const char* input, const char* advertised_file, e_token** outtoks, u3
           case '(': type = E_TOKEN_TYPE_OPENPAREN; break;
           case ')': type = E_TOKEN_TYPE_CLOSEPAREN; break;
 
-          default: lexerror("Unrecognized sequence or character\n"); goto err;
+          default: lexerror(line, col, "Unrecognized sequence or character\n"); goto err;
         }
         advance(s, line, col);
       }
@@ -441,7 +447,6 @@ e_freetoks(e_token* toks, u32 ntoks)
 {
   for (u32 i = 0; i < ntoks; i++) {
     if (toks[i].type == E_TOKEN_TYPE_STRING || toks[i].type == E_TOKEN_TYPE_IDENT) { free(toks[i].val.s); }
-    free(toks[i].span.file);
   }
   free(toks);
 }

@@ -27,6 +27,7 @@
 #include "arena.h"
 #include "cerr.h"
 #include "lex.h"
+#include "strint.h"
 
 #include <error.h>
 #include <stdarg.h>
@@ -62,7 +63,7 @@ static inline e_filespan
 clonespan(e_ast* a, e_filespan s)
 {
   e_filespan dup = {
-    .file = e_arnstrdup(a->arena, s.file),
+    .file = (char*)e_str_intern(s.file, a->interner),
     .line = s.line,
     .col  = s.col,
   };
@@ -117,13 +118,13 @@ parse_braces(e_ast* p, int** outstmts, u32* outnstmts)
 {
   u32  capacity = 16;
   u32  nstmts   = 0;
-  int* stmts    = e_arnalloc(p->arena, sizeof(int) * capacity);
+  int* stmts    = calloc(sizeof(int), capacity);
   if (!stmts) goto err;
 
   while (peek(p) != nullptr && peek(p)->type != E_TOKEN_TYPE_CLOSEBRACE) {
     if (nstmts + 1 >= capacity) {
       u32  newcap   = MAX(capacity * 2, 1);
-      int* newstmts = e_arnrealloc(p->arena, stmts, sizeof(int) * newcap);
+      int* newstmts = realloc(stmts, sizeof(int) * newcap);
       if (!newstmts) { goto err; }
 
       stmts    = newstmts;
@@ -155,7 +156,11 @@ parse_braces(e_ast* p, int** outstmts, u32* outnstmts)
   }
 
   if (e_ast_expect(p, E_TOKEN_TYPE_CLOSEBRACE)) {
-    asterror(prev(p)->span, "Expected closing brace '}' [braced statement list]\n");
+    // clang-format off
+    asterror(
+      prev(p)->span,
+      "Expected closing brace '}' [braced statement list]\n");
+    // clang-format on
     goto err;
   }
 
@@ -199,7 +204,7 @@ parse_body(e_ast* p, int** outstmts, u32* outnstmts)
   }
   // Single line expressions ending with a semi colon.
   else {
-    stmts = e_arnalloc(p->arena, sizeof(int));
+    stmts = calloc(1, sizeof(int));
     if (!stmts) goto err;
 
     e_filespan prev_span = peek(p)->span;
@@ -232,6 +237,7 @@ int
 e_ast_expect(e_ast* p, e_token_type type)
 {
   // printf("%s\n", e_token_type_to_string(peek(p)->type));
+  if (!peek(p)) return 1;
   return next(p)->type == type ? 0 : 1;
 }
 
@@ -270,10 +276,10 @@ parse_variable_decleration(e_ast* ast, bool is_const, int node)
 {
   if (node < 0) return node;
 
-  u32   capacity = 4;
-  u32   ndecls   = 0;
-  int*  decls    = e_arnalloc(ast->arena, sizeof(int) * capacity);
-  char* name     = nullptr;
+  u32         capacity = 16;
+  u32         ndecls   = 0;
+  int*        decls    = calloc(sizeof(int), capacity);
+  const char* name     = nullptr;
   if (!decls) goto err;
 
   while (true) {
@@ -288,7 +294,7 @@ parse_variable_decleration(e_ast* ast, bool is_const, int node)
     int decl_node = e_ast_make_node(ast);
     if (decl_node < 0) goto err;
 
-    name = e_arnstrdup(ast->arena, name_tk->val.s);
+    name = e_str_intern(name_tk->val.s, ast->interner);
     if (!name) goto err;
 
     E_GET_NODE(ast, decl_node)->type         = E_AST_NODE_VARIABLE_DECL;
@@ -311,7 +317,7 @@ parse_variable_decleration(e_ast* ast, bool is_const, int node)
 
     if (ndecls >= capacity) {
       u32  newcap = capacity * 2;
-      int* tmp    = e_arnrealloc(ast->arena, decls, sizeof(int) * newcap);
+      int* tmp    = realloc(decls, sizeof(int) * newcap);
       if (!tmp) goto err;
       decls    = tmp;
       capacity = newcap;
@@ -341,7 +347,7 @@ parse_variable_decleration(e_ast* ast, bool is_const, int node)
     src->let.span.file = NULL;
     src->type          = E_AST_NODE_NOP;
 
-    // free(decls);
+    free(decls);
 
     return node;
   }
@@ -363,7 +369,7 @@ parse_if(e_ast* p, int node)
 
   u32        cap_else_ifs = 4;
   u32        num_else_ifs = 0;
-  e_if_stmt* else_ifs     = e_arnalloc(p->arena, sizeof(e_if_stmt) * cap_else_ifs);
+  e_if_stmt* else_ifs     = calloc(sizeof(e_if_stmt), cap_else_ifs);
 
   int* body   = nullptr;
   u32  nstmts = 0;
@@ -416,7 +422,7 @@ parse_if(e_ast* p, int node)
 
         if (num_else_ifs >= cap_else_ifs) {
           u32        newcap           = MAX(cap_else_ifs * 2, 1);
-          e_if_stmt* new_else_ifs     = e_arnrealloc(p->arena, else_ifs, sizeof(e_if_stmt) * newcap);
+          e_if_stmt* new_else_ifs     = realloc(else_ifs, sizeof(e_if_stmt) * newcap);
           u32        new_cap_else_ifs = newcap;
           if (!new_else_ifs) goto err;
 
@@ -531,7 +537,7 @@ parse_for(e_ast* p, int node)
 
   u32  niterators = 0;
   u32  capacity   = 8;
-  int* iterators  = e_arnalloc(p->arena, capacity * sizeof(int));
+  int* iterators  = calloc(capacity, sizeof(int));
 
   // (
   if (e_ast_expect(p, E_TOKEN_TYPE_OPENPAREN)) {
@@ -584,7 +590,7 @@ parse_for(e_ast* p, int node)
     while (true) {
       if (niterators >= capacity) {
         u32  new_capacity  = capacity * 2;
-        int* new_iterators = e_arnrealloc(p->arena, iterators, new_capacity * sizeof(int));
+        int* new_iterators = realloc(iterators, new_capacity * sizeof(int));
 
         if (!new_iterators) { goto err; }
 
@@ -640,14 +646,14 @@ parse_function(e_ast* p, bool external, int node)
 {
   if (node < 0) return node;
 
-  u32      names_capacity = 0;
-  u32      arg_names_size = 0;
-  char**   arg_names      = nullptr;
-  char*    function_name  = nullptr;
-  char*    arg_name       = nullptr;
-  e_token* name_tk        = nullptr;
-  int*     stmts          = nullptr;
-  u32      nstmts         = 0;
+  u32         names_capacity = 0;
+  u32         arg_names_size = 0;
+  char**      arg_names      = nullptr;
+  const char* function_name  = nullptr;
+  char*       arg_name       = nullptr;
+  e_token*    name_tk        = nullptr;
+  int*        stmts          = nullptr;
+  u32         nstmts         = 0;
 
   name_tk = peek(p);
   if (e_ast_expect(p, E_TOKEN_TYPE_IDENT)) {
@@ -660,11 +666,11 @@ parse_function(e_ast* p, bool external, int node)
     goto err;
   }
 
-  function_name = e_arnstrdup(p->arena, name_tk->val.ident);
+  function_name = e_str_intern(name_tk->val.ident, p->interner);
 
-  names_capacity = 32; // NON ZERO
+  names_capacity = 8; // NON ZERO
   arg_names_size = 0;
-  arg_names      = e_arnalloc(p->arena, sizeof(char*) * names_capacity);
+  arg_names      = calloc(sizeof(char*), names_capacity);
 
   while (peek(p) && peek(p)->type != E_TOKEN_TYPE_CLOSEPAREN) {
     e_token* tk = peek(p);
@@ -676,7 +682,7 @@ parse_function(e_ast* p, bool external, int node)
 
     if (arg_names_size >= names_capacity) {
       u32    new_capacity = names_capacity * 2;
-      char** new_names    = e_arnrealloc(p->arena, arg_names, sizeof(char*) * new_capacity);
+      char** new_names    = realloc(arg_names, sizeof(char*) * new_capacity);
 
       if (!new_names) {
         asterror(peek(p)->span, "Allocation error! [function header]\n");
@@ -687,7 +693,7 @@ parse_function(e_ast* p, bool external, int node)
       names_capacity = new_capacity;
     }
 
-    arg_name = e_arnstrdup(p->arena, tk->val.ident);
+    arg_name = strdup(tk->val.ident);
     if (!arg_name) {
       asterror(peek(p)->span, "Alloc error [function argument name]\n");
       goto err;
@@ -739,10 +745,11 @@ err:
 static int
 parse_function_call(e_ast* p, e_token* tk, int node)
 {
-  u32   capacity  = 4;
-  u32   nargs     = 0;
-  int*  args      = e_arnalloc(p->arena, capacity * sizeof(int)); // argument nodes
-  char* func_name = e_arnstrdup(p->arena, tk->val.ident);
+  u32  capacity = 16;
+  u32  nargs    = 0;
+  int* args     = calloc(capacity, sizeof(int)); // argument nodes
+
+  const char* func_name = e_str_intern(tk->val.ident, p->interner);
 
   if (!func_name || !args) goto err;
 
@@ -759,7 +766,7 @@ parse_function_call(e_ast* p, e_token* tk, int node)
   while (peek(p) && peek(p)->type != E_TOKEN_TYPE_CLOSEPAREN) {
     if (nargs >= capacity) {
       u32  newcap       = MAX(capacity * 2, 1);
-      int* new_args     = e_arnrealloc(p->arena, args, newcap * sizeof(int));
+      int* new_args     = realloc(args, newcap * sizeof(int));
       u32  new_capacity = newcap;
 
       if (new_args == nullptr) goto err;
@@ -816,7 +823,7 @@ make_literal_node(e_ast* p, int node, const e_token* tk)
     nodep->c.c  = tk->val.c;
   } else if (tk->type == E_TOKEN_TYPE_STRING) {
     nodep->type = E_AST_NODE_STRING;
-    nodep->s.s  = e_arnstrdup(p->arena, tk->val.s);
+    nodep->s.s  = strdup(tk->val.s);
     if (!nodep->s.s) return -1;
   }
   return node;
@@ -825,16 +832,16 @@ make_literal_node(e_ast* p, int node, const e_token* tk)
 static int
 parse_list(e_ast* p, int node)
 {
-  u32  capelems = 8;
+  u32  capelems = 16;
   u32  nelems   = 0;
-  int* elems    = e_arnalloc(p->arena, sizeof(int) * capelems);
+  int* elems    = calloc(sizeof(int), capelems);
 
   while (peek(p) && peek(p)->type != E_TOKEN_TYPE_CLOSEBRACKET) {
     int elem = e_ast_expr(p, 0);
 
     if (nelems >= capelems) {
       u32  new_cap   = MAX(capelems * 2, 1);
-      int* new_elems = e_arnrealloc(p->arena, elems, new_cap * sizeof(int));
+      int* new_elems = realloc(elems, new_cap * sizeof(int));
       if (!new_elems) { goto err; }
 
       elems    = new_elems;
@@ -863,7 +870,7 @@ parse_list(e_ast* p, int node)
   return node;
 
 err:
-  // free(elems);
+  free(elems);
   return -1;
 }
 
@@ -878,8 +885,8 @@ parse_map(e_ast* p, int node)
   u32 capacity = 8;
   u32 npairs   = 0;
 
-  int* keys   = e_arnalloc(p->arena, sizeof(int) * capacity);
-  int* values = e_arnalloc(p->arena, sizeof(int) * capacity);
+  int* keys   = malloc(sizeof(int) * capacity);
+  int* values = malloc(sizeof(int) * capacity);
 
   if (!keys || !values) return -1;
 
@@ -899,8 +906,8 @@ parse_map(e_ast* p, int node)
 
     if (npairs >= capacity) {
       u32 newcap = capacity * 2;
-      keys       = e_arnrealloc(p->arena, keys, sizeof(int) * newcap);
-      values     = e_arnrealloc(p->arena, values, sizeof(int) * newcap);
+      keys       = realloc(keys, sizeof(int) * newcap);
+      values     = realloc(values, sizeof(int) * newcap);
       capacity   = newcap;
     }
 
@@ -975,7 +982,7 @@ parse_namespace_decleration(e_ast* p, int node)
   }
 
   E_GET_NODE(p, node)->type                  = E_AST_NODE_NAMESPACE_DECL;
-  E_GET_NODE(p, node)->namespace_decl.name   = e_arnstrdup(p->arena, name_tk->val.ident);
+  E_GET_NODE(p, node)->namespace_decl.name   = e_str_intern(name_tk->val.ident, p->interner);
   E_GET_NODE(p, node)->namespace_decl.stmts  = stmts;
   E_GET_NODE(p, node)->namespace_decl.nstmts = nstmts;
 
@@ -985,9 +992,9 @@ parse_namespace_decleration(e_ast* p, int node)
 static int
 parse_namespace_call(e_ast* p, char* name, int node)
 {
-  u32  capacity = 4;
+  u32  capacity = 16;
   u32  nargs    = 0;
-  int* args     = e_arnalloc(p->arena, sizeof(int) * capacity);
+  int* args     = calloc(sizeof(int), capacity);
   if (!args) { return -1; }
 
   next(p); // '('
@@ -995,9 +1002,9 @@ parse_namespace_call(e_ast* p, char* name, int node)
   while (peek(p) && peek(p)->type != E_TOKEN_TYPE_CLOSEPAREN) {
     if (nargs >= capacity) {
       u32  newcap   = MAX(capacity * 2, 1);
-      int* new_args = e_arnrealloc(p->arena, args, sizeof(int) * newcap);
+      int* new_args = realloc(args, sizeof(int) * newcap);
       if (!new_args) {
-        // free(args);
+        free(args);
         return -1;
       }
       args     = new_args;
@@ -1010,7 +1017,7 @@ parse_namespace_call(e_ast* p, char* name, int node)
 
     if (e_ast_expect(p, E_TOKEN_TYPE_COMMA)) {
       asterror(prev(p)->span, "Expected ',' or ')' [qualified function call]\n");
-      // free(args);
+      free(args);
       return -1;
     }
   }
@@ -1018,7 +1025,7 @@ parse_namespace_call(e_ast* p, char* name, int node)
   next(p); // ')'
 
   E_GET_NODE(p, node)->type               = E_AST_NODE_CALL;
-  E_GET_NODE(p, node)->call.function_name = name;
+  E_GET_NODE(p, node)->call.function_name = e_str_intern(name, p->interner);
   E_GET_NODE(p, node)->call.args          = args;
   E_GET_NODE(p, node)->call.nargs         = nargs;
 
@@ -1044,23 +1051,28 @@ parse_namespace_access(e_ast* p, int leftidx, int node)
   }
 
   size_t len      = strlen(left->ident.ident) + strlen(ident->val.ident) + 3; // +2 for ::, 1 for \0
-  char*  fullname = e_arnalloc(p->arena, len);
+  char*  fullname = calloc(len, 1);
   if (!fullname) { return -1; }
 
   snprintf(fullname, len, "%s::%s", left->ident.ident, ident->val.ident);
 
+  const char* interned = e_str_intern(fullname, p->interner);
+
   // If function call
   if (peek(p) && peek(p)->type == E_TOKEN_TYPE_OPENPAREN) {
     if (parse_namespace_call(p, fullname, node) < 0) {
-      // free(fullname);
+      free(fullname);
       return -1;
     }
+    free(fullname);
     return node;
   }
 
   // just a namespaced variable.
   E_GET_NODE(p, node)->type        = E_AST_NODE_VARIABLE;
-  E_GET_NODE(p, node)->ident.ident = fullname;
+  E_GET_NODE(p, node)->ident.ident = interned;
+
+  free(fullname);
 
   return node;
 }
@@ -1108,7 +1120,7 @@ parse_struct_decleration(e_ast* p, int node)
   }
 
   E_GET_NODE(p, node)->type               = E_AST_NODE_STRUCT_DECL;
-  E_GET_NODE(p, node)->struct_decl.name   = e_arnstrdup(p->arena, name_tk->val.ident);
+  E_GET_NODE(p, node)->struct_decl.name   = e_str_intern(name_tk->val.ident, p->interner);
   E_GET_NODE(p, node)->struct_decl.stmts  = stmts;
   E_GET_NODE(p, node)->struct_decl.nstmts = nstmts;
 
@@ -1166,7 +1178,7 @@ e_ast_nud(e_ast* p, e_token* tk)
         return node;
       }
 
-      char* name = e_arnstrdup(p->arena, tk->val.ident);
+      const char* name = e_str_intern(tk->val.ident, p->interner);
       if (!name) goto err1;
 
       // Just a variable!
@@ -1177,8 +1189,6 @@ e_ast_nud(e_ast* p, e_token* tk)
       return node;
 
     err1:
-
-      // free(name);
       return -1;
     }
 
@@ -1370,7 +1380,6 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
         E_GET_NODE(p, node)->index_assign.value = rightidx;
 
         // we stole lefts' children, we don't want to recursively free it.
-        // free(E_GET_NODE(p, leftidx)->common.span.file);
         E_GET_NODE(p, leftidx)->common.span.file = NULL;
         E_GET_NODE(p, leftidx)->type             = E_AST_NODE_NOP;
 
@@ -1425,7 +1434,7 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
 
       E_GET_NODE(p, node)->type                = E_AST_NODE_MEMBER_ACCESS;
       E_GET_NODE(p, node)->member_access.left  = leftidx;
-      E_GET_NODE(p, node)->member_access.right = e_arnstrdup(p->arena, s);
+      E_GET_NODE(p, node)->member_access.right = e_str_intern(s, p->interner);
 
       return node;
     }
@@ -1502,7 +1511,6 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
         E_GET_NODE(p, node)->index_compound.index = E_GET_NODE(p, leftidx)->index.index;
         E_GET_NODE(p, node)->index_compound.value = right;
 
-        // free(E_GET_NODE(p, leftidx)->common.span.file);
         E_GET_NODE(p, leftidx)->type = E_AST_NODE_NOP;
 
         return node;
@@ -1532,11 +1540,12 @@ e_ast_parse(e_ast* p, int* out_root_node)
   u32  cap    = 16;
   u32  nstmts = 0;
   int  node   = -1;
-  int* stmts  = e_arnalloc(p->arena, cap * sizeof(int));
+  int* stmts  = calloc(cap, sizeof(int));
 
   int rootnode = e_ast_make_node(p);
   if (rootnode < 0) return -1;
 
+  p->root = rootnode;
   if (out_root_node) *out_root_node = rootnode;
 
   e_ast_get_node(p, rootnode)->type = E_AST_NODE_ROOT;
@@ -1569,11 +1578,8 @@ e_ast_parse(e_ast* p, int* out_root_node)
 
     if (nstmts >= cap) {
       u32  newcap   = MAX(cap * 2, 1);
-      int* newstmts = e_arnrealloc(p->arena, stmts, newcap * sizeof(int));
-      if (!newstmts) {
-        asterror(take_span, "e_arnrealloc p->arena, failed! Can not continue\n");
-        goto err;
-      }
+      int* newstmts = realloc(stmts, newcap * sizeof(int));
+      if (!newstmts) { goto err; }
       stmts = newstmts;
       cap   = newcap;
     }
@@ -1592,16 +1598,16 @@ err:
 }
 
 int
-e_ast_init(e_token* toks, u32 ntoks, e_arena* arena, e_ast* prsr)
+e_ast_init(e_token* toks, u32 ntoks, e_str_interner* interner, e_ast* prsr)
 {
   if (prsr) {
     const u32 init_nodes = 64;
 
     *prsr = (e_ast){
-      .nodes    = e_arnalloc(arena, sizeof(e_ast_node) * init_nodes),
+      .nodes    = calloc(sizeof(e_ast_node), init_nodes),
       .nnodes   = 0,
+      .interner = interner,
       .capacity = init_nodes,
-      .arena    = arena,
       .toks     = toks,
       .ntoks    = ntoks,
       .head     = 0,
@@ -1614,4 +1620,6 @@ e_ast_init(e_token* toks, u32 ntoks, e_arena* arena, e_ast* prsr)
 void
 e_ast_free(e_ast* prsr)
 {
+  e_ast_node_free(prsr, prsr->root);
+  free(prsr->nodes);
 }

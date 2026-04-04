@@ -28,6 +28,7 @@
 #include "arena.h"
 #include "cerr.h"
 #include "lex.h"
+#include "strint.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -165,19 +166,19 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    char*           s;
+    char*           s; // Allocated ; free after use
   } s;
 
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    char*           ident;
+    const char*     ident; /* interned string ; DO NOT FREE */
   } ident;
 
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    char*           name;
+    const char*     name;        /* interned string ; DO NOT FREE */
     int             initializer; // -1 if not given.
     bool            is_const;
   } let;
@@ -258,18 +259,20 @@ typedef union e_ast_node_val {
     e_ast_node_type type;
     e_filespan      span;
 
-    char* name;  // Namespace name
-    int*  stmts; // All statements in namespace
-    u32   nstmts;
+    /* interned string ; DO NOT FREE */
+    const char* name;  // Namespace name
+    int*        stmts; // All statements in namespace
+    u32         nstmts;
   } namespace_decl;
 
   struct {
     e_ast_node_type type;
     e_filespan      span;
 
-    char* name;  // structure name
-    int*  stmts; // All statements in structure decl
-    u32   nstmts;
+    /* interned string ; DO NOT FREE */
+    const char* name;  // structure name
+    int*        stmts; // All statements in structure decl
+    u32         nstmts;
   } struct_decl;
 
   struct {
@@ -283,13 +286,13 @@ typedef union e_ast_node_val {
     e_ast_node_type type;
     e_filespan      span;
     int             left;
-    char*           right;
+    const char*     right; /* interned string ; DO NOT FREE */
   } member_access;
 
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    char*           function_name;
+    const char*     function_name; /* interned string ; DO NOT FREE */
     int*            args;
     u32             nargs;
   } call;
@@ -297,7 +300,7 @@ typedef union e_ast_node_val {
   struct {
     e_ast_node_type type;
     e_filespan      span;
-    char*           name;
+    const char*     name;  /* interned string ; DO NOT FREE */
     char**          args;  // Allocated, + each string is allocated individually.
     int*            stmts; // Function body
     u32             nargs;
@@ -329,6 +332,8 @@ typedef union e_ast_node_val {
 typedef e_ast_node_val e_ast_node;
 
 typedef struct e_ast {
+  e_str_interner* interner;
+
   e_ast_node* nodes;
   u32         nnodes;
   u32         capacity;
@@ -337,16 +342,21 @@ typedef struct e_ast {
   u32      ntoks;
   u32      head;
 
-  e_arena* arena;
+  int root;
 } e_ast;
 
-int  e_ast_init(e_token* toks, u32 ntoks, e_arena* a, e_ast* prsr);
+int  e_ast_init(e_token* toks, u32 ntoks, e_str_interner* interner, e_ast* prsr);
 void e_ast_free(e_ast* prsr);
+
+/**
+ * Recursively free a node in the tree.
+ */
+void e_ast_node_free(e_ast* p, int node);
 
 static inline e_token*
 e_ast_next(struct e_ast* prsr)
 {
-  if (prsr->head >= prsr->ntoks) return NULL;
+  if (prsr->head > prsr->ntoks) return NULL;
   return &prsr->toks[prsr->head++];
 }
 static inline e_token*
@@ -358,8 +368,8 @@ e_ast_peek(const struct e_ast* prsr)
 static inline e_token*
 e_ast_prev(const struct e_ast* prsr)
 {
-  if (prsr->head >= prsr->ntoks || prsr->head == 0) return NULL;
-  return &prsr->toks[prsr->head - 2];
+  if (prsr->head > prsr->ntoks || prsr->head == 0) return NULL;
+  return &prsr->toks[prsr->head - 1];
 }
 
 static inline bool
@@ -473,7 +483,7 @@ e_ast_make_node(e_ast* p)
 {
   if (p->nnodes + 1 >= p->capacity) {
     u32         newcap   = MAX(p->capacity * 2, 1);
-    e_ast_node* newnodes = (e_ast_node*)e_arnrealloc(p->arena, p->nodes, newcap * sizeof(e_ast_node));
+    e_ast_node* newnodes = (e_ast_node*)realloc(p->nodes, newcap * sizeof(e_ast_node));
     if (newnodes == NULL) {
       perror("Allocation failed");
       return -1;

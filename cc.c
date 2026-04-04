@@ -208,7 +208,7 @@ define_and_emit_label(e_compiler* cc, u32 label_id)
 static inline int
 compiler_make_fork(const e_compiler* old_c, e_compiler* new_c)
 {
-  const u32 init_code_capacity = 256;
+  const u32 init_code_capacity = 512;
   *new_c                       = (e_compiler){
     .arena             = old_c->arena,
     .ast               = old_c->ast,
@@ -221,7 +221,7 @@ compiler_make_fork(const e_compiler* old_c, e_compiler* new_c)
     .next_label        = old_c->next_label,
     .ns                = old_c->ns,
     .stack             = old_c->stack,
-    .emit              = (u8*)e_arnalloc(old_c->arena, init_code_capacity),
+    .emit              = (u8*)malloc(init_code_capacity),
     .num_bytes_emitted = 0,
     .emit_capacity     = init_code_capacity,
   };
@@ -861,16 +861,20 @@ compile_function_call(struct e_compiler* cc, int node)
           func->min_args,
           func->max_args,
           nargs);
+      fprintf(stderr, "[%s:%i] Builtin function is declared as: %s : %s\n", __FILE__, __LINE__, func->signature, func->desc);
       return -1;
     }
   }
   // Find the function (user defined) and check if the argument count matches
   else {
+    // bool found = false;
+
     e_function*         func       = nullptr;
     ecc_function_table* func_table = cc->function_table;
     for (u32 i = 0; i < func_table->functions_count; i++) {
       if (func_table->functions[i].name_hash == hash) {
         func = &func_table->functions[i];
+        // found = true;
         break;
       }
     }
@@ -884,6 +888,8 @@ compile_function_call(struct e_compiler* cc, int node)
           nargs);
       return -1;
     }
+
+    // if (!found) { printf("Function %s not defined\n", function_name); }
   }
 
   e_emit_instruction(cc, E_OPCODE_CALL);                 // 2 bytes
@@ -981,14 +987,6 @@ compile_if_statement(struct e_compiler* cc, int node)
 static int
 compile_while_statement(struct e_compiler* cc, int node)
 {
-  /**
-   * Push frame for the stack
-   */
-  e_stack_push_frame(cc->stack);
-
-  /* Push a new scope */
-  e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES);
-
   /* Computes the condition and jumps to the end label (breaks) if condition is false */
   const u32 pre_condition_label = make_label_id(cc);
 
@@ -1016,17 +1014,19 @@ compile_while_statement(struct e_compiler* cc, int node)
   // Break out of loop if condition is false.
   emit_and_record_jmp(cc, E_OPCODE_JZ, end_label);
 
+  /**
+   * Push frame for the stack
+   */
+  e_stack_push_frame(cc->stack);
+
+  /* Push a new scope */
+  e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES);
+
   // WHILE BODY
   for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->while_stmt.nstmts; i++) {
     e = compile(cc, E_GET_NODE(cc->ast, node)->while_stmt.stmts[i]);
     if (e) return e;
   }
-
-  /* Jump to condition, body is done executing */
-  emit_and_record_jmp(cc, E_OPCODE_JMP, pre_condition_label);
-
-  // End label.
-  define_and_emit_label(cc, end_label);
 
   // Pop the scope
   e_emit_instruction(cc, E_OPCODE_POP_VARIABLES);
@@ -1035,6 +1035,12 @@ compile_while_statement(struct e_compiler* cc, int node)
    * Pop frame for the stack
    */
   e_stack_pop_frame(cc->stack);
+
+  /* Jump to condition, body is done executing */
+  emit_and_record_jmp(cc, E_OPCODE_JMP, pre_condition_label);
+
+  // End label.
+  define_and_emit_label(cc, end_label);
 
   // swap the old loop metadata back in
   cc->loop = last;
@@ -1652,7 +1658,7 @@ e_compile(const ecc_info* info, e_compilation_result* result)
   e_arena fallback             = { 0 };
   bool    using_fallback_arena = false;
   if (!info->arena) {
-    if (e_arena_init(4, &fallback)) return -1;
+    if (e_arena_init(1, &fallback)) return -1;
     arena                = &fallback;
     using_fallback_arena = true;
   }
@@ -1706,7 +1712,7 @@ e_compile(const ecc_info* info, e_compilation_result* result)
     .builtin_var_table = &builtin_var_table,
     .function_table    = &func_table,
     .label_table       = &label_table,
-    .emit              = (u8*)e_arnalloc(arena, init_code_capacity),
+    .emit              = (u8*)malloc(init_code_capacity),
     .num_bytes_emitted = 0,
     .emit_capacity     = init_code_capacity,
   };

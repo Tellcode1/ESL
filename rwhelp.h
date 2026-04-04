@@ -226,14 +226,14 @@ e_file_write(const e_compilation_result* r, FILE* f)
 static inline void
 e_compilation_result_free(e_compilation_result* r)
 {
-  // for (u32 i = 0; i < r->nfunctions; i++) {
-  //   free(r->functions[i].code);
-  //   free(r->functions[i].arg_slots);
-  // }
+  for (u32 i = 0; i < r->nfunctions; i++) {
+    free(r->functions[i].code);
+    // free(r->functions[i].arg_slots);
+  }
   // free(r->functions);
   // for (u32 i = 0; i < r->nliterals; i++) { e_var_free(&r->literals[i]); }
   // free(r->literals);
-  // free(r->instructions);
+  free(r->instructions);
 }
 
 #endif // E_BYTECODE_STREAM_READ_WRITE_HELP_H

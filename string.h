@@ -25,8 +25,11 @@
 #ifndef E_STRING_H
 #define E_STRING_H
 
+#include "var.h"
 typedef struct e_string {
   char* s;
 } e_string;
+
+e_var make_var_from_string(char* s);
 
 #endif // E_STRING_H

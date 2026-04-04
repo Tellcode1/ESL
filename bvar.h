@@ -43,6 +43,15 @@ typedef struct e_builtin_var {
   e_varval    value;
 } e_builtin_var;
 
+typedef enum eb_io_constants {
+  EB_IO_REL_TO_START,
+  EB_IO_REL_TO_CURR,
+  EB_IO_REL_TO_END,
+  EB_IO_STDOUT,
+  EB_IO_STDIN,
+  EB_IO_STDERR,
+} eb_io_constants;
+
 /**
  * List is not checked for conflicting entries!
  * All variables must have constant, compile time (literal) values.
@@ -67,6 +76,13 @@ static const e_builtin_var eb_vars[] = {
 
   { .name = "float::MAX", .type = E_VARTYPE_FLOAT, .value = { .f = DBL_MAX } },
   { .name = "float::MIN", .type = E_VARTYPE_FLOAT, .value = { .f = DBL_MIN } },
+
+  { .name = "io::STDOUT", .type = E_VARTYPE_INT, .value = { .i = EB_IO_STDOUT } },
+  { .name = "io::STDIN", .type = E_VARTYPE_INT, .value = { .i = EB_IO_STDIN } },
+  { .name = "io::STDERR", .type = E_VARTYPE_INT, .value = { .i = EB_IO_STDERR } },
+  { .name = "io::REL_TO_START", .type = E_VARTYPE_INT, .value = { .i = EB_IO_REL_TO_START } },
+  { .name = "io::REL_TO_CURR", .type = E_VARTYPE_INT, .value = { .i = EB_IO_REL_TO_CURR } },
+  { .name = "io::REL_TO_END", .type = E_VARTYPE_INT, .value = { .i = EB_IO_REL_TO_END } },
 
   { .name = "fs::FILE", .type = E_VARTYPE_INT, .value = { .i = 0 } },
   { .name = "fs::LINK", .type = E_VARTYPE_INT, .value = { .i = 1 } },

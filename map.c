@@ -24,6 +24,8 @@
 
 #include "map.h"
 
+#include "list.h"
+#include "pool.h"
 #include "var.h"
 
 int
@@ -115,4 +117,44 @@ e_map_find_or_insert(e_map* map, struct e_var* key)
   map->size++;
 
   return ptr;
+}
+
+struct e_var
+e_map_keys(const e_map* map)
+{
+  e_list l;
+  e_list_init(NULL, 0, &l);
+
+  for (u32 i = 0; i < map->size; i++) {
+    e_var_acquire(&map->keys[i]);
+    e_list_append(&map->keys[i], &l);
+  }
+
+  e_var v = {
+    .type     = E_VARTYPE_LIST,
+    .val.list = e_refdobj_pool_acquire(&ge_pool),
+  };
+  memcpy(v.val.list, &l, sizeof(e_list));
+
+  return v;
+}
+
+struct e_var
+e_map_values(const e_map* map)
+{
+  e_list l;
+  e_list_init(NULL, 0, &l);
+
+  for (u32 i = 0; i < map->size; i++) {
+    e_var_acquire(&map->vals[i]);
+    e_list_append(&map->vals[i], &l);
+  }
+
+  e_var v = {
+    .type     = E_VARTYPE_LIST,
+    .val.list = e_refdobj_pool_acquire(&ge_pool),
+  };
+  memcpy(v.val.list, &l, sizeof(e_list));
+
+  return v;
 }

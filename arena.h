@@ -33,7 +33,13 @@
 /**
  * Minimum size of memory block that is allocated.
  */
-#define E_PAGE_SIZE (4096 * 4)
+#define E_PAGE_SIZE (64 * 1024)
+
+/**
+ * Minimum bytes that memory allocated is aligned to.
+ * Applies both to malloc and realloc.
+ */
+#define E_MEMALIGN 8
 
 /* Data is (uchar*)&page + sizeof(size_t) */
 typedef struct e_arena_page {
@@ -46,6 +52,13 @@ typedef struct e_arena {
   struct e_arena_page* root;
   struct e_arena_page* current;
 } e_arena;
+
+static inline uintptr_t
+align_up(uintptr_t data, size_t alignment)
+{
+  if (data % alignment == 0) return data;
+  return ((data + alignment - 1) & ~(alignment - 1));
+}
 
 static inline int
 e__create_and_link_page(size_t size, e_arena* arena)
@@ -90,6 +103,7 @@ static inline void*
 e_arnalloc(e_arena* a, size_t size)
 {
   size_t total = size + sizeof(size_t);
+  total        = align_up(total, E_MEMALIGN);
 
   /* can't fit in regular page. */
   if (total > (E_PAGE_SIZE - sizeof(e_arena_page))) {
@@ -102,17 +116,24 @@ e_arnalloc(e_arena* a, size_t size)
     uchar* data = (uchar*)page + sizeof(*page);
     memcpy(data, &size, sizeof(size));
 
-    return data + sizeof(size);
+    void* p = (void*)align_up((uintptr_t)(data + sizeof(size)), E_MEMALIGN);
+    if ((uintptr_t)p % E_MEMALIGN != 0) abort();
+    return p;
   }
 
   /**
    * Page with enough capacity.
    */
-  e_arena_page* fits = a->current;
+  e_arena_page* fits = a->root;
+  while (fits != nullptr) {
+    if ((fits->size - fits->head) >= total) break;
+    fits = fits->next;
+  }
 
-  // If current page doesn't meet our requirements,
+  // If current pages doesn't meet our requirements,
   // Create an link a new one
-  if (fits == nullptr || (fits->size - fits->head) < total) {
+
+  if (fits == nullptr) {
     e__create_and_link_page(E_PAGE_SIZE, a);
     fits = a->current;
   }
@@ -123,7 +144,9 @@ e_arnalloc(e_arena* a, size_t size)
   memcpy(data, &size, sizeof(size));
 
   // And return the pointer after it.
-  void* ptr = data + sizeof(size);
+  void* ptr = (void*)align_up((uintptr_t)data + sizeof(size), E_MEMALIGN);
+  if ((uintptr_t)ptr % E_MEMALIGN != 0) abort();
+
   fits->head += total;
 
   /**
@@ -136,7 +159,6 @@ e_arnalloc(e_arena* a, size_t size)
    *
    * Causing more problems than fixing! Removed it.
    */
-  // if ((float)fits->head / (float)fits->size >= E_EARLY_ALLOCATION_THRESHOLD) { e__create_and_link_page(E_PAGE_SIZE, a); }
 
   return ptr;
 }
@@ -164,7 +186,7 @@ e_arnstrdup(e_arena* arena, const char* s)
   if (s != nullptr) {
     size_t l = strlen(s);
     new_s    = (char*)e_arnalloc(arena, l + 1);
-    strlcpy(new_s, s, l + 1);
+    strncpy(new_s, s, l);
     new_s[l] = 0;
   }
   return new_s;

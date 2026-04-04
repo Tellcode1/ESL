@@ -30,6 +30,7 @@
 #include "lex.h"
 #include "pool.h"
 #include "rwhelp.h"
+#include "strint.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -52,6 +53,8 @@ main(int argc, char* argv[])
   char*                contents       = NULL;
 
   if (e_refdobj_pool_init(16, &ge_pool)) return -1;
+  e_str_interner interner;
+  if (e_str_interner_init(256, &interner)) return -1;
 
   const char* out = NULL;
   for (int i = 0; i < argc; i++) {
@@ -86,14 +89,14 @@ main(int argc, char* argv[])
   }
 
   e_arena arena = { 0 };
-  int     e     = e_arena_init(4, &arena);
+  int     e     = e_arena_init(1, &arena);
   if (e) {
     /* TODO Add flag to reducce memory allocations? */
     fprintf(stderr, "ec: Failed to initialize arena\n");
     goto err;
   }
 
-  e = e_tokenize(contents, in, &tokens, &ntoks);
+  e = e_tokenize(contents, in, &interner, &tokens, &ntoks);
   if (e) {
     fprintf(stderr, "ec: Failed to tokenize input string\n");
     goto err;
@@ -107,7 +110,7 @@ main(int argc, char* argv[])
     fputc('\n', stdout);
   }
 
-  e = e_ast_init(tokens, ntoks, &arena, &ast);
+  e = e_ast_init(tokens, ntoks, &interner, &ast);
   if (e) {
     fprintf(stderr, "ec: AST initialization failed\n");
     goto err;
@@ -156,6 +159,8 @@ main(int argc, char* argv[])
   e_ast_free(&ast);
 
   e_freetoks(tokens, ntoks);
+
+  e_str_interner_free(&interner);
 
   e_refdobj_pool_free(&ge_pool);
 

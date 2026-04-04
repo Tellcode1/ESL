@@ -43,4 +43,14 @@ void e_map_free(e_map* map);
 struct e_var* e_map_find(e_map* map, const struct e_var* key);
 struct e_var* e_map_find_or_insert(e_map* map, struct e_var* key);
 
+/**
+ * Get all the keys as a list
+ */
+struct e_var e_map_keys(const e_map* map);
+
+/**
+ * Get all the values as a list
+ */
+struct e_var e_map_values(const e_map* map);
+
 #endif // E_MAP_H

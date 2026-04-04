@@ -76,13 +76,63 @@ typedef int16_t  i16;
 typedef int32_t  i32;
 typedef int64_t  i64;
 
+static inline u32
+e_hash_fnv(const void* data, size_t size)
+{
+  const uchar* current = (const uchar*)data;
+
+  u32 hash = 2166136261U;
+  for (size_t i = 0; i < size; ++i) {
+    hash ^= current[i];
+    hash *= 16777619U;
+  }
+
+  return hash;
+}
+
 // static inline void*
 // allocator_callback(const char* file, size_t line, size_t size)
 // {
 //   printf("[%s:%zu] %zu bytes allocated\n", file, line, size);
-//   return malloc(size);
+//   memory_usage += size;
+//   return calloc(size, 1);
 // }
-// #define malloc(size) allocator_callback(__FILE__, __LINE__, size)
+// #define calloc(size, n) allocator_callback(__FILE__, __LINE__, (size) * (n))
+// #define malloc(size) allocator_callback(__FILE__, __LINE__, (size))
+
+static inline size_t
+_strlcat(char* d, const char* s, size_t dsize)
+{
+  size_t dl = strlen(d);
+  size_t sl = strlen(s);
+  size_t i;
+
+  if (dsize <= dl) { return dsize + sl; }
+
+  for (i = 0; i < sl && (dl + i) < dsize - 1; i++) { d[dl + i] = s[i]; }
+  d[dl + i] = 0;
+
+  return dl + sl;
+}
+
+static inline char*
+_strlpcat(char* d, const char* s, const char* dabs, size_t dsize)
+{
+  size_t off = d - dabs;
+  if (off >= dsize) return d;
+  dsize -= off;
+
+  size_t dl = strlen(d);
+  size_t sl = strlen(s);
+  size_t i;
+
+  if (dsize <= dl) { return d; }
+
+  for (i = 0; i < sl && (dl + i) < dsize - 1; i++) { d[dl + i] = s[i]; }
+  d[dl + i] = 0;
+
+  return &d[dl + i];
+}
 
 static inline char*
 read_file(const char* path, u64* size)

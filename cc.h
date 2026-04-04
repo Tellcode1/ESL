@@ -212,7 +212,7 @@ ecc_stream_resize(e_compiler* cc, int new_cap)
 {
   if (cc == nullptr || new_cap == 0) return;
 
-  u8* newcode = (u8*)e_arnrealloc(cc->arena, cc->emit, sizeof(u8) * new_cap);
+  u8* newcode = (u8*)realloc(cc->emit, sizeof(u8) * new_cap);
   if (newcode == nullptr) { return; }
 
   cc->emit          = newcode;

@@ -29,30 +29,44 @@
 
 #include <stdlib.h>
 
-static inline double
-to_float(e_var v)
+char*
+e_read_full_line(FILE* fp)
 {
-  switch (v.type) {
-    case E_VARTYPE_NULL: return 0.0;
-    case E_VARTYPE_FLOAT: return v.val.f;
-    case E_VARTYPE_INT: return (double)v.val.i;
-    case E_VARTYPE_CHAR: return (double)v.val.c;
-    case E_VARTYPE_BOOL: return (double)v.val.b;
-    default: return 0.0;
-  }
-}
+  size_t size = 128;
+  char*  line = (char*)malloc(size);
+  line[0]     = 0;
 
-static inline int
-to_int(e_var v)
-{
-  switch (v.type) {
-    case E_VARTYPE_NULL: return 0;
-    case E_VARTYPE_INT: return v.val.i;
-    case E_VARTYPE_FLOAT: return (int)v.val.f;
-    case E_VARTYPE_CHAR: return (int)v.val.c;
-    case E_VARTYPE_BOOL: return (int)v.val.b;
-    default: return 0;
+  if (line == nullptr) return NULL;
+
+  char tmp[128] = { 0 };
+
+  while (fgets(tmp, sizeof(tmp), fp) != nullptr) {
+    size_t tmp_len = strlen(tmp);
+    size_t cur_len = strlen(line);
+
+    if (cur_len + tmp_len + 1 > size) {
+      size *= 2;
+      char* new_line = (char*)realloc(line, size);
+      if (new_line == nullptr) {
+        free(line);
+        return NULL;
+      }
+      line = new_line;
+    }
+
+    strcat(line, tmp);
+
+    if (tmp[tmp_len - 1] == '\n') {
+      tmp[tmp_len - 1] = 0;
+      break;
+    }
   }
+
+  if (strlen(line) == 0) {
+    free(line);
+    return NULL;
+  }
+  return line;
 }
 
 e_var
@@ -63,31 +77,39 @@ eb_print(e_var* args, u32 nargs)
 }
 
 e_var
+eb_readln(e_var* args, u32 nargs)
+{
+  (void)args;
+  (void)nargs;
+  return e_make_var_from_string(e_read_full_line(stdin));
+}
+
+e_var
 eb_cast_int(e_var* args, u32 nargs)
 {
   (void)nargs;
-  return (e_var){ .type = E_VARTYPE_INT, .val.i = to_int(args[0]) };
+  return (e_var){ .type = E_VARTYPE_INT, .val.i = evar_to_int(args[0]) };
 }
 
 e_var
 eb_cast_char(e_var* args, u32 nargs)
 {
   (void)nargs;
-  return (e_var){ .type = E_VARTYPE_CHAR, .val.c = (char)to_int(args[0]) };
+  return (e_var){ .type = E_VARTYPE_CHAR, .val.c = (char)evar_to_int(args[0]) };
 }
 
 e_var
 eb_cast_bool(e_var* args, u32 nargs)
 {
   (void)nargs;
-  return (e_var){ .type = E_VARTYPE_BOOL, .val.b = (bool)to_int(args[0]) };
+  return (e_var){ .type = E_VARTYPE_BOOL, .val.b = (bool)evar_to_int(args[0]) };
 }
 
 e_var
 eb_cast_float(e_var* args, u32 nargs)
 {
   (void)nargs;
-  return (e_var){ .type = E_VARTYPE_FLOAT, .val.f = to_float(args[0]) };
+  return (e_var){ .type = E_VARTYPE_FLOAT, .val.f = evar_to_float(args[0]) };
 }
 
 e_var

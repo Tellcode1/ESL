@@ -87,12 +87,16 @@ typedef union e_varval {
   /* Compiler info for variables, not stored in runtime. */
   struct e_refdobj* var_info;
   struct e_refdobj* struct_info;
+
+  void* generic_ptr;
 } e_varval;
 
 typedef struct e_var {
   e_vartype type;
   e_varval  val;
 } e_var;
+
+e_var e_make_var_from_string(char* s);
 
 int e_var_shallow_cpy(const e_var* var, e_var* dst);
 int e_var_deep_cpy(const e_var* var, e_var* dst);
@@ -108,20 +112,6 @@ u32  e_var_hash(const e_var* var);
 bool e_var_equal(const e_var* a, const e_var* b);
 
 void e_var_free(e_var* var);
-
-static inline u32
-e_hash_fnv(const void* data, size_t size)
-{
-  const uchar* current = (const uchar*)data;
-
-  u32 hash = 2166136261U;
-  for (size_t i = 0; i < size; ++i) {
-    hash ^= current[i];
-    hash *= 16777619U;
-  }
-
-  return hash;
-}
 
 static inline u32
 e_combine_hash(const void** list, size_t size, size_t var_size)
