@@ -41,6 +41,7 @@ typedef enum e_ast_nodetype {
   E_AST_NODE_UNARYOP,
   E_AST_NODE_STATEMENT_LIST,
 
+  E_AST_NODE_DEFER,
   E_AST_NODE_FOR,
   E_AST_NODE_WHILE,
   E_AST_NODE_BREAK,
@@ -253,7 +254,7 @@ typedef union e_ast_node_val {
     e_filespan      span;
     int*            stmts;
     u32             nstmts;
-  } stmts, root;
+  } stmts, root, defer;
 
   struct {
     e_ast_node_type type;
@@ -342,6 +343,12 @@ typedef struct e_ast {
   u32      ntoks;
   u32      head;
 
+  /**
+   * MUST BE EXPLICITLY SET TO -1
+   * If not, on error free's will try to go the usual way,
+   * But the node is NULL, so they will fail.
+   * And give you a sigsegv.
+   */
   int root;
 } e_ast;
 
@@ -502,7 +509,10 @@ e_ast_make_node(e_ast* p)
 
 static inline bool
 e_ast_is_limiter_exempt(e_ast_node_type t)
-{ return t == E_AST_NODE_IF || t == E_AST_NODE_WHILE || t == E_AST_NODE_FOR || t == E_AST_NODE_FUNCTION_DEFINITION; }
+{
+  return t == E_AST_NODE_IF || t == E_AST_NODE_WHILE || t == E_AST_NODE_FOR || t == E_AST_NODE_FUNCTION_DEFINITION || t == E_AST_NODE_DEFER
+      || t == E_AST_NODE_NOP;
+}
 
 int e_ast_parse(e_ast* p, int* root_nodeID);
 int e_ast_nud(e_ast* p, e_token* token);

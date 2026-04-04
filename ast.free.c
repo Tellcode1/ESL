@@ -88,6 +88,7 @@ e_ast_node_free(e_ast* ast, int id)
       free(node->func.stmts);
       break;
 
+    case E_AST_NODE_DEFER:
     case E_AST_NODE_STATEMENT_LIST:
     case E_AST_NODE_ROOT:
       for (u32 i = 0; i < node->stmts.nstmts; i++) e_ast_node_free(ast, node->stmts.stmts[i]);

@@ -85,7 +85,7 @@ e_file_load(FILE* f, void** root_allocation, u32* ninstructions, u8** instructio
   fread(&bytes_req, sizeof(bytes_req), 1, f);
 
   *root_allocation = malloc(bytes_req);
-  if (*root_allocation == nullptr) return E_EMALLOC;
+  if (*root_allocation == nullptr) return -2;
 
   uchar* alloc = (uchar*)*root_allocation;
 
@@ -94,7 +94,7 @@ e_file_load(FILE* f, void** root_allocation, u32* ninstructions, u8** instructio
   e_var* alits = (e_var*)(alloc);
   alloc += sizeof(e_var) * (*nlits);
   *lits = alits;
-  if (*lits == nullptr) return -1;
+  if (*lits == nullptr) return -3;
 
   for (u32 i = 0; i < *nlits; i++) {
     fread(&alits[i].type, sizeof(e_vartype), 1, f);
@@ -134,13 +134,13 @@ e_file_load(FILE* f, void** root_allocation, u32* ninstructions, u8** instructio
 
     func.arg_slots = (u32*)(alloc);
     alloc += sizeof(u32) * func.nargs;
-    if (func.arg_slots == nullptr) return -1;
+    if (func.arg_slots == nullptr) return -4;
 
     fread(func.arg_slots, sizeof(*func.arg_slots), func.nargs, f);
 
     func.code = (u8*)(alloc);
     alloc += func.code_size;
-    if (func.code == nullptr) return -1;
+    if (func.code == nullptr) return -5;
 
     fread(func.code, 1, func.code_size, f);
     (*functions)[i] = func;

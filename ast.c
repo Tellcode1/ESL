@@ -24,7 +24,6 @@
 
 #include "ast.h"
 
-#include "arena.h"
 #include "cerr.h"
 #include "lex.h"
 #include "strint.h"
@@ -1156,6 +1155,20 @@ e_ast_nud(e_ast* p, e_token* tk)
     case E_TOKEN_TYPE_STRING: {
       int e = make_literal_node(p, node, tk);
       if (e < 0) { return -1; }
+      return node;
+    }
+
+    case E_TOKEN_TYPE_DEFER: {
+      u32  nstmts;
+      int* stmts;
+      if (parse_body(p, &stmts, &nstmts) < 0) {
+        e_ast_node_free(p, node);
+        return -1;
+      }
+
+      E_GET_NODE(p, node)->type         = E_AST_NODE_DEFER;
+      E_GET_NODE(p, node)->defer.nstmts = nstmts;
+      E_GET_NODE(p, node)->defer.stmts  = stmts;
       return node;
     }
 

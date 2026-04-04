@@ -41,23 +41,23 @@ main(int argc, char** argv)
 
   const char* bin_file = argv[1];
 
-  FILE* f = fopen(bin_file, "rb");
+  FILE* f = fopen(bin_file, "r");
   if (!f) {
     perror("edc: Failed to open input file");
     return -1;
   }
 
-  void* root_allocation;
+  void*       root_allocation = nullptr;
+  e_var*      lits            = nullptr;
+  u8*         ins             = nullptr;
+  e_function* funcs           = nullptr;
+  u32         nlits           = 0;
+  u32         nins            = 0;
+  u32         nfuncs          = 0;
 
-  u32         nlits;
-  e_var*      lits;
-  u32         nfuncs;
-  u32         nins;
-  u8*         ins;
-  e_function* funcs;
-  if (e_file_load(f, &root_allocation, &nins, &ins, &nlits, &lits, &nfuncs, &funcs)) {
-    perror("Failed to open input file");
-    return -1;
+  int e = 0;
+  if ((e = e_file_load(f, &root_allocation, &nins, &ins, &nlits, &lits, &nfuncs, &funcs))) {
+    fprintf(stderr, "eexec: Failed to parse input file: %i\n", e);
   }
 
   e_print_instruction_stream((const u8*)ins, nins, 0);

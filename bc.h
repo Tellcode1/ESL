@@ -121,6 +121,11 @@ typedef enum e_opcode_bck {
   E_OPCODE_LOAD,
 
   /**
+   * Pop the top of the stack.
+   */
+  E_OPCODE_POP,
+
+  /**
    * Load a reference to the variable using the 1st operand as the ID.
    * If MEMBER_ACCESS attr is used, the 1st operand is the member index, and the 2nd operand is the variable ID.
    * Usage(noattr): LOAD_REFERENCE [var ID]

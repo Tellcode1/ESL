@@ -244,6 +244,8 @@ e_tokenize(const char* input, const char* advertised_file, e_str_interner* inter
         tk = (e_token){ .type = E_TOKEN_TYPE_FN, .span = SPAN };
       } else if (len == strlen("let") && strncmp(snap, "let", len) == 0) {
         tk = (e_token){ .type = E_TOKEN_TYPE_LET, .span = SPAN };
+      } else if (len == strlen("defer") && strncmp(snap, "defer", len) == 0) {
+        tk = (e_token){ .type = E_TOKEN_TYPE_DEFER, .span = SPAN };
       } else if (len == strlen("const") && strncmp(snap, "const", len) == 0) {
         tk = (e_token){ .type = E_TOKEN_TYPE_CONST, .span = SPAN };
       } else if (len == strlen("true") && strncmp(snap, "true", len) == 0) {

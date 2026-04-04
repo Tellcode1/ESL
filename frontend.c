@@ -45,7 +45,7 @@ main(int argc, char* argv[])
   bool                 tokenizer_only = false;
   bool                 ast_only       = false;
   int                  root           = -1;
-  e_ast                ast            = { 0 };
+  e_ast                ast            = { 0, .root = -1 };
   e_token*             tokens         = nullptr;
   u32                  ntoks          = 0;
   e_compilation_result compiled       = { 0 };

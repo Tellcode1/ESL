@@ -91,6 +91,118 @@ static int        compile_binary_op(struct e_compiler* cc, int node);
 static int        compile_unary_op(struct e_compiler* cc, int node);
 static int        compile(struct e_compiler* cc, int node);
 
+static inline ecc_defer_scope*
+defer_push_scope(e_compiler* cc)
+{
+  const u32 init_defer_entry_capacity = 8;
+
+  ecc_defer_scope* scope = malloc(sizeof(ecc_defer_scope));
+  scope->entries         = malloc(sizeof(ecc_defer_entry) * init_defer_entry_capacity);
+  scope->count           = 0;
+  scope->capacity        = init_defer_entry_capacity;
+  scope->parent          = cc->defer_stack;
+  cc->defer_stack        = scope;
+  return scope;
+}
+
+static inline void
+defer_pop_scope(e_compiler* cc)
+{
+  ecc_defer_scope* scope = cc->defer_stack;
+  cc->defer_stack        = scope->parent;
+  free(scope->entries);
+  free(scope);
+}
+
+static inline void
+append_defer_entry(e_compiler* cc, int* exprs, u32 nexprs)
+{
+  ecc_defer_scope* scope = cc->defer_stack;
+  if (scope->count >= scope->capacity) {
+    scope->capacity *= 2;
+    scope->entries = realloc(scope->entries, sizeof(ecc_defer_entry) * scope->capacity);
+  }
+  scope->entries[scope->count++] = (ecc_defer_entry){ .exprs = exprs, .nexprs = nexprs };
+}
+
+// LIFO
+static inline int
+defer_emit_current_scope(e_compiler* cc)
+{
+  ecc_defer_scope* scope = cc->defer_stack;
+  if (!scope) return 0;
+  for (int i = (int)scope->count - 1; i >= 0; i--) {
+    for (u32 j = 0; j < scope->entries[i].nexprs; j++) {
+      int e = compile(cc, scope->entries[i].exprs[j]);
+      if (e) return e;
+      e_emit_instruction(cc, E_OPCODE_POP);
+    }
+  }
+  return 0;
+}
+
+/**
+ * Emit the deferred statements for all scopes up to now.
+ */
+static inline int
+defer_emit_all_scopes(e_compiler* cc)
+{
+  ecc_defer_scope* scope = cc->defer_stack;
+  while (scope) {
+    for (int i = (int)scope->count - 1; i >= 0; i--) {
+      for (u32 j = 0; j < scope->entries[i].nexprs; j++) {
+        int e = compile(cc, scope->entries[i].exprs[j]);
+        if (e) return e;
+        e_emit_instruction(cc, E_OPCODE_POP);
+      }
+    }
+    scope = scope->parent;
+  }
+  return 0;
+}
+
+static inline u32
+defer_get_current_depth(e_compiler* cc)
+{
+  u32              d     = 0;
+  ecc_defer_scope* scope = cc->defer_stack;
+  while (scope) {
+    d++;
+    scope = scope->parent;
+  }
+  return d;
+}
+
+// flush all defers up to (but not including) depth
+static inline int
+defer_emit_to_depth(e_compiler* cc, u32 target_depth)
+{
+  ecc_defer_scope* scope = cc->defer_stack;
+  u32              depth = defer_get_current_depth(cc);
+  while (scope && depth > target_depth) {
+    for (int i = (int)scope->count - 1; i >= 0; i--) {
+      for (u32 j = 0; j < scope->entries[i].nexprs; j++) {
+        int e = compile(cc, scope->entries[i].exprs[j]);
+        if (e) return e;
+        e_emit_instruction(cc, E_OPCODE_POP);
+      }
+    }
+    scope = scope->parent;
+    depth--;
+  }
+  return 0;
+}
+
+static inline void
+compiler_push_scope(e_compiler* cc)
+{
+}
+
+static inline void
+compiler_pop_scope(e_compiler* cc)
+{
+}
+
 /**
  * Returns UINT32_MAX on no find.
  */
@@ -656,11 +768,18 @@ compile_function_definition(struct e_compiler* cc, int node)
   e_compiler copy;
   compiler_make_fork(cc, &copy);
 
+  defer_push_scope(&copy);
+
   int e = e_compile_function(&copy, node);
+
+  // emit the defer before the return you asshole
+  defer_emit_current_scope(&copy);
 
   /* Always return void if no other return value was specified */
   e_emit_instruction(&copy, E_OPCODE_RETURN);
   e_emit_u8(&copy, false);
+
+  defer_pop_scope(&copy);
 
   compiler_join_fork(&copy, cc);
 
@@ -924,13 +1043,18 @@ compile_if_statement(struct e_compiler* cc, int node)
 
   // condition failed :<
   emit_and_record_jmp(cc, E_OPCODE_JZ, next_in_chain_label); // Jump to the next in chain
-                                                             // Possibly else if or else
+  // Possibly else if or else
+
+  defer_push_scope(cc);
 
   // BODY OF ROOT IF STATEMENT
   for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->if_stmt.nstmts; i++) {
     e = compile(cc, E_GET_NODE(cc->ast, node)->if_stmt.body[i]);
     if (e) return e;
   }
+
+  defer_emit_current_scope(cc);
+  defer_pop_scope(cc);
 
   // Still inside the body, JMP over all other branches
   // since we're done executing the body of the if statement
@@ -952,11 +1076,16 @@ compile_if_statement(struct e_compiler* cc, int node)
     /* Failed. Jump to the next in chain. */
     emit_and_record_jmp(cc, E_OPCODE_JZ, next_in_chain_label);
 
+    defer_push_scope(cc);
+
     /* Condition true! Execute the body */
     for (u32 i = 0; i < if_stmt->nstmts; i++) {
       e = compile(cc, if_stmt->body[i]);
       if (e) return e;
     }
+
+    defer_emit_current_scope(cc);
+    defer_pop_scope(cc);
 
     /* JMP over all other branches. */
     emit_and_record_jmp(cc, E_OPCODE_JMP, end_label); // skip remaining elseifs and else
@@ -964,6 +1093,9 @@ compile_if_statement(struct e_compiler* cc, int node)
 
   /* Emit the final next in chain label for the else statement. */
   define_and_emit_label(cc, next_in_chain_label); // BAM!
+
+  defer_push_scope(cc);
+
   /* ELSE BODY */
   for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->if_stmt.nelse_stmts; i++) {
     e = compile(cc, E_GET_NODE(cc->ast, node)->if_stmt.else_body[i]);
@@ -971,6 +1103,9 @@ compile_if_statement(struct e_compiler* cc, int node)
 
     /* No need to jump! we're already at the end :> */
   }
+
+  defer_emit_current_scope(cc);
+  defer_pop_scope(cc);
 
   /* END LABEL. There's still one instruction after this and it's to ensure we always pop our variables. */
   define_and_emit_label(cc, end_label);
@@ -993,15 +1128,26 @@ compile_while_statement(struct e_compiler* cc, int node)
   /* After the while loop, with one POP_VARIABLES to ensure we always pop our variables. */
   const u32 end_label = make_label_id(cc);
 
+  defer_push_scope(cc);
+
+  /**
+   * Push frame for the stack
+   */
+  e_stack_push_frame(cc->stack);
+
   /* Append a loop entry to our compiler. */
   ecc_loop_location loop = {
     .continue_label = pre_condition_label,
     .break_label    = end_label,
+    .defer_depth    = defer_get_current_depth(cc),
   };
 
   /* Ensure we don't overwrite it... */
   ecc_loop_location* last = cc->loop;
   cc->loop                = &loop;
+
+  /* Push a new scope */
+  e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES);
 
   //
   define_and_emit_label(cc, pre_condition_label);
@@ -1014,19 +1160,20 @@ compile_while_statement(struct e_compiler* cc, int node)
   // Break out of loop if condition is false.
   emit_and_record_jmp(cc, E_OPCODE_JZ, end_label);
 
-  /**
-   * Push frame for the stack
-   */
-  e_stack_push_frame(cc->stack);
-
-  /* Push a new scope */
-  e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES);
-
   // WHILE BODY
   for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->while_stmt.nstmts; i++) {
     e = compile(cc, E_GET_NODE(cc->ast, node)->while_stmt.stmts[i]);
     if (e) return e;
   }
+
+  /* Jump to condition, body is done executing */
+  emit_and_record_jmp(cc, E_OPCODE_JMP, pre_condition_label);
+
+  // End label.
+  define_and_emit_label(cc, end_label);
+
+  defer_emit_current_scope(cc);
+  defer_pop_scope(cc);
 
   // Pop the scope
   e_emit_instruction(cc, E_OPCODE_POP_VARIABLES);
@@ -1035,12 +1182,6 @@ compile_while_statement(struct e_compiler* cc, int node)
    * Pop frame for the stack
    */
   e_stack_pop_frame(cc->stack);
-
-  /* Jump to condition, body is done executing */
-  emit_and_record_jmp(cc, E_OPCODE_JMP, pre_condition_label);
-
-  // End label.
-  define_and_emit_label(cc, end_label);
 
   // swap the old loop metadata back in
   cc->loop = last;
@@ -1081,6 +1222,7 @@ compile_for_statement(struct e_compiler* cc, int node)
   ecc_loop_location loop = {
     .continue_label = iterator_label,
     .break_label    = end_label,
+    .defer_depth    = defer_get_current_depth(cc),
   };
 
   /* Ensure we don't overwrite it... */
@@ -1113,6 +1255,11 @@ compile_for_statement(struct e_compiler* cc, int node)
   // JZ END_LABEL
   emit_and_record_jmp(cc, E_OPCODE_JZ, end_label);
 
+  defer_push_scope(cc);
+
+  u32 old_depth = cc->loop->defer_depth;
+  if (cc->loop) cc->loop->defer_depth = defer_get_current_depth(cc);
+
   // BODY
   u32 nstmts = E_GET_NODE(cc->ast, node)->for_stmt.nstmts;
   for (u32 i = 0; i < nstmts; i++) {
@@ -1122,6 +1269,16 @@ compile_for_statement(struct e_compiler* cc, int node)
       goto err;
     }
   }
+
+  /**
+   * Deposit the deferred statements before the
+   * iterator region so all iterator values are
+   * correct.
+   */
+  defer_emit_current_scope(cc);
+  defer_pop_scope(cc);
+
+  if (cc->loop) cc->loop->defer_depth = old_depth;
 
   // ITERATOR_LABEL
   define_and_emit_label(cc, iterator_label);
@@ -1370,6 +1527,13 @@ compile(struct e_compiler* cc, int node)
       return 0;
     }
 
+    case E_AST_NODE_DEFER: {
+      int* stmts  = E_GET_NODE(cc->ast, node)->defer.stmts;
+      u32  nstmts = E_GET_NODE(cc->ast, node)->defer.nstmts;
+      append_defer_entry(cc, stmts, nstmts);
+      return 0;
+    }
+
     case E_AST_NODE_NAMESPACE_DECL: {
       const char* ns_name        = E_GET_NODE(cc->ast, node)->namespace_decl.name;
       int*        ns_decl_stmts  = E_GET_NODE(cc->ast, node)->namespace_decl.stmts;
@@ -1435,6 +1599,8 @@ compile(struct e_compiler* cc, int node)
         cerror(E_GET_NODE(cc->ast, node)->common.span, "break used outside loop\n");
         return -1;
       }
+      defer_emit_to_depth(cc, cc->loop->defer_depth);
+
       emit_and_record_jmp(cc, E_OPCODE_JMP, cc->loop->break_label);
       return 0;
     }
@@ -1444,6 +1610,8 @@ compile(struct e_compiler* cc, int node)
         cerror(E_GET_NODE(cc->ast, node)->common.span, "continue used outside loop\n");
         return -1;
       }
+      defer_emit_to_depth(cc, cc->loop->defer_depth);
+
       emit_and_record_jmp(cc, E_OPCODE_JMP, cc->loop->continue_label);
       return 0;
     }
@@ -1453,9 +1621,13 @@ compile(struct e_compiler* cc, int node)
         /* Compile the return value */
         compile(cc, E_GET_NODE(cc->ast, node)->ret.expr_id);
 
+        defer_emit_all_scopes(cc);
+
         e_emit_instruction(cc, E_OPCODE_RETURN);
         e_emit_u8(cc, true); // Specify that we're returning a value
       } else {
+        defer_emit_all_scopes(cc);
+
         e_emit_instruction(cc, E_OPCODE_RETURN);
         e_emit_u8(cc, false); /* Returning void! */
       }
@@ -1717,10 +1889,14 @@ e_compile(const ecc_info* info, e_compilation_result* result)
     .emit_capacity     = init_code_capacity,
   };
 
+  defer_push_scope(&cc);
+
   if (e_stack_init(256, 32, 32, &stack) < 0) return -1;
 
   int e = compile(&cc, info->root);
   if (e) return e;
+
+  defer_pop_scope(&cc);
 
   /* Resolve all labels after compilation. Ensure this is the last optimization / cleanup function called! */
   // e_resolve_labels(cc.emit, cc.num_bytes_emitted);

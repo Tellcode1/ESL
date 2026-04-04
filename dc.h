@@ -107,6 +107,7 @@ e_print_instruction(e_opcode o, const u8** ip)
       break;
     }
     case E_OPCODE_INDEX: printf("index\n"); break;
+    case E_OPCODE_POP: printf("pop\n"); break;
     case E_OPCODE_INDEX_ASSIGN: printf("idx_assign\n"); break;
     case E_OPCODE_MEMBER_ACCESS: printf("member_access\n"); break;
   }

@@ -248,6 +248,8 @@ e_exec(const e_exec_info* info)
       case E_OPCODE_LABEL: ip += 4; break; // move over Label ID
       case E_OPCODE_NOOP: break;
 
+      case E_OPCODE_POP: e_stack_pop(info->stack); break;
+
       case E_OPCODE_CALL: {
         u32 hash       = e_read_u32(&ip);
         u16 func_nargs = e_read_u16(&ip);
@@ -417,8 +419,8 @@ e_exec(const e_exec_info* info)
         u32 target = e_read_u32(&ip); // always read the operand
 
         const e_var* cnd  = e_stack_top(info->stack);
-        bool         eval = evar_to_bool(*cnd);
-        if (!eval) ip = info->code + target;
+        int          eval = evar_to_int(*cnd);
+        if (eval == 0) ip = info->code + target;
 
         e_stack_pop(info->stack); // remove condition
         break;
@@ -426,7 +428,10 @@ e_exec(const e_exec_info* info)
 
       case E_OPCODE_JNZ: {
         u32 target = e_read_u32(&ip); // always read the operand
-        if (evar_to_bool(*e_stack_top(info->stack))) ip = info->code + target;
+
+        const e_var* cnd  = e_stack_top(info->stack);
+        int          eval = evar_to_int(*cnd);
+        if (eval != 0) ip = info->code + target;
 
         e_stack_pop(info->stack); // remove condition
         break;

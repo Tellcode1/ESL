@@ -57,6 +57,7 @@ typedef struct ecc_info {
 typedef struct ecc_loop_location {
   u32 continue_label;
   u32 break_label;
+  u32 defer_depth;
 } ecc_loop_location;
 
 typedef struct ecc_callframe {
@@ -113,6 +114,19 @@ typedef struct ecc_function_table {
   u32         functions_count;
   u32         functions_capacity;
 } ecc_function_table;
+
+typedef struct ecc_defer_entry {
+  u32  nexprs;
+  u32  capacity;
+  int* exprs;
+} ecc_defer_entry;
+
+typedef struct ecc_defer_scope {
+  ecc_defer_entry*        entries;
+  u32                     count;
+  u32                     capacity;
+  struct ecc_defer_scope* parent;
+} ecc_defer_scope;
 
 /**
  * Data a label stores about all of its
@@ -178,6 +192,7 @@ typedef struct e_compiler {
   ecc_literal_table*           lit_table;
   ecc_builtin_variables_table* builtin_var_table;
   ecc_function_table*          function_table;
+  ecc_defer_scope*             defer_stack;
 
   ecc_loop_location*   loop;
   ecc_namespace_stack* ns;

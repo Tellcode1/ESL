@@ -54,6 +54,7 @@ typedef enum e_token_type {
   E_TOKEN_TYPE_EXTERN, // local function
   E_TOKEN_TYPE_STRUCT, // structure declerations.
   E_TOKEN_TYPE_LET,    // let keyword for variable declerations, no value.
+  E_TOKEN_TYPE_DEFER,  // defer keyword
   E_TOKEN_TYPE_CONST,  // const qualifier
   E_TOKEN_TYPE_IF,
   E_TOKEN_TYPE_ELSE,
@@ -180,6 +181,7 @@ e_token_type_to_string(e_token_type e)
     case E_TOKEN_TYPE_BOR: return "|";
     case E_TOKEN_TYPE_XOR: return "^";
     case E_TOKEN_TYPE_DOUBLE_COLON: return "::";
+    case E_TOKEN_TYPE_DEFER: return "defer";
   }
   return "UNKNOWN";
 }

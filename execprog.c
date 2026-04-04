@@ -143,7 +143,11 @@ main(int argc, char* argv[])
   u32         nlits           = 0;
   u32         nins            = 0;
   u32         nfuncs          = 0;
-  if (e_file_load(f, &root_allocation, &nins, &ins, &nlits, &lits, &nfuncs, &funcs)) { perror("eexec: Failed to open input file\n"); }
+
+  int e = 0;
+  if ((e = e_file_load(f, &root_allocation, &nins, &ins, &nlits, &lits, &nfuncs, &funcs))) {
+    fprintf(stderr, "eexec: Failed to parse input file: %i\n", e);
+  }
 
 #define include_fn(name)                                                                                                                             \
   (e_extern_function){                                                                                                                               \
@@ -194,7 +198,6 @@ main(int argc, char* argv[])
   /* No need to free anything else */
   free(root_allocation);
 
-  int e = 0;
   if (v.type == E_VARTYPE_INT) { e = v.val.i; }
   e_var_release(&v);
   return e;
