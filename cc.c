@@ -122,6 +122,13 @@ append_defer_entry(e_compiler* cc, int* exprs, u32 nexprs)
     scope->capacity *= 2;
     scope->entries = realloc(scope->entries, sizeof(ecc_defer_entry) * scope->capacity);
   }
+
+  for (u32 i = 0; i < nexprs; i++) {
+    if (E_GET_NODE(cc->ast, exprs[i])->type == E_AST_NODE_DEFER) {
+      cerror(E_GET_NODE(cc->ast, exprs[i])->common.span, "Defer statement in another defer statement\n");
+    }
+  }
+
   scope->entries[scope->count++] = (ecc_defer_entry){ .exprs = exprs, .nexprs = nexprs };
 }
 
@@ -727,6 +734,7 @@ compile_function_definition(struct e_compiler* cc, int node)
    * Push frame for the stack
    */
   e_stack_push_frame(cc->stack);
+  e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES);
 
   /* Ensure it doesn't already exist */
   const ecc_function_table* func_table = cc->function_table;
@@ -1034,9 +1042,6 @@ compile_if_statement(struct e_compiler* cc, int node)
   /* Push a new scope before everything. */
   e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES);
 
-  /* For the compiler too */
-  e_stack_push_frame(cc->stack);
-
   // condition
   int e = compile(cc, E_GET_NODE(cc->ast, node)->if_stmt.condition);
   if (e) return e;
@@ -1045,6 +1050,8 @@ compile_if_statement(struct e_compiler* cc, int node)
   emit_and_record_jmp(cc, E_OPCODE_JZ, next_in_chain_label); // Jump to the next in chain
   // Possibly else if or else
 
+  e_stack_push_frame(cc->stack);
+  e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES);
   defer_push_scope(cc);
 
   // BODY OF ROOT IF STATEMENT
@@ -1053,6 +1060,8 @@ compile_if_statement(struct e_compiler* cc, int node)
     if (e) return e;
   }
 
+  e_emit_instruction(cc, E_OPCODE_POP_VARIABLES);
+  e_stack_pop_frame(cc->stack);
   defer_emit_current_scope(cc);
   defer_pop_scope(cc);
 
@@ -1076,6 +1085,8 @@ compile_if_statement(struct e_compiler* cc, int node)
     /* Failed. Jump to the next in chain. */
     emit_and_record_jmp(cc, E_OPCODE_JZ, next_in_chain_label);
 
+    e_stack_push_frame(cc->stack);
+    e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES);
     defer_push_scope(cc);
 
     /* Condition true! Execute the body */
@@ -1084,6 +1095,8 @@ compile_if_statement(struct e_compiler* cc, int node)
       if (e) return e;
     }
 
+    e_stack_pop_frame(cc->stack);
+    e_emit_instruction(cc, E_OPCODE_POP_VARIABLES);
     defer_emit_current_scope(cc);
     defer_pop_scope(cc);
 
@@ -1094,6 +1107,8 @@ compile_if_statement(struct e_compiler* cc, int node)
   /* Emit the final next in chain label for the else statement. */
   define_and_emit_label(cc, next_in_chain_label); // BAM!
 
+  e_stack_push_frame(cc->stack);
+  e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES);
   defer_push_scope(cc);
 
   /* ELSE BODY */
@@ -1104,6 +1119,8 @@ compile_if_statement(struct e_compiler* cc, int node)
     /* No need to jump! we're already at the end :> */
   }
 
+  e_stack_pop_frame(cc->stack);
+  e_emit_instruction(cc, E_OPCODE_POP_VARIABLES);
   defer_emit_current_scope(cc);
   defer_pop_scope(cc);
 
@@ -1112,9 +1129,6 @@ compile_if_statement(struct e_compiler* cc, int node)
 
   /* Pop scope. */
   e_emit_instruction(cc, E_OPCODE_POP_VARIABLES);
-
-  /* for the compieler too */
-  e_stack_pop_frame(cc->stack);
 
   return 0;
 }
@@ -1128,12 +1142,12 @@ compile_while_statement(struct e_compiler* cc, int node)
   /* After the while loop, with one POP_VARIABLES to ensure we always pop our variables. */
   const u32 end_label = make_label_id(cc);
 
-  defer_push_scope(cc);
-
   /**
    * Push frame for the stack
    */
+  defer_push_scope(cc);
   e_stack_push_frame(cc->stack);
+  e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES);
 
   /* Append a loop entry to our compiler. */
   ecc_loop_location loop = {
@@ -1175,13 +1189,13 @@ compile_while_statement(struct e_compiler* cc, int node)
   defer_emit_current_scope(cc);
   defer_pop_scope(cc);
 
-  // Pop the scope
-  e_emit_instruction(cc, E_OPCODE_POP_VARIABLES);
-
   /**
    * Pop frame for the stack
    */
   e_stack_pop_frame(cc->stack);
+
+  // Pop the scope
+  e_emit_instruction(cc, E_OPCODE_POP_VARIABLES);
 
   // swap the old loop metadata back in
   cc->loop = last;
@@ -1299,10 +1313,11 @@ compile_for_statement(struct e_compiler* cc, int node)
   // END_LABEL
   define_and_emit_label(cc, end_label);
 
-  // Pop scope
-  e_emit_instruction(cc, E_OPCODE_POP_VARIABLES);
   // For the compiler too
   e_stack_pop_frame(cc->stack);
+
+  // Pop scope
+  e_emit_instruction(cc, E_OPCODE_POP_VARIABLES);
 
   cc->loop = last;
 

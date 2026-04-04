@@ -8,6 +8,13 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifdef _WIN32
+#  include <windows.h>
+#else
+#  include <sys/stat.h>
+#  include <unistd.h>
+#endif
+
 FILE*
 file_from_var(const e_var* v)
 {
@@ -215,4 +222,36 @@ eb_io_error(e_var* args, u32 nargs)
   (void)args;
   (void)nargs;
   return e_make_var_from_string(strdup(strerror(errno)));
+}
+
+e_var
+eb_io_type(e_var* args, u32 nargs)
+{
+  (void)nargs;
+  const char* path = E_VAR_AS_STRING(&args[0])->s;
+#ifdef _WIN32
+  DWORD attr = GetFileAttributes(path);
+  if (attr == INVALID_FILE_ATTRIBUTES) { return (e_var){ .type = E_VARTYPE_INT, .val.i = EB_IO_UNKNOWN }; }
+
+  if (attr & FILE_ATTRIBUTE_REPARSE_POINT) {
+    return (e_var){ .type = E_VARTYPE_INT, .val.i = EB_IO_LINK };
+  } else if (attr & FILE_ATTRIBUTE_DIRECTORY) {
+    return (e_var){ .type = E_VARTYPE_INT, .val.i = EB_IO_DIRECTORY };
+  } else {
+    return (e_var){ .type = E_VARTYPE_INT, .val.i = EB_IO_FILE };
+  }
+#else
+  struct stat sb;
+  if (lstat(path, &sb) == -1) { return (e_var){ .type = E_VARTYPE_INT, .val.i = EB_IO_UNKNOWN }; }
+
+  if (S_ISLNK(sb.st_mode)) {
+    return (e_var){ .type = E_VARTYPE_INT, .val.i = EB_IO_LINK };
+  } else if (S_ISDIR(sb.st_mode)) {
+    return (e_var){ .type = E_VARTYPE_INT, .val.i = EB_IO_DIRECTORY };
+  } else if (S_ISREG(sb.st_mode)) {
+    return (e_var){ .type = E_VARTYPE_INT, .val.i = EB_IO_FILE };
+  }
+#endif
+
+  return (e_var){ .type = E_VARTYPE_INT, .val.i = EB_IO_UNKNOWN };
 }

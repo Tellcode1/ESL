@@ -154,6 +154,11 @@ call(const e_exec_info* info, u32 hash, u32 nargs)
   for (u32 f = 0; f < info->nfuncs; f++) {
     if (info->funcs[f].name_hash != hash) continue;
 
+    /**
+     * The depth that we'll need to
+     * restore to when the function returns.
+     */
+    u32 depth_restore = info->stack->depth;
     TRY_V(e_stack_push_frame(info->stack));
 
     e_exec_info fi = {
@@ -172,7 +177,11 @@ call(const e_exec_info* info, u32 hash, u32 nargs)
     };
     return_value = e_exec(&fi);
 
-    TRY_V(e_stack_pop_frame(info->stack));
+    /**
+     * Restore to the depth that we
+     * were in
+     */
+    while (info->stack->depth > depth_restore) TRY_V(e_stack_pop_frame(info->stack));
 
     goto pop_and_ret;
   }
@@ -183,6 +192,11 @@ call(const e_exec_info* info, u32 hash, u32 nargs)
   return null_var;
 
 pop_and_ret:
+  // #ifdef DEBUG_PRINT_STACK
+  // printf("Function %u returned: ", hash);
+  // eb_println(&return_value, 1);
+  // #endif
+
   for (u32 i = 0; i < nargs; i++) e_stack_pop(info->stack);
   return return_value;
 }
@@ -238,12 +252,20 @@ e_exec(const e_exec_info* info)
   while (true) {
     if (ip >= end) { goto _RETURN; }
 
-    e_opcode opcode;
-    memcpy(&opcode, ip, sizeof(opcode)); // faster for some reason?
+    e_opcode_bck opcode = 0;
+    memcpy(&opcode, ip, sizeof(e_opcode)); // faster for some reason?
 
     ip += sizeof(e_opcode);
 
-    switch ((e_opcode_bck)opcode) {
+    // fputs("[ ", stdout);
+
+    // for (u32 i = 0; i < info->stack->size; i++) {
+    //   eb_print(&info->stack->stack[i], 1);
+    //   fputs(", ", stdout);
+    // }
+    // fputs(" ]\n", stdout);
+
+    switch (opcode) {
       /* NOOPs */
       case E_OPCODE_LABEL: ip += 4; break; // move over Label ID
       case E_OPCODE_NOOP: break;
@@ -470,13 +492,19 @@ e_exec(const e_exec_info* info)
         u32  hash        = e_read_u32(&ip);
         bool is_compound = (bool)e_read_u8(&ip);
 
-        e_var* old_top = e_stack_top(info->stack);
-
-        e_var* v = e_stack_push_variable(hash, info->stack);
-
         if (is_compound) {
-          e_var_acquire(old_top);
-          e_var_shallow_cpy(old_top, v);
+          e_var  top_take;
+          e_var* top = e_stack_top(info->stack);
+
+          e_var_acquire(top);
+          e_var_shallow_cpy(top, &top_take);
+
+          e_stack_pop(info->stack);
+
+          e_var* v = e_stack_push_variable(hash, info->stack);
+          e_var_shallow_cpy(&top_take, v);
+        } else {
+          e_stack_push_variable(hash, info->stack);
         }
         break;
       }

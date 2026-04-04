@@ -25,6 +25,8 @@
 #ifndef E_STACK_H
 #define E_STACK_H
 
+#define DEBUG_PRINT_STACK 1
+
 #include "bfunc.h"
 #include "perr.h"
 #include "pool.h"
@@ -120,6 +122,7 @@ e_stack_push_frame(e_stack* stack)
     .variable_offset = stack->nvariables,
     .stack_size      = stack->size,
   };
+  // printf("Pushed frame [depth=%u]\n", stack->depth);
   stack->depth++;
 
   return 0;
@@ -128,6 +131,7 @@ e_stack_push_frame(e_stack* stack)
 static inline int
 e_stack_pop_frame(e_stack* stack)
 {
+  // printf("Popped frame [depth=%u]\n", stack->depth - 1);
   const e_stack_frame* frame = &stack->frames[--stack->depth];
 
   /* Release the variables we're popping. */

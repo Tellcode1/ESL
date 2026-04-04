@@ -44,12 +44,16 @@ typedef struct e_builtin_var {
 } e_builtin_var;
 
 typedef enum eb_io_constants {
-  EB_IO_REL_TO_START,
-  EB_IO_REL_TO_CURR,
-  EB_IO_REL_TO_END,
   EB_IO_STDOUT,
   EB_IO_STDIN,
   EB_IO_STDERR,
+  EB_IO_REL_TO_START,
+  EB_IO_REL_TO_CURR,
+  EB_IO_REL_TO_END,
+  EB_IO_FILE,
+  EB_IO_LINK,
+  EB_IO_DIRECTORY,
+  EB_IO_UNKNOWN = -1,
 } eb_io_constants;
 
 /**
@@ -83,11 +87,10 @@ static const e_builtin_var eb_vars[] = {
   { .name = "io::REL_TO_START", .type = E_VARTYPE_INT, .value = { .i = EB_IO_REL_TO_START } },
   { .name = "io::REL_TO_CURR", .type = E_VARTYPE_INT, .value = { .i = EB_IO_REL_TO_CURR } },
   { .name = "io::REL_TO_END", .type = E_VARTYPE_INT, .value = { .i = EB_IO_REL_TO_END } },
-
-  { .name = "fs::FILE", .type = E_VARTYPE_INT, .value = { .i = 0 } },
-  { .name = "fs::LINK", .type = E_VARTYPE_INT, .value = { .i = 1 } },
-  { .name = "fs::DIRECTORY", .type = E_VARTYPE_INT, .value = { .i = 2 } },
-  { .name = "fs::UNKNOWN", .type = E_VARTYPE_INT, .value = { .i = -1 } },
+  { .name = "io::FILE", .type = E_VARTYPE_INT, .value = { .i = EB_IO_FILE } },
+  { .name = "io::LINK", .type = E_VARTYPE_INT, .value = { .i = EB_IO_LINK } },
+  { .name = "io::DIRECTORY", .type = E_VARTYPE_INT, .value = { .i = EB_IO_DIRECTORY } },
+  { .name = "io::UNKNOWN", .type = E_VARTYPE_INT, .value = { .i = EB_IO_UNKNOWN } },
 };
 
 #endif // E_BUILTIN_VARIABLES_H
