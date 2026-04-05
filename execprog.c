@@ -190,7 +190,9 @@ main(int argc, char* argv[])
   };
 
   e_stack_push_frame(&stack);
+
   e_var v = e_exec(&info);
+
   e_stack_pop_frame(&stack);
 
   fclose(f);

@@ -30,7 +30,6 @@
 #include "stdafx.h"
 
 #include <stdio.h>
-#include <string.h>
 
 static inline void
 e_print_instruction(e_opcode o, const u8** ip)
@@ -56,9 +55,9 @@ e_print_instruction(e_opcode o, const u8** ip)
     case E_OPCODE_GT: printf("gt\n"); break;
     case E_OPCODE_GTE: printf("gte\n"); break;
 
-    case E_OPCODE_NOT: printf("not %s\n", (bool)e_read_u8(ip) ? "true" : "false"); break;
-    case E_OPCODE_BNOT: printf("bnot %s\n", (bool)e_read_u8(ip) ? "true" : "false"); break;
-    case E_OPCODE_NEG: printf("neg %s\n", (bool)e_read_u8(ip) ? "true" : "false"); break;
+    case E_OPCODE_NOT: printf("not %s\n", e_read_u8(ip) ? "true" : "false"); break;
+    case E_OPCODE_BNOT: printf("bnot %s\n", e_read_u8(ip) ? "true" : "false"); break;
+    case E_OPCODE_NEG: printf("neg %s\n", e_read_u8(ip) ? "true" : "false"); break;
 
     case E_OPCODE_INC: {
       (void)e_read_u8(ip); // always compound!
@@ -78,14 +77,14 @@ e_print_instruction(e_opcode o, const u8** ip)
     }
     case E_OPCODE_RETURN: {
       u8 has_return_value = e_read_u8(ip);
-      printf("ret [%s]\n", (bool)has_return_value ? "true" : "false");
+      printf("ret [%s]\n", has_return_value ? "true" : "false");
       break;
     }
     case E_OPCODE_LITERAL: printf("literal [%u]\n", e_read_u16(ip)); break;
     case E_OPCODE_LOAD: printf("load %u\n", e_read_u32(ip)); break;
     // case E_OPCODE_LOAD_REFERENCE: printf("load_reference\n"); break;
     case E_OPCODE_ASSIGN: printf("store %u\n", e_read_u32(ip)); break;
-    case E_OPCODE_INIT: printf("init %u %s\n", e_read_u32(ip), (bool)e_read_u8(ip) ? "true" : "false"); break;
+    case E_OPCODE_INIT: printf("init %u %s\n", e_read_u32(ip), e_read_u8(ip) ? "true" : "false"); break;
     case E_OPCODE_LABEL: printf("label %u\n", e_read_u32(ip)); break;
     case E_OPCODE_JMP: printf("jmp [%u]\n", e_read_u32(ip)); break;
     case E_OPCODE_JE: printf("je [%u]\n", e_read_u32(ip)); break;
@@ -123,6 +122,7 @@ e_print_instruction(e_opcode o, const u8** ip)
     }
     case E_OPCODE_DUP: printf("dup\n"); break;
     case E_OPCODE_INDEX_ASSIGN_VAR: printf("index_assign_to_var [%u]\n", e_read_u32(ip)); break;
+    case E_OPCODE_LOAD_ARG_LIST: printf("load.args\n"); break;
   }
 }
 

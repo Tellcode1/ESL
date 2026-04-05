@@ -1,12 +1,17 @@
 fn main() {
   let args = sys::get_command_line_args();
+  if (len(args) < 2)
+  {
+    println("Expected expression");
+    return -1;
+  }
 
-  let x = args[2];
-  let op = args[3];
+  let x = args[0];
+  let op = args[1];
 
   if (str::equal(x, "sqrt"))
   {
-    if (len(args) < 4)
+    if (len(args) < 2)
     {
       println("Expected argument");
       return null;
@@ -16,7 +21,7 @@ fn main() {
     return null;
   }
   
-  if (len(args) < 5)
+  if (len(args) < 3)
   {
     println("Expected argument");
     return null;
@@ -24,14 +29,12 @@ fn main() {
 
   if (str::equal(x, "pow"))
   {
-    let x = float(args[3]);
-    let y = float(args[4]);
+    let x = float(args[1]);
+    let y = float(args[2]);
     println(math::pow(x,y));
     return null;
   }
 
-
-  let y = args[4];
 
   let r = null;
   if (str::equal(op, "+"))

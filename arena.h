@@ -117,7 +117,7 @@ e_arnalloc(e_arena* a, size_t size)
     memcpy(data, &size, sizeof(size));
 
     void* p = (void*)align_up((uintptr_t)(data + sizeof(size)), E_MEMALIGN);
-    if ((uintptr_t)p % E_MEMALIGN != 0) abort();
+    if ((uintptr_t)p & (E_MEMALIGN - 1)) abort();
     return p;
   }
 
@@ -145,7 +145,7 @@ e_arnalloc(e_arena* a, size_t size)
 
   // And return the pointer after it.
   void* ptr = (void*)align_up((uintptr_t)data + sizeof(size), E_MEMALIGN);
-  if ((uintptr_t)ptr % E_MEMALIGN != 0) abort();
+  if ((uintptr_t)ptr & (E_MEMALIGN - 1)) abort();
 
   fits->head += total;
 

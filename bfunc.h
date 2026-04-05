@@ -25,9 +25,6 @@
 #ifndef E_BUILTIN_FUNCTIONS_H
 #define E_BUILTIN_FUNCTIONS_H
 
-#include "cerr.h"
-#include "pool.h"
-#include "refcount.h"
 #include "stdafx.h"
 #include "var.h"
 

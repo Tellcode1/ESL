@@ -238,6 +238,13 @@ e_exec(const e_exec_info* info)
         break;
       }
 
+      case E_OPCODE_LOAD_ARG_LIST: {
+        e_var args = eb_get_command_line_args(NULL, 0);
+        e_stack_push(info->stack, &args);
+        e_var_release(&args); // release our copy
+        break;
+      }
+
       case E_OPCODE_LITERAL: {
         u16 id = e_read_u16(&ip);
         assert(id < info->nliterals);
@@ -487,8 +494,8 @@ e_exec(const e_exec_info* info)
         u32 target = e_read_u32(&ip); // always read the operand
 
         const e_var* cnd  = e_stack_top(info->stack);
-        int          eval = evar_to_int(*cnd);
-        if (eval == 0) ip = info->code + target;
+        bool         eval = evar_to_bool(*cnd);
+        if (!eval) ip = info->code + target;
 
         e_stack_pop(info->stack); // remove condition
         break;
@@ -498,8 +505,8 @@ e_exec(const e_exec_info* info)
         u32 target = e_read_u32(&ip); // always read the operand
 
         const e_var* cnd  = e_stack_top(info->stack);
-        int          eval = evar_to_int(*cnd);
-        if (eval != 0) ip = info->code + target;
+        bool         eval = evar_to_bool(*cnd);
+        if (eval) ip = info->code + target;
 
         e_stack_pop(info->stack); // remove condition
         break;

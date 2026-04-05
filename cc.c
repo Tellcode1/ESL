@@ -1607,17 +1607,12 @@ compile(struct e_compiler* cc, int node)
       /* Find entry point and ensure it doesn't ask for any arguments. */
       ecc_function_table* func_table = cc->function_table;
 
-      bool found = false;
+      bool found             = false;
+      u32  entry_point_nargs = 0;
       for (u32 i = 0; i < func_table->functions_count; i++) {
         if (func_table->functions[i].name_hash == entry_point_hash) {
-          found = true;
-
-          if (func_table->functions[i].nargs != 0) {
-            cerror(root->common.span, "Entry point can not accept any arguments!\n");
-            return -1;
-          }
-
-          break;
+          found             = true;
+          entry_point_nargs = func_table->functions[i].nargs;
         }
       }
 
@@ -1626,10 +1621,18 @@ compile(struct e_compiler* cc, int node)
         return -1;
       }
 
+      if (entry_point_nargs > 1) {
+        cerror(root->common.span, "Entry point must either accept 1 argument (command line argument list) or no arguments at all.\n");
+        return -1;
+      }
+
+      /* Push command line argument list to the stack, right before main */
+      if (entry_point_nargs != 0) e_emit_instruction(cc, E_OPCODE_LOAD_ARG_LIST);
+
       /* CALL to main */
       e_emit_instruction(cc, E_OPCODE_CALL);
       e_emit_u32(cc, entry_point_hash);
-      e_emit_u16(cc, 0); // no arguments to main
+      e_emit_u16(cc, entry_point_nargs);
 
       return 0;
     }
