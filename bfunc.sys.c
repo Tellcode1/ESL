@@ -23,7 +23,7 @@ eb_get_command_line_args(e_var* args, u32 nargs)
   e_list_init(NULL, 0, E_VAR_AS_LIST(&l));
 
   for (u32 i = 0; i < e_argc; i++) {
-    e_var arg = e_make_var_from_string(strdup(e_argv[i]));
+    e_var arg = e_make_var_from_string(e_strdup(e_argv[i]));
     e_list_append(&arg, E_VAR_AS_LIST(&l));
   }
 

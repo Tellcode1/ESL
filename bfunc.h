@@ -197,6 +197,12 @@ e_var eb_list_len(e_var* args, u32 nargs);
 
 e_var eb_get_command_line_args(e_var* args, u32 nargs);
 
+e_var eb_vec2(e_var* args, u32 nargs);
+e_var eb_vec3(e_var* args, u32 nargs);
+e_var eb_vec4(e_var* args, u32 nargs);
+e_var eb_mat3(e_var* args, u32 nargs);
+e_var eb_mat4(e_var* args, u32 nargs);
+
 static inline e_var
 eb_len(e_var* args, u32 nargs)
 {
@@ -218,20 +224,20 @@ e_var_type_bitmask_to_string(e_vartype mask, char* buffer, size_t buffer_size)
 {
   char* p = strncpy(buffer, "[", buffer_size - 1);
 
-  if ((bool)(mask & E_VARTYPE_INT)) p = _strlpcat(p, "int,", buffer, buffer_size);
-  if ((bool)(mask & E_VARTYPE_BOOL)) p = _strlpcat(p, "bool,", buffer, buffer_size);
-  if ((bool)(mask & E_VARTYPE_CHAR)) p = _strlpcat(p, "char,", buffer, buffer_size);
-  if ((bool)(mask & E_VARTYPE_FLOAT)) p = _strlpcat(p, "float,", buffer, buffer_size);
-  if ((bool)(mask & E_VARTYPE_STRING)) p = _strlpcat(p, "string,", buffer, buffer_size);
-  if ((bool)(mask & E_VARTYPE_LIST)) p = _strlpcat(p, "list,", buffer, buffer_size);
-  if ((bool)(mask & E_VARTYPE_MAP)) p = _strlpcat(p, "map,", buffer, buffer_size);
-  if ((bool)(mask & E_VARTYPE_ERROR)) p = _strlpcat(p, "error,", buffer, buffer_size);
+  if ((bool)(mask & E_VARTYPE_INT)) p = e_strlpcat(p, "int,", buffer, buffer_size);
+  if ((bool)(mask & E_VARTYPE_BOOL)) p = e_strlpcat(p, "bool,", buffer, buffer_size);
+  if ((bool)(mask & E_VARTYPE_CHAR)) p = e_strlpcat(p, "char,", buffer, buffer_size);
+  if ((bool)(mask & E_VARTYPE_FLOAT)) p = e_strlpcat(p, "float,", buffer, buffer_size);
+  if ((bool)(mask & E_VARTYPE_STRING)) p = e_strlpcat(p, "string,", buffer, buffer_size);
+  if ((bool)(mask & E_VARTYPE_LIST)) p = e_strlpcat(p, "list,", buffer, buffer_size);
+  if ((bool)(mask & E_VARTYPE_MAP)) p = e_strlpcat(p, "map,", buffer, buffer_size);
+  if ((bool)(mask & E_VARTYPE_ERROR)) p = e_strlpcat(p, "error,", buffer, buffer_size);
 
   /* Set last pipe to NUL */
   char* last_comma = strrchr(buffer, ',');
   if (last_comma != nullptr) *last_comma = 0;
 
-  p = _strlpcat(p, "]", buffer, buffer_size);
+  p = e_strlpcat(p, "]", buffer, buffer_size);
 }
 
 char* e_read_full_line(FILE* f);
@@ -297,6 +303,8 @@ static const e_builtin_func eb_funcs[] = {
 
   /* Can convert anything to string. */
   { "string", "Cast a variable to a string", "fn string(v) -> string", 0xFFFFFFFF, 1, 1, eb_cast_string },
+
+  {"vec2", "Cast two floats in to a vec2", "fn vec2(x, y) -> vec2", E_VARTYPE_FLOAT, 2, 2, },
 
   /* Scalar types */
   { "int", "Cast a variable to a int", "fn int(v) -> int", E_VARTYPE_INT | E_VARTYPE_CHAR | E_VARTYPE_BOOL | E_VARTYPE_FLOAT | E_VARTYPE_STRING,    1,    1, eb_cast_int },

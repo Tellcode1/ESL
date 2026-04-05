@@ -30,6 +30,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 int
 e_var_shallow_cpy(const e_var* var, e_var* dst)
@@ -67,7 +68,7 @@ e_var_deep_cpy(const e_var* var, e_var* dst)
     case E_VARTYPE_FLOAT: dst->val = var->val; break;
     case E_VARTYPE_STRING:
       dst->val.s              = e_refdobj_pool_acquire(&ge_pool);
-      E_VAR_AS_STRING(dst)->s = strdup(E_VAR_AS_STRING(var)->s);
+      E_VAR_AS_STRING(dst)->s = e_strdup(E_VAR_AS_STRING(var)->s);
       break;
     case E_VARTYPE_LIST: {
       dst->val.list = e_refdobj_pool_acquire(&ge_pool);
@@ -251,12 +252,12 @@ e_var_to_string(const struct e_var* v, char* buffer, size_t buffer_size)
         offset = strlen(buffer);
 
         if (i < E_VAR_AS_LIST(v)->size - 1) {
-          _strlcat(buffer, ", ", buffer_size);
+          e_strlcat(buffer, ", ", buffer_size);
           offset = strlen(buffer);
         }
       }
 
-      _strlcat(buffer, "]", buffer_size);
+      e_strlcat(buffer, "]", buffer_size);
 
       break;
     }

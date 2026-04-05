@@ -65,7 +65,7 @@ e_str_intern(const char* s, e_str_interner* table)
   }
 
   u32   i                 = table->strings_count;
-  char* sdup              = strdup(s);
+  char* sdup              = e_strdup(s);
   table->strings[i]       = sdup;
   table->string_hashes[i] = hash;
   table->strings_count++;

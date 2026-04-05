@@ -692,7 +692,7 @@ parse_function(e_ast* p, bool external, int node)
       names_capacity = new_capacity;
     }
 
-    arg_name = strdup(tk->val.ident);
+    arg_name = e_strdup(tk->val.ident);
     if (!arg_name) {
       asterror(peek(p)->span, "Alloc error [function argument name]\n");
       goto err;
@@ -822,7 +822,7 @@ make_literal_node(e_ast* p, int node, const e_token* tk)
     nodep->c.c  = tk->val.c;
   } else if (tk->type == E_TOKEN_TYPE_STRING) {
     nodep->type = E_AST_NODE_STRING;
-    nodep->s.s  = strdup(tk->val.s);
+    nodep->s.s  = e_strdup(tk->val.s);
     if (!nodep->s.s) return -1;
   }
   return node;

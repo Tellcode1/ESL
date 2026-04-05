@@ -1,5 +1,5 @@
 CC ?= cc
-CFLAGS ?= -g -Wall -Wpedantic
+CFLAGS ?= -std=c99 -g -Wall -Wpedantic
 LDFLAGS ?= -g -lm
 
 SRC_DIR=.

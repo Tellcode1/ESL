@@ -62,18 +62,18 @@ typedef enum eb_io_constants {
  */
 static const e_builtin_var eb_vars[] = {
   { .name = "null", .type = E_VARTYPE_NULL, .value = { 0 } },
-  { .name = "math::PI", .type = E_VARTYPE_FLOAT, .value = { .f = M_PI } },
-  { .name = "math::PIBY2", .type = E_VARTYPE_FLOAT, .value = { .f = M_PI_2 } },
-  { .name = "math::PIBY4", .type = E_VARTYPE_FLOAT, .value = { .f = M_PI_4 } },
-  { .name = "math::PIX2", .type = E_VARTYPE_FLOAT, .value = { .f = M_PI * 2.0 } },
-  { .name = "math::TAU", .type = E_VARTYPE_FLOAT, .value = { .f = M_PI * 2.0 } },
+  { .name = "math::PI", .type = E_VARTYPE_FLOAT, .value = { .f = 3.14159265358979323846 } },
+  { .name = "math::PIBY2", .type = E_VARTYPE_FLOAT, .value = { .f = 1.57079632679489661923 } },
+  { .name = "math::PIBY4", .type = E_VARTYPE_FLOAT, .value = { .f = 0.78539816339744830962 } },
+  { .name = "math::PIX2", .type = E_VARTYPE_FLOAT, .value = { .f = 3.14159265358979323846 * 2.0 } },
+  { .name = "math::TAU", .type = E_VARTYPE_FLOAT, .value = { .f = 3.14159265358979323846 * 2.0 } },
   { .name = "math::PHI", .type = E_VARTYPE_FLOAT, .value = { .f = 1.6180339887498948 } }, // golden ratio
-  { .name = "math::e", .type = E_VARTYPE_FLOAT, .value = { .f = M_E } },
+  { .name = "math::e", .type = E_VARTYPE_FLOAT, .value = { .f = 2.7182818284590452354 } },
   { .name = "math::ROOT2", .type = E_VARTYPE_FLOAT, .value = { .f = 1.4142135623730950 } },
   { .name = "math::ROOT3", .type = E_VARTYPE_FLOAT, .value = { .f = 1.7320508075688772 } },
   { .name = "math::ROOT5", .type = E_VARTYPE_FLOAT, .value = { .f = 2.2360679774997896 } },
-  { .name = "math::LN2", .type = E_VARTYPE_FLOAT, .value = { .f = M_LN2 } },
-  { .name = "math::LN10", .type = E_VARTYPE_FLOAT, .value = { .f = M_LN10 } },
+  { .name = "math::LN2", .type = E_VARTYPE_FLOAT, .value = { .f = 0.69314718055994530942 } },
+  { .name = "math::LN10", .type = E_VARTYPE_FLOAT, .value = { .f = 2.30258509299404568402 } },
 
   { .name = "int::MAX", .type = E_VARTYPE_INT, .value = { .i = INT32_MAX } },
   { .name = "int::MIN", .type = E_VARTYPE_INT, .value = { .i = INT32_MIN } },

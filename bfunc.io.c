@@ -221,7 +221,7 @@ eb_io_error(e_var* args, u32 nargs)
 {
   (void)args;
   (void)nargs;
-  return e_make_var_from_string(strdup(strerror(errno)));
+  return e_make_var_from_string(e_strdup(strerror(errno)));
 }
 
 e_var
@@ -242,7 +242,7 @@ eb_io_type(e_var* args, u32 nargs)
   }
 #else
   struct stat sb;
-  if (lstat(path, &sb) == -1) { return (e_var){ .type = E_VARTYPE_INT, .val.i = EB_IO_UNKNOWN }; }
+  if (stat(path, &sb) == -1) { return (e_var){ .type = E_VARTYPE_INT, .val.i = EB_IO_UNKNOWN }; }
 
   if (S_ISLNK(sb.st_mode)) {
     return (e_var){ .type = E_VARTYPE_INT, .val.i = EB_IO_LINK };

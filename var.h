@@ -25,8 +25,13 @@
 #ifndef ESL_VAR_H
 #define ESL_VAR_H
 
+#include "list.h"
+#include "map.h"
+#include "mathstrucs.h"
+#include "pool.h"
 #include "refcount.h"
 #include "stdafx.h"
+#include "string.h"
 
 #include <string.h>
 
@@ -34,11 +39,15 @@
 #define E_OBJ_AS_LIST(obj) ((e_list*)((obj)->data))
 #define E_OBJ_AS_MAP(obj) ((e_map*)((obj)->data))
 #define E_OBJ_AS_STRUCT(obj) ((e_struct*)((obj)->data))
+#define E_OBJ_AS_MAT3(obj) ((e_mat3*)((obj)->data))
+#define E_OBJ_AS_MAT4(obj) ((e_mat4*)((obj)->data))
 
 #define E_VAR_AS_STRING(var) ((e_string*)((var)->val.s->data))
 #define E_VAR_AS_LIST(var) ((e_list*)((var)->val.list->data))
 #define E_VAR_AS_MAP(var) ((e_map*)((var)->val.map->data))
 #define E_VAR_AS_STRUCT(var) ((e_struct*)((var)->val.map->data))
+#define E_VAR_AS_MAT3(var) ((e_mat3*)((var)->val.mat3->data))
+#define E_VAR_AS_MAT4(var) ((e_mat4*)((var)->val.mat4->data))
 
 struct e_var;
 struct e_list;
@@ -62,9 +71,14 @@ typedef enum e_vartype {
   E_VARTYPE_LIST        = 1 << 7,
   E_VARTYPE_MAP         = 1 << 8,
   E_VARTYPE_STRUCT      = 1 << 9,
-  E_VARTYPE_ERROR       = 1 << 10, // use e_error_string to get string representation of the error.
-  E_VARTYPE_CC_VARIABLE = 1 << 11,
-  E_VARTYPE_CC_STRUCT   = 1 << 12,
+  E_VARTYPE_VEC2        = 1 << 10,
+  E_VARTYPE_VEC3        = 1 << 11,
+  E_VARTYPE_VEC4        = 1 << 12,
+  E_VARTYPE_MAT3        = 1 << 13,
+  E_VARTYPE_MAT4        = 1 << 14,
+  E_VARTYPE_ERROR       = 1 << 15, // use e_error_string to get string representation of the error.
+  E_VARTYPE_CC_VARIABLE = 1 << 16,
+  E_VARTYPE_CC_STRUCT   = 1 << 17,
 } e_vartype;
 // typedef u32 e_vartype;
 
@@ -79,6 +93,13 @@ typedef union e_varval {
 
   /* No 32 bit floats :) */
   double f;
+
+  e_vec2 vec2;
+  e_vec3 vec3;
+  e_vec4 vec4;
+
+  struct e_refdobj* mat3;
+  struct e_refdobj* mat4;
 
   struct e_refdobj* s;     // Use E_VAR_AS_STRING to access as e_string*
   struct e_refdobj* list;  // Use E_VAR_AS_LIST to access as e_list*
@@ -148,6 +169,11 @@ e_var_type_to_string(e_vartype type)
     case E_VARTYPE_CC_STRUCT: return "struct::compile_info";
     case E_VARTYPE_NULL: return "null";
     case E_VARTYPE_STRUCT: return "struct";
+    case E_VARTYPE_VEC2: return "vec2";
+    case E_VARTYPE_VEC3: return "vec3";
+    case E_VARTYPE_VEC4: return "vec4";
+    case E_VARTYPE_MAT3: return "mat3";
+    case E_VARTYPE_MAT4: return "mat4";
   }
   return "unknown";
 }

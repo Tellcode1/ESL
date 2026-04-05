@@ -27,10 +27,9 @@
 
 #include "list.h"
 #include "map.h"
+#include "mathstrucs.h"
 #include "refcount.h"
 #include "stdafx.h"
-#include "string.h"
-#include "var.h"
 
 /**
  * I made this after looking at the linux slab allocator.
@@ -41,12 +40,13 @@
 /**
  * Must be a power of 2!
  */
-#define E_REFLEAVE_COUNT 64
+#define E_REFLEAVE_COUNT 32
 
 /**
  * Size of a leaf, excluding the reference counter.
+ * 128 bytes, by default.
  */
-#define E_REFLEAVE_SIZE MAX(MAX(sizeof(e_list), MAX(sizeof(e_map), sizeof(e_string))), 40)
+#define E_REFLEAVE_SIZE sizeof(e_mat4)
 struct e_refdobj;
 struct e_refdobj_branch;
 struct e_refdobj_pool;

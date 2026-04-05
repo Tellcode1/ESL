@@ -64,8 +64,6 @@ extern "C" {
 #  define E_ARR_FREE(arr) (free((void*)arr))
 #endif
 
-typedef uint8_t uchar;
-
 typedef uint8_t  uchar;
 typedef uint8_t  u8;
 typedef uint16_t u16;
@@ -101,7 +99,7 @@ e_hash_fnv(const void* data, size_t size)
 // #define malloc(size) allocator_callback(__FILE__, __LINE__, (size))
 
 static inline size_t
-_strlcat(char* d, const char* s, size_t dsize)
+e_strlcat(char* d, const char* s, size_t dsize)
 {
   size_t dl = strlen(d);
   size_t sl = strlen(s);
@@ -116,7 +114,7 @@ _strlcat(char* d, const char* s, size_t dsize)
 }
 
 static inline char*
-_strlpcat(char* d, const char* s, const char* dabs, size_t dsize)
+e_strlpcat(char* d, const char* s, const char* dabs, size_t dsize)
 {
   size_t off = d - dabs;
   if (off >= dsize) return d;
@@ -132,6 +130,15 @@ _strlpcat(char* d, const char* s, const char* dabs, size_t dsize)
   d[dl + i] = 0;
 
   return &d[dl + i];
+}
+
+static inline char*
+e_strdup(const char* s)
+{
+  size_t len = strlen(s) + 1;
+  char*  p   = malloc(len);
+  if (p) { memcpy(p, s, len); }
+  return p;
 }
 
 static inline char*

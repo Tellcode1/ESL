@@ -44,7 +44,7 @@ eb_str_append(e_var* args, u32 nargs)
 
   char* p = big_s;
   p[0]    = 0;
-  for (u32 i = 0; i < nargs; i++) { p = _strlpcat(p, E_VAR_AS_STRING(&args[0])->s, big_s, total_len + 1); }
+  for (u32 i = 0; i < nargs; i++) { p = e_strlpcat(p, E_VAR_AS_STRING(&args[0])->s, big_s, total_len + 1); }
 
   return e_make_var_from_string(big_s);
 }
@@ -84,7 +84,7 @@ eb_str_repeat(e_var* args, u32 nargs)
   new_s[0]    = 0;
 
   char* p = new_s;
-  for (int i = 0; i < times; i++) { p = _strlpcat(p, s, new_s, new_len + 1); }
+  for (int i = 0; i < times; i++) { p = e_strlpcat(p, s, new_s, new_len + 1); }
 
   return e_make_var_from_string(new_s);
 }
@@ -97,7 +97,7 @@ eb_str_ltrim(e_var* args, u32 nargs)
   const char* s = E_VAR_AS_STRING(&args[0])->s;
 
   while (*s && isspace(*s)) { s++; }
-  char* new_s = strdup(s);
+  char* new_s = e_strdup(s);
 
   return e_make_var_from_string(new_s);
 }
@@ -161,11 +161,11 @@ eb_str_split(e_var* args, u32 nargs)
 
   e_list_init(NULL, 0, E_VAR_AS_LIST(&returned_list));
 
-  char* to_split_copy = strdup(to_split);
+  char* to_split_copy = e_strdup(to_split);
   char* tok           = strtok(to_split_copy, split_by);
 
   while (tok) {
-    e_var s = e_make_var_from_string(strdup(tok));
+    e_var s = e_make_var_from_string(e_strdup(tok));
     e_list_append(&s, E_VAR_AS_LIST(&returned_list));
 
     tok = strtok(NULL, split_by);

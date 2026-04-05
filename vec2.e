@@ -1,25 +1,3 @@
-struct vec2
-{
-  let x;
-  let y;
-};
-
-struct vec4
-{
-  let x;
-  let y;
-  let z;
-  let w;
-};
-
-struct mat4
-{
-  let rows0;
-  let rows1;
-  let rows2;
-  let rows3;
-};
-
 fn v2add(va, vb)
 {
   return vec2(va.x + vb.x, va.y + vb.y);

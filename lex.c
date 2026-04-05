@@ -436,7 +436,7 @@ e_tokenize(const char* input, const char* advertised_file, e_str_interner* inter
 
   // e_token tk = {
   //   .type = E_TOKEN_TYPE_EOF,
-  //   .span = { .file = strdup(advertised_file), .line = line, .col = col, },
+  //   .span = { .file = e_strdup(advertised_file), .line = line, .col = col, },
   // };
   // tklist_append(&toks, &tk);
 
