@@ -160,6 +160,14 @@ typedef enum e_opcode_bck {
   E_OPCODE_INDEX_ASSIGN,
 
   /**
+   * Assign to variable on the stack.
+   * Used for direct variable assignments
+   * (vectors, generally.)
+   * INDEX_ASSIGN_VAR [varID : u32]
+   */
+  E_OPCODE_INDEX_ASSIGN_VAR,
+
+  /**
    * Push a variable to the stack, and set its ID on the variable table.
    * The initial value of the variable will be NULL.
    * If an explicit type for the variable is defined, but no initializer was specified, the initial value of the variable will be zeroed.

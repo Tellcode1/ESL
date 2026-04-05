@@ -26,12 +26,9 @@
 #define E_CC_LVALUE_H
 
 #include "ast.h"
-#include "bc.h"
 #include "cc.h"
 #include "cerr.h"
-#include "rwhelp.h"
 #include "stdafx.h"
-#include "var.h"
 
 typedef enum e_lval_type {
   E_LVAL_VAR,
@@ -52,6 +49,10 @@ typedef union e_lval_value {
   struct {
     int left_node;  // Compile to get LHS of index. For vec[16], it will push vec to stack.
     int index_node; // Compile to get index. For vec[16], it will push 16 to stack.
+
+    bool left_is_var; // Is left a variable?
+    u32  left_var_id;
+
   } index;
 } e_lval_value;
 

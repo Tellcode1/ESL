@@ -122,6 +122,7 @@ e_print_instruction(e_opcode o, const u8** ip)
       break;
     }
     case E_OPCODE_DUP: printf("dup\n"); break;
+    case E_OPCODE_INDEX_ASSIGN_VAR: printf("index_assign_to_var [%u]\n", e_read_u32(ip)); break;
   }
 }
 

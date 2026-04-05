@@ -587,6 +587,18 @@ e_exec(const e_exec_info* info)
 
           e_var* find = e_map_find(map, &key);
           if (find) { push = *find; }
+        } else if (left_type == E_VARTYPE_VEC2) {
+          e_vec2 v2  = stack[stack_size - 2].val.vec2;
+          int    idx = evar_to_int(stack[stack_size - 1]);
+          if (idx < 2) { push = (e_var){ .type = E_VARTYPE_FLOAT, .val.f = idx == 0 ? v2.x : v2.y }; }
+        } else if (left_type == E_VARTYPE_VEC3) {
+          e_vec3 v3  = stack[stack_size - 2].val.vec3;
+          int    idx = evar_to_int(stack[stack_size - 1]);
+          if (idx < 3) { push = (e_var){ .type = E_VARTYPE_FLOAT, .val.f = idx == 0 ? v3.x : idx == 1 ? v3.y : v3.z }; }
+        } else if (left_type == E_VARTYPE_VEC4) {
+          e_vec4 v4  = stack[stack_size - 2].val.vec4;
+          int    idx = evar_to_int(stack[stack_size - 1]);
+          if (idx < 4) { push = (e_var){ .type = E_VARTYPE_FLOAT, .val.f = idx == 0 ? v4.x : idx == 1 ? v4.y : idx == 2 ? v4.z : v4.w }; }
         }
 
         e_stack_pop(info->stack); // pop index
@@ -615,6 +627,12 @@ e_exec(const e_exec_info* info)
 
           e_var_shallow_cpy(&value, slot);
           e_var_acquire(slot);
+
+          e_stack_pop(info->stack);
+          e_stack_pop(info->stack);
+          e_stack_pop(info->stack);
+
+          TRY_V(e_stack_push(info->stack, &value));
         } else if (base_type == E_VARTYPE_MAP) {
           e_map* map = E_VAR_AS_MAP(&stack[stack_size - 3]);
           if (!map) break;
@@ -624,14 +642,48 @@ e_exec(const e_exec_info* info)
 
           e_var_shallow_cpy(&value, slot);
           e_var_acquire(slot);
+
+          e_stack_pop(info->stack);
+          e_stack_pop(info->stack);
+          e_stack_pop(info->stack);
+
+          TRY_V(e_stack_push(info->stack, &value));
         }
+        // e_var_release(&value);
+        break;
+      }
+
+      case E_OPCODE_INDEX_ASSIGN_VAR: {
+        u32 var_id = e_read_u32(&ip);
+
+        e_var* stack      = info->stack->stack;
+        u32    stack_size = info->stack->size;
+
+        e_var value = stack[stack_size - 1];
+        e_var index = stack[stack_size - 2];
+        e_var base  = stack[stack_size - 3];
+
+        if (base.type == E_VARTYPE_VEC2 || base.type == E_VARTYPE_VEC3 || base.type == E_VARTYPE_VEC4) {
+          int idx = evar_to_int(index);
+          if (idx == 0) {
+            base.val.vec4.x = evar_to_float(value);
+          } else if (idx == 1) {
+            base.val.vec4.y = evar_to_float(value);
+          } else if (idx == 2) {
+            base.val.vec4.z = evar_to_float(value);
+          } else if (idx == 3) {
+            base.val.vec4.w = evar_to_float(value);
+          }
+        }
+
+        e_var* slot = get_variable_from_id(info->stack, var_id);
+        *slot       = base;
 
         e_stack_pop(info->stack);
         e_stack_pop(info->stack);
         e_stack_pop(info->stack);
 
         TRY_V(e_stack_push(info->stack, &value));
-        // e_var_release(&value);
         break;
       }
 

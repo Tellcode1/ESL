@@ -407,7 +407,11 @@ emit_lvalue_assign_epilogue(e_compiler* cc, e_lval lv)
     return 0;
   }
   /* LVAL_INDEX handles all three of INDEX, INDEX_ASSIGN and INDEX_COMPOUND */
-  else if (lv.type == E_LVAL_INDEX) {
+  if (lv.type == E_LVAL_INDEX && lv.val.index.left_is_var) {
+    e_emit_instruction(cc, E_OPCODE_INDEX_ASSIGN_VAR);
+    e_emit_u32(cc, lv.val.index.left_var_id);
+    return 0;
+  } else if (lv.type == E_LVAL_INDEX) {
     e_emit_instruction(cc, E_OPCODE_INDEX_ASSIGN);
     return 0;
   } else if (lv.type == E_LVAL_MEMBER) {
@@ -499,6 +503,17 @@ e_make_value(e_compiler* cc, int node)
       l.type                 = E_LVAL_INDEX;
       l.val.index.left_node  = E_GET_NODE(cc->ast, node)->index.base;
       l.val.index.index_node = E_GET_NODE(cc->ast, node)->index.index;
+
+      int base = l.val.index.left_node;
+      if (E_GET_NODE(cc->ast, base)->type == E_AST_NODE_VARIABLE) {
+        char* name              = mk_name(cc, E_GET_NODE(cc->ast, base)->ident.ident);
+        l.val.index.left_is_var = true;
+        l.val.index.left_var_id = e_hash_fnv(name, strlen(name));
+      } else {
+        l.val.index.left_is_var = false;
+        l.val.index.left_var_id = 0;
+      }
+
       return l;
     }
 
@@ -508,6 +523,16 @@ e_make_value(e_compiler* cc, int node)
       l.type                 = E_LVAL_INDEX;
       l.val.index.left_node  = E_GET_NODE(cc->ast, node)->index_assign.base;
       l.val.index.index_node = E_GET_NODE(cc->ast, node)->index_assign.index;
+
+      int base = l.val.index.left_node;
+      if (E_GET_NODE(cc->ast, base)->type == E_AST_NODE_VARIABLE) {
+        char* name              = mk_name(cc, E_GET_NODE(cc->ast, base)->ident.ident);
+        l.val.index.left_is_var = true;
+        l.val.index.left_var_id = e_hash_fnv(name, strlen(name));
+      } else {
+        l.val.index.left_is_var = false;
+        l.val.index.left_var_id = 0;
+      }
       return l;
     }
 
@@ -517,6 +542,16 @@ e_make_value(e_compiler* cc, int node)
       l.type                 = E_LVAL_INDEX;
       l.val.index.left_node  = E_GET_NODE(cc->ast, node)->index_compound.base;
       l.val.index.index_node = E_GET_NODE(cc->ast, node)->index_compound.index;
+
+      int base = l.val.index.left_node;
+      if (E_GET_NODE(cc->ast, base)->type == E_AST_NODE_VARIABLE) {
+        char* name              = mk_name(cc, E_GET_NODE(cc->ast, base)->ident.ident);
+        l.val.index.left_is_var = true;
+        l.val.index.left_var_id = e_hash_fnv(name, strlen(name));
+      } else {
+        l.val.index.left_is_var = false;
+        l.val.index.left_var_id = 0;
+      }
       return l;
     }
 
