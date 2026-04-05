@@ -83,7 +83,7 @@ e_file_load(FILE* f, void** root_allocation, u32* ninstructions, u8** instructio
   u32 bytes_req = 0;
   fread(&bytes_req, sizeof(bytes_req), 1, f);
 
-  *root_allocation = malloc(bytes_req);
+  *root_allocation = calloc(bytes_req, 1);
   if (*root_allocation == nullptr) return -2;
 
   uchar* alloc = (uchar*)*root_allocation;

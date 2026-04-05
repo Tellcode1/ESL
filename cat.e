@@ -7,7 +7,9 @@ fn main(args)
     let fd = io::open(args[i], "r");
     if (fd == null)
     {
-      println("cat: Failed to open file: ", args[i]);
+      io::println(io::STDERR, "cat: Failed to open file: ", args[i]);
+      io::println(io::STDERR, "cat: ", io::error());
+      continue;
     }
 
     defer io::close(fd);

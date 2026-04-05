@@ -1598,6 +1598,13 @@ compile(struct e_compiler* cc, int node)
         if (e) { return e; }
       }
 
+      // Compiling headless. Emit a halt and return.
+      if (!cc->info->executable) {
+        e_emit_instruction(cc, E_OPCODE_HALT);
+        e_emit_u32(cc, 0);
+        return 0; // Done!
+      }
+
       const char* custom_entry_point = cc->info->custom_entry_point;
 
       /* main if not specified. */
@@ -1626,8 +1633,8 @@ compile(struct e_compiler* cc, int node)
         return -1;
       }
 
-      /* Push command line argument list to the stack, right before main */
-      if (entry_point_nargs != 0) e_emit_instruction(cc, E_OPCODE_LOAD_ARG_LIST);
+      /* Push command line argument list to the stack, right before main as an argument. */
+      if (entry_point_nargs == 1) { e_emit_instruction(cc, E_OPCODE_LOAD_ARG_LIST); }
 
       /* CALL to main */
       e_emit_instruction(cc, E_OPCODE_CALL);

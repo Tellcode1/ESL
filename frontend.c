@@ -53,8 +53,11 @@ main(int argc, char* argv[])
   char*                contents       = NULL;
 
   if (e_refdobj_pool_init(16, &ge_pool)) return -1;
+
   e_str_interner interner;
   if (e_str_interner_init(256, &interner)) return -1;
+
+  bool executable = false;
 
   const char* out = NULL;
   for (int i = 0; i < argc; i++) {
@@ -72,6 +75,8 @@ main(int argc, char* argv[])
       tokenizer_only = true;
     } else if (strcmp(opt, "ast") == 0) {
       ast_only = true;
+    } else if (strcmp(opt, "executable") == 0 || strcmp(opt, "e") == 0) {
+      executable = true;
     }
   }
 
@@ -133,6 +138,7 @@ main(int argc, char* argv[])
     .arena              = &arena,
     .ast                = &ast,
     .root               = root,
+    .executable         = executable,
     .custom_entry_point = nullptr,
     .opt_level          = 0,
   };

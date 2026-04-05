@@ -170,25 +170,18 @@ eb_var_dup(e_var* args, u32 nargs)
 
 // Make list from elements
 e_var eb_list_make(e_var* args, u32 nargs);
-
 // append(list, value)
 e_var eb_list_append(e_var* args, u32 nargs);
-
 // pop(list)
 e_var eb_list_pop(e_var* args, u32 nargs); // fast
-
 // remove(list, index)
 e_var eb_list_remove(e_var* args, u32 nargs); // expensive
-
 // insert(list, index, value)
 e_var eb_list_insert(e_var* args, u32 nargs); // Replaces value if it exists!
-
 // find(list, value) => -1 if non existent
 e_var eb_list_find(e_var* args, u32 nargs); // Returns index, -1 if it doesn't exist.
-
 // reserve(list, elements_to_reserve)
 e_var eb_list_reserve(e_var* args, u32 nargs); // number of new variables to reserve
-
 // len(list)
 e_var eb_list_len(e_var* args, u32 nargs);
 

@@ -51,6 +51,14 @@ typedef struct ecc_info {
   // If NULL, main is used.
   const char* custom_entry_point;
 
+  /**
+   * If true, the compiler will emit code to
+   * jump to main on start.
+   * Otherwise, the program will HALT after global
+   * initialization is finished.
+   */
+  bool executable;
+
   int opt_level; // 0 or 1/2/3
 } ecc_info;
 
