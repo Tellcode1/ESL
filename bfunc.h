@@ -304,7 +304,12 @@ static const e_builtin_func eb_funcs[] = {
   /* Can convert anything to string. */
   { "string", "Cast a variable to a string", "fn string(v) -> string", 0xFFFFFFFF, 1, 1, eb_cast_string },
 
-  {"vec2", "Cast two floats in to a vec2", "fn vec2(x, y) -> vec2", E_VARTYPE_FLOAT, 2, 2, },
+  {"vec2", "Cast two floats in to a vec2", "fn vec2(x, y) -> vec2", E_VARTYPE_FLOAT, 2, 2, eb_vec2},
+  {"vec3", "Cast two floats in to a vec2", "fn vec3(x, y, z) -> vec3", E_VARTYPE_FLOAT, 3, 3, eb_vec3},
+  {"vec4", "Cast two floats in to a vec2", "fn vec4(x, y, z, w) -> vec4", E_VARTYPE_FLOAT, 4, 4, eb_vec4},
+
+  {"mat3", "Cast three vector3's into a mat3", "fn mat3(row0, row1, row2, row3) -> vec2", E_VARTYPE_VEC3, 4, 4, eb_mat3},
+  {"mat4", "Cast three vector4's into a mat3", "fn mat4(row0, row1, row2, row3) -> vec2", E_VARTYPE_VEC4, 4, 4, eb_mat4},
 
   /* Scalar types */
   { "int", "Cast a variable to a int", "fn int(v) -> int", E_VARTYPE_INT | E_VARTYPE_CHAR | E_VARTYPE_BOOL | E_VARTYPE_FLOAT | E_VARTYPE_STRING,    1,    1, eb_cast_int },

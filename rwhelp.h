@@ -28,7 +28,6 @@
 #include "bc.h"
 #include "cc.h"
 #include "fn.h"
-#include "perr.h"
 #include "pool.h"
 #include "refcount.h"
 #include "stdafx.h"
@@ -100,24 +99,40 @@ e_file_load(FILE* f, void** root_allocation, u32* ninstructions, u8** instructio
     fread(&alits[i].type, sizeof(e_vartype), 1, f);
 
     e_var* lit = &alits[i];
-    if (alits[i].type == E_VARTYPE_STRING) {
-      u32 len = 0;
-      fread(&len, sizeof(len), 1, f);
+    switch (lit->type) {
+      case E_VARTYPE_STRING: {
+        u32 len = 0;
+        fread(&len, sizeof(len), 1, f);
 
-      lit->val.s = (e_refdobj*)(alloc);
-      alloc += sizeof(e_refdobj);
+        lit->val.s = (e_refdobj*)(alloc);
+        alloc += sizeof(e_refdobj);
 
-      /* Initialize ref counter to 1. Not used for literals but VM expects it */
-      lit->val.s->refc.ctr = 1;
+        /* Initialize ref counter to 1. Not used for literals but VM expects it */
+        lit->val.s->refc.ctr = 1;
 
-      E_VAR_AS_STRING(lit)->s = (char*)(alloc);
-      alloc += len + 1;
+        E_VAR_AS_STRING(lit)->s = (char*)(alloc);
+        alloc += len + 1;
 
-      fread(E_VAR_AS_STRING(lit)->s, sizeof(char), len, f);
+        fread(E_VAR_AS_STRING(lit)->s, sizeof(char), len, f);
 
-      E_VAR_AS_STRING(lit)->s[len] = 0;
-    } else {
-      fread(&alits[i].val, sizeof(e_varval), 1, f);
+        E_VAR_AS_STRING(lit)->s[len] = 0;
+        break;
+      }
+
+      case E_VARTYPE_NULL: *lit = (e_var){ .type = E_VARTYPE_NULL }; break;
+      case E_VARTYPE_VOID:
+        *lit = (e_var){ .type = E_VARTYPE_NULL };
+        break;
+        break;
+      case E_VARTYPE_INT: fread(&lit->val.i, sizeof(lit->val.i), 1, f); break;
+      case E_VARTYPE_BOOL: fread(&lit->val.b, sizeof(lit->val.b), 1, f); break;
+      case E_VARTYPE_CHAR: fread(&lit->val.c, sizeof(lit->val.c), 1, f); break;
+      case E_VARTYPE_FLOAT: fread(&lit->val.f, sizeof(lit->val.f), 1, f); break;
+      case E_VARTYPE_STRUCT: break;
+      case E_VARTYPE_VEC2: fread(&lit->val.vec2, sizeof(lit->val.vec2), 1, f); break;
+      case E_VARTYPE_VEC3: fread(&lit->val.vec3, sizeof(lit->val.vec3), 1, f); break;
+      case E_VARTYPE_VEC4: fread(&lit->val.vec4, sizeof(lit->val.vec4), 1, f); break;
+      default: break;
     }
   }
 
@@ -132,8 +147,11 @@ e_file_load(FILE* f, void** root_allocation, u32* ninstructions, u8** instructio
     fread(&func.nargs, sizeof(func.nargs), 1, f);
     fread(&func.name_hash, sizeof(func.name_hash), 1, f);
 
+    alloc = (uchar*)(((uintptr_t)alloc + 3) & ~3);
+
     func.arg_slots = (u32*)(alloc);
     alloc += sizeof(u32) * func.nargs;
+
     if (func.arg_slots == nullptr) return -4;
 
     fread(func.arg_slots, sizeof(*func.arg_slots), func.nargs, f);
@@ -147,6 +165,7 @@ e_file_load(FILE* f, void** root_allocation, u32* ninstructions, u8** instructio
   }
 
   fread(ninstructions, sizeof(*ninstructions), 1, f);
+
   *instructions = (u8*)alloc;
   fread(*instructions, sizeof(u8), *ninstructions, f);
 
@@ -156,7 +175,7 @@ e_file_load(FILE* f, void** root_allocation, u32* ninstructions, u8** instructio
 static inline u32
 e_file_bytes_required(const e_compilation_result* r)
 {
-  u32 size = 0;
+  u32 size = 1024;
 
   // literals array
   size += sizeof(e_var) * r->nliterals;
@@ -178,8 +197,10 @@ e_file_bytes_required(const e_compilation_result* r)
   for (u32 i = 0; i < r->nfunctions; i++) {
     const e_function* fn = &r->functions[i];
 
+    size = (size + 3) & ~3;
     size += sizeof(u32) * fn->nargs; // arg_slots
-    size += fn->code_size;           // code
+
+    size += fn->code_size; // code
   }
 
   size += r->ninstructions;
@@ -199,19 +220,32 @@ e_file_write(const e_compilation_result* r, FILE* f)
   fwrite(&r->nliterals, sizeof(r->nliterals), 1, f);
   for (u32 i = 0; i < r->nliterals; i++) {
     const e_var* lit = &r->literals[i];
-    fwrite(&lit->type, sizeof(e_vartype), 1, f);
+    fwrite(&lit->type, sizeof(lit->type), 1, f);
 
     if (lit->type == E_VARTYPE_STRING) {
       u32 len = strlen(E_VAR_AS_STRING(lit)->s);
       fwrite(&len, sizeof(len), 1, f);
       fwrite(E_VAR_AS_STRING(lit)->s, sizeof(char), len, f);
     } else {
-      fwrite(&lit->val, sizeof(lit->val), 1, f);
+      switch (lit->type) {
+        case E_VARTYPE_INT: fwrite(&lit->val.i, sizeof(lit->val.i), 1, f); break;
+        case E_VARTYPE_BOOL: fwrite(&lit->val.b, sizeof(lit->val.b), 1, f); break;
+        case E_VARTYPE_CHAR: fwrite(&lit->val.c, sizeof(lit->val.c), 1, f); break;
+        case E_VARTYPE_FLOAT: fwrite(&lit->val.f, sizeof(lit->val.f), 1, f); break;
+        case E_VARTYPE_VEC2: fwrite(&lit->val.vec2, sizeof(lit->val.vec2), 1, f); break;
+        case E_VARTYPE_VEC3: fwrite(&lit->val.vec3, sizeof(lit->val.vec3), 1, f); break;
+        case E_VARTYPE_VEC4: fwrite(&lit->val.vec4, sizeof(lit->val.vec4), 1, f); break;
+        default: break;
+      }
     }
   }
   fwrite(&r->nfunctions, sizeof(r->nfunctions), 1, f);
   for (u32 i = 0; i < r->nfunctions; i++) {
     const e_function* fn = &r->functions[i];
+    if (fn->nargs > 100) {
+      printf("Function %u has %u arguments\n", fn->name_hash, fn->nargs);
+      abort();
+    }
     fwrite(&fn->code_size, sizeof(fn->code_size), 1, f);
     fwrite(&fn->nargs, sizeof(fn->nargs), 1, f);
     fwrite(&fn->name_hash, sizeof(fn->name_hash), 1, f);

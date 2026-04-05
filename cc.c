@@ -28,6 +28,7 @@
 #include "ast.h"
 #include "bc.h"
 #include "bfunc.h"
+#include "bstructs.h"
 #include "bvar.h"
 #include "cerr.h"
 #include "fn.h"
@@ -1162,9 +1163,6 @@ compile_while_statement(struct e_compiler* cc, int node)
   ecc_loop_location* last = cc->loop;
   cc->loop                = &loop;
 
-  /* Push a new scope */
-  e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES);
-
   //
   define_and_emit_label(cc, pre_condition_label);
   //
@@ -1440,6 +1438,65 @@ collect_struct_declerations(e_compiler* cc, int* stmts, u32 nstmts, ecc_struct_i
 }
 
 static int
+compile_struct_constructor(e_compiler* fork, e_filespan span, const ecc_struct_information* struc)
+{
+  u32* arg_slots = (u32*)e_arnalloc(fork->arena, sizeof(u32) * struc->fields_count);
+
+  for (u32 i = 0; i < struc->fields_count; i++) {
+    u32 arg_hash = struc->field_hashes[i];
+    arg_slots[i] = arg_hash;
+
+    /* Add variable entry to stack */
+    e_var* arg = e_stack_push_variable(arg_hash, fork->stack);
+
+    /* Acquire a refdobj */
+    arg->val.var_info                 = e_refdobj_pool_acquire(&ge_pool);
+    E_VAR_AS_INFO(arg)->initializer   = -1; // Arguments aren't initialized.
+    E_VAR_AS_INFO(arg)->current_value = -1; // Or initialized to null if you think about it.
+    E_VAR_AS_INFO(arg)->name_hash     = arg_hash;
+    E_VAR_AS_INFO(arg)->span          = span;
+    E_VAR_AS_INFO(arg)->is_const      = false; // User can override the argument any time.
+  }
+
+  e_emit_instruction(fork, E_OPCODE_MK_STRUCT);
+  e_emit_u32(fork, struc->fields_count); // number of members
+  // hashes of all members
+  for (u32 i = 0; i < struc->fields_count; i++) { e_emit_u32(fork, struc->field_hashes[i]); }
+
+  /**
+   * Assign the arguments to all members
+   */
+  for (u32 i = 0; i < struc->fields_count; i++) {
+    e_emit_instruction(fork, E_OPCODE_DUP); // Duplicate struct (shallow copy)
+
+    e_emit_instruction(fork, E_OPCODE_LOAD); // Load the argument
+    e_emit_u32(fork, struc->field_hashes[i]);
+
+    e_emit_instruction(fork, E_OPCODE_MEMBER_ASSIGN);
+    e_emit_u32(fork, struc->field_hashes[i]); // Assign to that field
+    e_emit_instruction(fork, E_OPCODE_POP);   // Pop member assign pushing the value back up. We only
+                                              // want the struct to be on the stack (Member assign pushes struct + value, in that order).
+  }
+
+  // Return the accumulated struct.
+  e_emit_instruction(fork, E_OPCODE_RETURN);
+  e_emit_u8(fork, true); // has_return_value = true
+
+  e_function f = {
+    .code      = fork->emit,
+    .code_size = fork->num_bytes_emitted,
+    .arg_slots = arg_slots,
+    .name_hash = struc->name_hash,
+    .nargs     = struc->fields_count,
+  };
+
+  int e = add_function_entry(fork->arena, fork->function_table, &f);
+  if (e) return e;
+
+  return 0;
+}
+
+static int
 compile_struct_decleration(e_compiler* cc, int node)
 {
   const char* struct_name        = E_GET_NODE(cc->ast, node)->struct_decl.name;
@@ -1460,79 +1517,22 @@ compile_struct_decleration(e_compiler* cc, int node)
   };
   collect_struct_declerations(cc, struct_decl_stmts, struct_decl_nstmts, &struct_data);
 
-  // e_var* r = e_stack_push_variable(struct_name_hash, cc->stack);
-
-  // /* Acquire a refdobj */
-  // r->type            = E_VARTYPE_CC_STRUCT;
-  // r->val.struct_info = e_refdobj_pool_acquire(&ge_pool);
-
-  // /**
-  //  *  Copy entire struct information data to the variable.
-  //  *  BTW, this won't leak. We allocated everything on the arena.
-  //  */
-  // *E_VAR_AS_STRUCT_INFO(r) = struct_data;
-
   /* Generate the constructor function */
   e_compiler fork;
-  compiler_make_fork(cc, &fork);
 
-  e_stack_push_frame(cc->stack);
+  int e = compiler_make_fork(cc, &fork);
+  if (e) return e;
+
+  e = e_stack_push_frame(cc->stack);
+  if (e) return e;
+
   defer_push_scope(&fork);
 
-  u32* arg_slots = (u32*)e_arnalloc(cc->arena, sizeof(u32) * struct_data.fields_count);
-  for (u32 i = 0; i < struct_data.fields_count; i++) {
-    u32 arg_hash = struct_data.field_hashes[i];
-    arg_slots[i] = arg_hash;
-
-    /* Add variable entry to stack */
-    e_var* arg = e_stack_push_variable(arg_hash, fork.stack);
-
-    /* Acquire a refdobj */
-    arg->val.var_info                 = e_refdobj_pool_acquire(&ge_pool);
-    E_VAR_AS_INFO(arg)->initializer   = -1; // Arguments aren't initialized.
-    E_VAR_AS_INFO(arg)->current_value = -1; // Or initialized to null if you think about it.
-    E_VAR_AS_INFO(arg)->name_hash     = arg_hash;
-    E_VAR_AS_INFO(arg)->span          = E_GET_NODE(cc->ast, node)->common.span;
-    E_VAR_AS_INFO(arg)->is_const      = false; // User can override the argument any time.
-  }
-
-  e_emit_instruction(&fork, E_OPCODE_MK_STRUCT);
-  e_emit_u32(&fork, struct_data.fields_count); // number of members
-  // hashes of all members
-  for (u32 i = 0; i < struct_data.fields_count; i++) { e_emit_u32(&fork, struct_data.field_hashes[i]); }
-
-  /**
-   * Assign the arguments to all members
-   */
-  for (u32 i = 0; i < struct_data.fields_count; i++) {
-    e_emit_instruction(&fork, E_OPCODE_DUP); // Duplicate struct (shallow copy)
-
-    e_emit_instruction(&fork, E_OPCODE_LOAD); // Load the argument
-    e_emit_u32(&fork, struct_data.field_hashes[i]);
-
-    e_emit_instruction(&fork, E_OPCODE_MEMBER_ASSIGN);
-    e_emit_u32(&fork, struct_data.field_hashes[i]); // Assign to that field
-    e_emit_instruction(&fork, E_OPCODE_POP);        // Pop member assign pushing the value back up. We only
-                                                    // want the struct to be on the stack (Member assign pushes struct + value, in that order).
-  }
-
-  // Return the accumulated struct.
-  e_emit_instruction(&fork, E_OPCODE_RETURN);
-  e_emit_u8(&fork, true); // has_return_value = true
+  e = compile_struct_constructor(&fork, E_GET_NODE(cc->ast, node)->common.span, &struct_data);
+  if (e) return e;
 
   defer_pop_scope(&fork);
   compiler_join_fork(&fork, cc);
-
-  e_function f = {
-    .code      = fork.emit,
-    .code_size = fork.num_bytes_emitted,
-    .arg_slots = arg_slots,
-    .name_hash = struct_name_hash,
-    .nargs     = struct_data.fields_count,
-  };
-
-  int e = add_function_entry(cc->arena, cc->function_table, &f);
-  if (e) return e;
 
   e_stack_pop_frame(cc->stack);
 
@@ -1898,6 +1898,46 @@ e_compile_function(e_compiler* cc, int node)
   return 0;
 }
 
+static int
+compile_builtin_structures(e_compiler* cc)
+{
+  for (u32 i = 0; i < E_ARRLEN(eb_structs); i++) {
+    const e_builtin_struct* b  = &eb_structs[i];
+    ecc_struct_information  st = {
+      .name           = e_arnstrdup(cc->arena, b->name),
+      .fields         = e_arnalloc(cc->arena, b->fields_count * sizeof(u32)),
+      .field_hashes   = e_arnalloc(cc->arena, b->fields_count * sizeof(u32)),
+      .fields_count   = b->fields_count,
+      .field_capacity = b->fields_count,
+      .name_hash      = e_hash_fnv(b->name, strlen(b->name)),
+    };
+
+    for (u32 j = 0; j < b->fields_count; j++) { st.fields[j] = e_arnstrdup(cc->arena, b->fields[j]); }
+    for (u32 j = 0; j < b->fields_count; j++) { st.field_hashes[j] = e_hash_fnv(b->fields[j], strlen(b->fields[j])); }
+
+    /* Generate the constructor function */
+    e_compiler fork;
+
+    int e = compiler_make_fork(cc, &fork);
+    if (e) return e;
+
+    e = e_stack_push_frame(cc->stack);
+    if (e) return e;
+
+    defer_push_scope(&fork);
+
+    e = compile_struct_constructor(&fork, E_GET_NODE(cc->ast, cc->ast->root)->common.span, &st);
+    if (e) return e;
+
+    defer_pop_scope(&fork);
+    compiler_join_fork(&fork, cc);
+
+    e_stack_pop_frame(cc->stack);
+  }
+
+  return 0;
+}
+
 int
 e_compile(const ecc_info* info, e_compilation_result* result)
 {
@@ -1973,9 +2013,17 @@ e_compile(const ecc_info* info, e_compilation_result* result)
 
   defer_push_scope(&cc);
 
-  if (e_stack_init(256, 32, 32, &stack) < 0) return -1;
+  int e = 0;
+  if ((e = e_stack_init(256, 32, 32, &stack))) return e;
 
-  int e = compile(&cc, info->root);
+  /**
+   * Generate constructors for all builtin
+   * structures.
+   */
+  e = compile_builtin_structures(&cc);
+  if (e) return e;
+
+  e = compile(&cc, info->root);
   if (e) return e;
 
   defer_pop_scope(&cc);

@@ -29,11 +29,11 @@ fn main()
   let vel = vec2(1.0, 0.0);
   
   let r = v2add(pos, vel);
-  println(v2add(r, vel));
+  println("Should be 2,1: ", v2add(r, vel));
 
   r.x = r.y = 0.1;
 
-  println(v2scale(r, 10.0));
+  println("Should be 10, 10: ", v2scale(r, 10.0));
 
-  println(m4identity());
+  println("Identity matrix: ", m4identity());
 }

@@ -141,6 +141,13 @@ bool e_var_equal(const e_var* a, const e_var* b);
 
 void e_var_free(e_var* var);
 
+/**
+ * Extend the given vector to be a vec4.
+ * Fills the remaining slots with 0.
+ * null is input is not a vector.
+ */
+e_var evector_zero_extend(const e_var* v);
+
 static inline u32
 e_combine_hash(const void** list, size_t size, size_t var_size)
 {

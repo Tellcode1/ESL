@@ -39,6 +39,7 @@
 #include "var.h"
 
 #include <assert.h>
+#include <float.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -179,7 +180,7 @@ e_var
 e_exec(const e_exec_info* info)
 {
   for (u32 i = 0; i < info->nargs; i++) {
-    e_var v;
+    e_var v = { 0 };
     e_var_deep_cpy(&info->args[i], &v);
 
     e_var* slot = e_stack_push_variable(info->slots[i], info->stack);
@@ -333,12 +334,29 @@ e_exec(const e_exec_info* info)
 
         e_var push = { .type = E_VARTYPE_NULL };
 
-        e_struct* st = E_VAR_AS_STRUCT(e_stack_top(info->stack));
-        for (u32 i = 0; i < st->nmembers; i++) {
-          if (st->member_hashes[i] == member) {
-            e_var_shallow_cpy(&st->members[i], &push);
-            e_var_acquire(&push); // acquire tmp
-            break;
+        e_vartype type = e_stack_top(info->stack)->type;
+        if (type == E_VARTYPE_VEC2 || type == E_VARTYPE_VEC3 || type == E_VARTYPE_VEC4) {
+          e_var v = evector_zero_extend(e_stack_top(info->stack));
+
+          double d = DBL_MAX;
+          if (member == e_hash_fnv("x", 1)) { d = v.val.vec4.x; }
+          if (member == e_hash_fnv("y", 1)) { d = v.val.vec4.y; }
+          if (member == e_hash_fnv("z", 1)) { d = v.val.vec4.z; }
+          if (member == e_hash_fnv("w", 1)) { d = v.val.vec4.w; }
+
+          // Vectors are not ref counted. This is safe.
+          push = (e_var){
+            .type  = d == DBL_MAX ? E_VARTYPE_NULL : E_VARTYPE_FLOAT, // if member not in vec2, return a null var
+            .val.f = d,
+          };
+        } else {
+          e_struct* st = E_VAR_AS_STRUCT(e_stack_top(info->stack));
+          for (u32 i = 0; i < st->nmembers; i++) {
+            if (st->member_hashes[i] == member) {
+              e_var_shallow_cpy(&st->members[i], &push);
+              e_var_acquire(&push); // acquire tmp
+              break;
+            }
           }
         }
 
@@ -357,7 +375,18 @@ e_exec(const e_exec_info* info)
         e_var* value = e_stack_top(info->stack);
         e_var* struc = e_stack_top(info->stack) - 1;
 
-        if (struc->type == E_VARTYPE_STRUCT) {
+        e_vartype type = struc->type;
+        if (type == E_VARTYPE_VEC2 || type == E_VARTYPE_VEC3 || type == E_VARTYPE_VEC4) {
+          if (member == e_hash_fnv("x", 1)) {
+            struc->val.vec4.x = value->val.f;
+          } else if (member == e_hash_fnv("y", 1)) {
+            struc->val.vec4.y = value->val.f;
+          } else if (type != E_VARTYPE_VEC2 && member == e_hash_fnv("z", 1)) {
+            struc->val.vec4.z = value->val.f;
+          } else if (type == E_VARTYPE_VEC4 && member == e_hash_fnv("w", 1)) {
+            struc->val.vec4.w = value->val.f;
+          }
+        } else if (struc->type == E_VARTYPE_STRUCT) {
           e_struct* st = E_VAR_AS_STRUCT(struc);
           for (u32 i = 0; i < st->nmembers; i++) {
             if (st->member_hashes[i] == member) {

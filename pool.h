@@ -25,8 +25,6 @@
 #ifndef E_POOL_H
 #define E_POOL_H
 
-#include "list.h"
-#include "map.h"
 #include "mathstrucs.h"
 #include "refcount.h"
 #include "stdafx.h"

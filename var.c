@@ -65,6 +65,9 @@ e_var_deep_cpy(const e_var* var, e_var* dst)
     case E_VARTYPE_INT:
     case E_VARTYPE_BOOL:
     case E_VARTYPE_CHAR:
+    case E_VARTYPE_VEC2:
+    case E_VARTYPE_VEC3:
+    case E_VARTYPE_VEC4:
     case E_VARTYPE_FLOAT: dst->val = var->val; break;
     case E_VARTYPE_STRING:
       dst->val.s              = e_refdobj_pool_acquire(&ge_pool);
@@ -104,6 +107,16 @@ e_var_deep_cpy(const e_var* var, e_var* dst)
       int e = e_map_init(flattened, E_VAR_AS_MAP(var)->size, E_VAR_AS_MAP(dst));
       free(flattened);
       return e;
+    }
+    case E_VARTYPE_MAT3: {
+      dst->val.mat3 = e_refdobj_pool_acquire(&ge_pool);
+      memcpy(E_VAR_AS_MAT3(dst), E_VAR_AS_MAT3(var), sizeof(e_mat3));
+      return 0;
+    }
+    case E_VARTYPE_MAT4: {
+      dst->val.mat4 = e_refdobj_pool_acquire(&ge_pool);
+      memcpy(E_VAR_AS_MAT4(dst), E_VAR_AS_MAT4(var), sizeof(e_mat4));
+      return 0;
     }
 
     case E_VARTYPE_ERROR: break;
@@ -184,6 +197,16 @@ e_var_free(e_var* var)
       e_map_free(E_VAR_AS_MAP(var));
       e_refdobj_pool_return(&ge_pool, var->val.list);
       break;
+
+    case E_VARTYPE_MAT3: {
+      e_refdobj_pool_return(&ge_pool, var->val.mat3);
+      break;
+    }
+
+    case E_VARTYPE_MAT4: {
+      e_refdobj_pool_return(&ge_pool, var->val.mat4);
+      break;
+    }
   }
 
   /* safety: Zero out the variable */
@@ -223,6 +246,46 @@ e_var_print(const struct e_var* v, FILE* f)
     case E_VARTYPE_MAP: break;
     case E_VARTYPE_ERROR: {
       fprintf(f, "%i", v->val.errcode);
+      break;
+    }
+    case E_VARTYPE_VEC2: {
+      printf("<%g, %g>", v->val.vec2.x, v->val.vec2.y);
+      break;
+    }
+    case E_VARTYPE_VEC3: {
+      printf("<%g, %g, %g>", v->val.vec3.x, v->val.vec3.y, v->val.vec3.z);
+      break;
+    }
+    case E_VARTYPE_VEC4: {
+      printf("<%g, %g, %g, %g>", v->val.vec4.x, v->val.vec4.y, v->val.vec4.z, v->val.vec4.w);
+      break;
+    }
+    case E_VARTYPE_MAT4: {
+      printf("4x4[ ");
+      for (u32 i = 0; i < 4; i++) {
+        printf("[");
+        for (u32 j = 0; j < 4; j++) {
+          printf("%g", E_VAR_AS_MAT4(v)->m[j][i]);
+          if (j != 3) { printf(", "); }
+        }
+        printf("]");
+        if (i != 3) { printf(", "); }
+      }
+      printf(" ]");
+      break;
+    }
+    case E_VARTYPE_MAT3: {
+      printf("3x3[ ");
+      for (u32 i = 0; i < 3; i++) {
+        printf("[");
+        for (u32 j = 0; j < 3; j++) {
+          printf("%g", E_VAR_AS_MAT3(v)->m[j][i]);
+          if (j != 2) { printf(", "); }
+        }
+        printf("]");
+        if (i != 2) { printf(", "); }
+      }
+      printf(" ]");
       break;
     }
   }
