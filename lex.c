@@ -270,6 +270,8 @@ e_tokenize(const char* input, const char* advertised_file, e_str_interner* inter
         tk = (e_token){ .type = E_TOKEN_TYPE_NAMESPACE, .span = SPAN };
       } else if (len == strlen("extern") && strncmp(snap, "extern", len) == 0) {
         tk = (e_token){ .type = E_TOKEN_TYPE_EXTERN, .span = SPAN };
+      } else if (len == strlen("struct") && strncmp(snap, "struct", len) == 0) {
+        tk = (e_token){ .type = E_TOKEN_TYPE_STRUCT, .span = SPAN };
       } else {
         tk = (e_token){ .type = E_TOKEN_TYPE_IDENT, .val.ident = _strndup(snap, len), .span = SPAN };
       }

@@ -1580,7 +1580,9 @@ e_ast_parse(e_ast* p, int* out_root_node)
         && type != E_AST_NODE_VARIABLE_DECL) {
       // asterror(take_span, "Expected function definition or variable declerations in global scope\n");
       asterror(
-          take_span, "Expected only function definitions, variable declerations,  namespace declerations or struct declerations in global scope\n");
+          take_span,
+          "Expected only function definitions, variable declerations, namespace declerations or struct declerations in global scope (%i)\n",
+          type);
       goto err;
     }
 

@@ -61,9 +61,10 @@ typedef enum e_vartype {
   E_VARTYPE_STRING      = 1 << 6,
   E_VARTYPE_LIST        = 1 << 7,
   E_VARTYPE_MAP         = 1 << 8,
-  E_VARTYPE_ERROR       = 1 << 9, // use e_error_string to get string representation of the error.
-  E_VARTYPE_CC_VARIABLE = 1 << 10,
-  E_VARTYPE_CC_STRUCT   = 1 << 11,
+  E_VARTYPE_STRUCT      = 1 << 9,
+  E_VARTYPE_ERROR       = 1 << 10, // use e_error_string to get string representation of the error.
+  E_VARTYPE_CC_VARIABLE = 1 << 11,
+  E_VARTYPE_CC_STRUCT   = 1 << 12,
 } e_vartype;
 // typedef u32 e_vartype;
 
@@ -95,6 +96,12 @@ typedef struct e_var {
   e_vartype type;
   e_varval  val;
 } e_var;
+
+typedef struct e_struct {
+  e_var* members;
+  u32*   member_hashes;
+  u32    nmembers;
+} e_struct;
 
 e_var e_make_var_from_string(char* s);
 
@@ -140,6 +147,7 @@ e_var_type_to_string(e_vartype type)
     case E_VARTYPE_CC_VARIABLE: return "var::compile_info";
     case E_VARTYPE_CC_STRUCT: return "struct::compile_info";
     case E_VARTYPE_NULL: return "null";
+    case E_VARTYPE_STRUCT: return "struct";
   }
   return "unknown";
 }

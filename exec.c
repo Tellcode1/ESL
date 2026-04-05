@@ -268,9 +268,17 @@ e_exec(const e_exec_info* info)
     switch (opcode) {
       /* NOOPs */
       case E_OPCODE_LABEL: ip += 4; break; // move over Label ID
+      case E_OPCODE_COUNT:
       case E_OPCODE_NOOP: break;
 
       case E_OPCODE_POP: e_stack_pop(info->stack); break;
+      case E_OPCODE_DUP: {
+        e_var v;
+        e_var_acquire(e_stack_top(info->stack));
+        e_var_shallow_cpy(e_stack_top(info->stack), &v);
+        e_stack_push(info->stack, &v);
+        break;
+      }
 
       case E_OPCODE_CALL: {
         u32 hash       = e_read_u32(&ip);
@@ -354,16 +362,58 @@ e_exec(const e_exec_info* info)
       }
 
       case E_OPCODE_MK_STRUCT: {
-        u32 nmembers = e_read_u32(&ip);
+        u32  nmembers = e_read_u32(&ip);
+        u32* fields   = calloc(sizeof(u32), nmembers);
+        for (u32 i = 0; i < nmembers; i++) { fields[i] = e_read_u32(&ip); }
 
-        printf("TODO: Implement\n");
-        abort();
+        e_var st = {
+          .type      = E_VARTYPE_STRUCT,
+          .val.struc = e_refdobj_pool_acquire(&ge_pool),
+        };
 
-        // e_var* stack      = info->stack->stack;
-        // size_t stack_size = info->stack->size;
+        E_VAR_AS_STRUCT(&st)->member_hashes = fields;
+        E_VAR_AS_STRUCT(&st)->members       = (e_var*)calloc(sizeof(e_var), nmembers);
+        E_VAR_AS_STRUCT(&st)->nmembers      = nmembers;
 
-        // Release variables from the stack.
-        for (u32 i = 0; i < nmembers; i++) { e_stack_pop(info->stack); }
+        for (u32 i = 0; i < nmembers; i++) { E_VAR_AS_STRUCT(&st)->members[i] = (e_var){ .type = E_VARTYPE_NULL }; }
+
+        TRY_V(e_stack_push(info->stack, &st));
+
+        break;
+      }
+
+      case E_OPCODE_MEMBER_ACCESS: {
+        u32 member = e_read_u32(&ip);
+
+        e_struct* st = E_VAR_AS_STRUCT(e_stack_top(info->stack));
+        for (u32 i = 0; i < st->nmembers; i++) {
+          if (st->member_hashes[i] == member) {
+            e_stack_pop(info->stack);
+            TRY_V(e_stack_push(info->stack, &st->members[i]));
+            break;
+          }
+        }
+        break;
+      }
+
+      case E_OPCODE_MEMBER_ASSIGN: {
+        u32 member = e_read_u32(&ip);
+
+        e_var*    value = e_stack_top(info->stack);
+        e_var*    st_v  = e_stack_top(info->stack) - 1;
+        e_struct* st    = E_VAR_AS_STRUCT(st_v);
+
+        for (u32 i = 0; i < st->nmembers; i++) {
+          if (st->member_hashes[i] == member) {
+            e_var_acquire(value);
+            e_var_shallow_cpy(value, &st->members[i]);
+            break;
+          }
+        }
+
+        /* remove struct. we only want value on stack. */
+        *(st_v) = *value;
+        e_stack_pop(info->stack);
 
         break;
       }

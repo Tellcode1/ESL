@@ -109,7 +109,19 @@ e_print_instruction(e_opcode o, const u8** ip)
     case E_OPCODE_INDEX: printf("index\n"); break;
     case E_OPCODE_POP: printf("pop\n"); break;
     case E_OPCODE_INDEX_ASSIGN: printf("idx_assign\n"); break;
-    case E_OPCODE_MEMBER_ACCESS: printf("member_access\n"); break;
+    case E_OPCODE_MEMBER_ACCESS: printf("member_access [%u]\n", e_read_u32(ip)); break;
+    case E_OPCODE_MK_STRUCT: {
+      u32 nmembers = e_read_u32(ip);
+      printf("mk_struct [%u]\n", nmembers);
+      for (u32 i = 0; i < nmembers; i++) { printf("\t[%u] = null\n", e_read_u32(ip)); }
+      break;
+    }
+    case E_OPCODE_MEMBER_ASSIGN: {
+      u32 member = e_read_u32(ip);
+      printf("member_assign [%u]\n", member);
+      break;
+    }
+    case E_OPCODE_DUP: printf("dup\n"); break;
   }
 }
 

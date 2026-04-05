@@ -390,6 +390,8 @@ emit_lvalue_assign_prologue(e_compiler* cc, e_lval lv)
     int left = lv.val.member.base;
     int e    = compile(cc, left);
     if (e) return e;
+
+    return 0;
   }
 
   return -1;
@@ -410,6 +412,7 @@ emit_lvalue_assign_epilogue(e_compiler* cc, e_lval lv)
   } else if (lv.type == E_LVAL_MEMBER) {
     e_emit_instruction(cc, E_OPCODE_MEMBER_ASSIGN);
     e_emit_u32(cc, e_hash_fnv(lv.val.member.member, strlen(lv.val.member.member)));
+    return 0;
   }
   return -1;
 }
@@ -731,10 +734,9 @@ compile_function_definition(struct e_compiler* cc, int node)
   // free(full);
 
   /**
-   * Push frame for the stack
+   * Push frame for (our/compiler only) stack
    */
   e_stack_push_frame(cc->stack);
-  e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES);
 
   /* Ensure it doesn't already exist */
   const ecc_function_table* func_table = cc->function_table;
@@ -1444,30 +1446,94 @@ compile_struct_decleration(e_compiler* cc, int node)
   u32         struct_decl_nstmts = E_GET_NODE(cc->ast, node)->struct_decl.nstmts;
   u32         struct_name_hash   = e_hash_fnv(struct_name, strlen(struct_name));
 
-  const u32 init_capacity = 16;
+  const u32 init_fields_capacity = 16;
 
   /* Gather all information the user provided into one big structure. */
   ecc_struct_information struct_data = {
     .name           = e_arnstrdup(cc->arena, struct_name),
     .name_hash      = struct_name_hash,
-    .fields         = (char**)e_arnalloc(cc->arena, init_capacity * sizeof(char*)),
-    .field_hashes   = (u32*)e_arnalloc(cc->arena, init_capacity * sizeof(u32)),
-    .field_capacity = init_capacity,
+    .fields         = (char**)e_arnalloc(cc->arena, init_fields_capacity * sizeof(char*)),
+    .field_hashes   = (u32*)e_arnalloc(cc->arena, init_fields_capacity * sizeof(u32)),
+    .field_capacity = init_fields_capacity,
     .fields_count   = 0,
   };
   collect_struct_declerations(cc, struct_decl_stmts, struct_decl_nstmts, &struct_data);
 
-  e_var* r = e_stack_push_variable(struct_name_hash, cc->stack);
+  // e_var* r = e_stack_push_variable(struct_name_hash, cc->stack);
 
-  /* Acquire a refdobj */
-  r->type            = E_VARTYPE_CC_STRUCT;
-  r->val.struct_info = e_refdobj_pool_acquire(&ge_pool);
+  // /* Acquire a refdobj */
+  // r->type            = E_VARTYPE_CC_STRUCT;
+  // r->val.struct_info = e_refdobj_pool_acquire(&ge_pool);
+
+  // /**
+  //  *  Copy entire struct information data to the variable.
+  //  *  BTW, this won't leak. We allocated everything on the arena.
+  //  */
+  // *E_VAR_AS_STRUCT_INFO(r) = struct_data;
+
+  /* Generate the constructor function */
+  e_compiler fork;
+  compiler_make_fork(cc, &fork);
+
+  e_stack_push_frame(cc->stack);
+  defer_push_scope(&fork);
+
+  u32* arg_slots = (u32*)e_arnalloc(cc->arena, sizeof(u32) * struct_data.fields_count);
+  for (u32 i = 0; i < struct_data.fields_count; i++) {
+    u32 arg_hash = struct_data.field_hashes[i];
+    arg_slots[i] = arg_hash;
+
+    /* Add variable entry to stack */
+    e_var* arg = e_stack_push_variable(arg_hash, fork.stack);
+
+    /* Acquire a refdobj */
+    arg->val.var_info                 = e_refdobj_pool_acquire(&ge_pool);
+    E_VAR_AS_INFO(arg)->initializer   = -1; // Arguments aren't initialized.
+    E_VAR_AS_INFO(arg)->current_value = -1; // Or initialized to null if you think about it.
+    E_VAR_AS_INFO(arg)->name_hash     = arg_hash;
+    E_VAR_AS_INFO(arg)->span          = E_GET_NODE(cc->ast, node)->common.span;
+    E_VAR_AS_INFO(arg)->is_const      = false; // User can override the argument any time.
+  }
+
+  e_emit_instruction(&fork, E_OPCODE_MK_STRUCT);
+  e_emit_u32(&fork, struct_data.fields_count); // number of members
+  // hashes of all members
+  for (u32 i = 0; i < struct_data.fields_count; i++) { e_emit_u32(&fork, struct_data.field_hashes[i]); }
 
   /**
-   *  Copy entire struct information data to the variable.
-   *  BTW, this won't leak. We allocated everything on the arena.
+   * Assign the arguments to all members
    */
-  *E_VAR_AS_STRUCT_INFO(r) = struct_data;
+  for (u32 i = 0; i < struct_data.fields_count; i++) {
+    e_emit_instruction(&fork, E_OPCODE_DUP); // Duplicate struct (shallow copy)
+
+    e_emit_instruction(&fork, E_OPCODE_LOAD); // Load the argument
+    e_emit_u32(&fork, struct_data.field_hashes[i]);
+
+    e_emit_instruction(&fork, E_OPCODE_MEMBER_ASSIGN);
+    e_emit_u32(&fork, struct_data.field_hashes[i]); // Assign to that field
+    e_emit_instruction(&fork, E_OPCODE_POP);        // Pop member assign pushing the value back up. We only
+                                                    // want the struct to be on the stack (Member assign pushes struct + value, in that order).
+  }
+
+  // Return the accumulated struct.
+  e_emit_instruction(&fork, E_OPCODE_RETURN);
+  e_emit_u8(&fork, true); // has_return_value = true
+
+  defer_pop_scope(&fork);
+  compiler_join_fork(&fork, cc);
+
+  e_function f = {
+    .code      = fork.emit,
+    .code_size = fork.num_bytes_emitted,
+    .arg_slots = arg_slots,
+    .name_hash = struct_name_hash,
+    .nargs     = struct_data.fields_count,
+  };
+
+  int e = add_function_entry(cc->arena, cc->function_table, &f);
+  if (e) return e;
+
+  e_stack_pop_frame(cc->stack);
 
   return 0;
 }

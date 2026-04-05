@@ -73,6 +73,24 @@ e_var_deep_cpy(const e_var* var, e_var* dst)
       dst->val.list = e_refdobj_pool_acquire(&ge_pool);
       return e_list_init(E_VAR_AS_LIST(var)->vars, E_VAR_AS_LIST(var)->size, E_VAR_AS_LIST(dst));
     }
+    case E_VARTYPE_STRUCT: {
+      e_struct* s = E_VAR_AS_STRUCT(var);
+
+      e_var* members = calloc(s->nmembers, sizeof(e_var));
+      u32*   hashes  = calloc(s->nmembers, sizeof(u32));
+
+      for (u32 i = 0; i < s->nmembers; i++) {
+        e_var_deep_cpy(&s->members[i], &members[i]);
+        hashes[i] = s->member_hashes[i];
+      }
+
+      dst->val.struc                      = e_refdobj_pool_acquire(&ge_pool);
+      E_VAR_AS_STRUCT(dst)->members       = members;
+      E_VAR_AS_STRUCT(dst)->member_hashes = hashes;
+      E_VAR_AS_STRUCT(dst)->nmembers      = s->nmembers;
+
+      return 0;
+    }
     case E_VARTYPE_MAP: {
       dst->val.map = e_refdobj_pool_acquire(&ge_pool);
       /**
@@ -151,6 +169,12 @@ e_var_free(e_var* var)
       e_refdobj_pool_return(&ge_pool, var->val.list);
       break;
 
+    case E_VARTYPE_STRUCT:
+      free(E_VAR_AS_STRUCT(var)->members);
+      free(E_VAR_AS_STRUCT(var)->member_hashes);
+      e_refdobj_pool_return(&ge_pool, var->val.struc);
+      break;
+
     case E_VARTYPE_MAP:
       e_map_free(E_VAR_AS_MAP(var));
       e_refdobj_pool_return(&ge_pool, var->val.list);
@@ -180,6 +204,15 @@ e_var_print(const struct e_var* v, FILE* f)
         if (i < E_VAR_AS_LIST(v)->size - 1) { fputs(", ", f); }
       }
       fputc(']', f);
+      break;
+    }
+    case E_VARTYPE_STRUCT: {
+      fputc('{', f);
+      for (u32 i = 0; i < E_VAR_AS_STRUCT(v)->nmembers; i++) {
+        e_var_print(&E_VAR_AS_STRUCT(v)->members[i], f);
+        if (i < E_VAR_AS_STRUCT(v)->nmembers - 1) { fputs(", ", f); }
+      }
+      fputc('}', f);
       break;
     }
     case E_VARTYPE_MAP: break;
