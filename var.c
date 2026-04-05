@@ -119,6 +119,7 @@ e_var_acquire(e_var* v)
     case E_VARTYPE_MAP: refc = &v->val.map->refc; break;
     case E_VARTYPE_LIST: refc = &v->val.list->refc; break;
     case E_VARTYPE_STRING: refc = &v->val.s->refc; break;
+    case E_VARTYPE_STRUCT: refc = &v->val.struc->refc; break;
     default: refc = nullptr; break;
   }
 
@@ -135,6 +136,7 @@ e_var_release(e_var* v)
     case E_VARTYPE_MAP: refc = &v->val.map->refc; break;
     case E_VARTYPE_LIST: refc = &v->val.list->refc; break;
     case E_VARTYPE_STRING: refc = &v->val.s->refc; break;
+    case E_VARTYPE_STRUCT: refc = &v->val.struc->refc; break;
     default: refc = nullptr; break;
   }
 
@@ -170,6 +172,8 @@ e_var_free(e_var* var)
       break;
 
     case E_VARTYPE_STRUCT:
+      for (u32 i = 0; i < E_VAR_AS_STRUCT(var)->nmembers; i++) { e_var_release(&E_VAR_AS_STRUCT(var)->members[i]); }
+
       free(E_VAR_AS_STRUCT(var)->members);
       free(E_VAR_AS_STRUCT(var)->member_hashes);
       e_refdobj_pool_return(&ge_pool, var->val.struc);
@@ -311,6 +315,9 @@ e_var_hash(const e_var* var)
     case E_VARTYPE_MAP:
       return e_combine_hash((const void**)(E_VAR_AS_MAP(var)->keys), (E_VAR_AS_MAP(var)->size), sizeof(e_var))
           + 13 * e_combine_hash((const void**)(E_VAR_AS_MAP(var)->vals), (E_VAR_AS_MAP(var)->size), sizeof(e_var));
+    case E_VARTYPE_STRUCT: {
+      return e_combine_hash((const void**)E_VAR_AS_STRUCT(var)->members, E_VAR_AS_STRUCT(var)->nmembers, sizeof(e_var));
+    }
     default: return e_hash_fnv(&var->val, sizeof(var->val));
   }
 }
@@ -335,6 +342,14 @@ e_var_equal(const e_var* a, const e_var* b)
       if (E_VAR_AS_LIST(a)->size != E_VAR_AS_LIST(b)->size) return false;
       for (size_t i = 0; i < E_VAR_AS_LIST(a)->size; i++) {
         if (!e_var_equal(&E_VAR_AS_LIST(a)->vars[i], &E_VAR_AS_LIST(b)->vars[i])) return false;
+      }
+      return true;
+    case E_VARTYPE_STRUCT:
+      if (b->type != E_VARTYPE_STRUCT) return false;
+      if (E_VAR_AS_STRUCT(a)->nmembers != E_VAR_AS_STRUCT(b)->nmembers) return false;
+      for (size_t i = 0; i < E_VAR_AS_STRUCT(a)->nmembers; i++) {
+        if (E_VAR_AS_STRUCT(a)->member_hashes[i] != E_VAR_AS_STRUCT(b)->member_hashes[i]) return false;
+        if (!e_var_equal(&E_VAR_AS_STRUCT(a)->members[i], &E_VAR_AS_STRUCT(b)->members[i])) return false;
       }
       return true;
     case E_VARTYPE_MAP:

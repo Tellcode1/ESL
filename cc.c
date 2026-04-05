@@ -1353,7 +1353,8 @@ compile_assign(e_compiler* cc, int node)
   ecc_builtin_variables_table* builtin_vars_table = cc->builtin_var_table;
 
   e_var* exists = e_stack_find(cc->stack, lv.val.var.id);
-  if (!exists) {
+  if (!exists
+      && E_GET_NODE(cc->ast, node)->type == E_AST_NODE_VARIABLE) { // Doesn't exist and node is supposed to be a variable (Not member access or index)
     /* Check if the user is trying to modify a builtin variable. */
     for (u32 i = 0; i < builtin_vars_table->builtin_vars_count; i++) {
       if (lv.val.var.id == builtin_vars_table->builtin_var_hashes[i]) {
@@ -1368,7 +1369,7 @@ compile_assign(e_compiler* cc, int node)
     return -1;
   }
 
-  if (E_VAR_AS_INFO(exists)->is_const) {
+  if (exists && E_VAR_AS_INFO(exists)->is_const) {
     cerror(E_GET_NODE(cc->ast, left)->common.span, "Can not assign to const qualified variable '%s'\n", lv.val.var.name);
     e_free_value(&lv);
     return -1;

@@ -274,7 +274,7 @@ e_exec(const e_exec_info* info)
       case E_OPCODE_POP: e_stack_pop(info->stack); break;
       case E_OPCODE_DUP: {
         e_var v;
-        e_var_acquire(e_stack_top(info->stack));
+        // e_var_acquire(e_stack_top(info->stack)); // Don't acquire! Stack_push already does that
         e_var_shallow_cpy(e_stack_top(info->stack), &v);
         e_stack_push(info->stack, &v);
         break;
@@ -378,6 +378,7 @@ e_exec(const e_exec_info* info)
         for (u32 i = 0; i < nmembers; i++) { E_VAR_AS_STRUCT(&st)->members[i] = (e_var){ .type = E_VARTYPE_NULL }; }
 
         TRY_V(e_stack_push(info->stack, &st));
+        e_var_release(&st); // Stack owns it now
 
         break;
       }
@@ -385,35 +386,56 @@ e_exec(const e_exec_info* info)
       case E_OPCODE_MEMBER_ACCESS: {
         u32 member = e_read_u32(&ip);
 
+        e_var push = { .type = E_VARTYPE_NULL };
+
         e_struct* st = E_VAR_AS_STRUCT(e_stack_top(info->stack));
         for (u32 i = 0; i < st->nmembers; i++) {
           if (st->member_hashes[i] == member) {
-            e_stack_pop(info->stack);
-            TRY_V(e_stack_push(info->stack, &st->members[i]));
+            e_var_shallow_cpy(&st->members[i], &push);
+            e_var_acquire(&push); // acquire tmp
             break;
           }
         }
+
+        // pop off struct
+        e_stack_pop(info->stack);
+
+        // Push member
+        TRY_V(e_stack_push(info->stack, &push));
+        e_var_release(&push); // release tmp hold
         break;
       }
 
       case E_OPCODE_MEMBER_ASSIGN: {
         u32 member = e_read_u32(&ip);
 
-        e_var*    value = e_stack_top(info->stack);
-        e_var*    st_v  = e_stack_top(info->stack) - 1;
-        e_struct* st    = E_VAR_AS_STRUCT(st_v);
+        e_var* value = e_stack_top(info->stack);
+        e_var* struc = e_stack_top(info->stack) - 1;
 
-        for (u32 i = 0; i < st->nmembers; i++) {
-          if (st->member_hashes[i] == member) {
-            e_var_acquire(value);
-            e_var_shallow_cpy(value, &st->members[i]);
-            break;
+        if (struc->type == E_VARTYPE_STRUCT) {
+          e_struct* st = E_VAR_AS_STRUCT(struc);
+          for (u32 i = 0; i < st->nmembers; i++) {
+            if (st->member_hashes[i] == member) {
+              e_var_release(&st->members[i]);
+              e_var_shallow_cpy(value, &st->members[i]);
+              e_var_acquire(&st->members[i]);
+              break;
+            }
           }
         }
 
-        /* remove struct. we only want value on stack. */
-        *(st_v) = *value;
+        e_var value_copy;
+        e_var_shallow_cpy(value, &value_copy);
+        e_var_acquire(&value_copy);
+
+        /* remove value, we have a copy of it.  */
         e_stack_pop(info->stack);
+
+        /* release old struct object */
+        e_var_release(struc);
+
+        /* replace struct slot with value copy */
+        *struc = value_copy;
 
         break;
       }
