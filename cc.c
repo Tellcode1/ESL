@@ -82,15 +82,56 @@ e_binary_operator_to_opcode(e_operator op)
   return -1;
 }
 
-static char*      mk_name(const e_compiler* cc, const char* name);
-static inline int compile_literal(e_compiler* cc, int node);
-static int        compile_function_definition(struct e_compiler* cc, int node);
-static int        compile_function_call(struct e_compiler* cc, int node);
-static int        compile_if_statement(struct e_compiler* cc, int node);
-static int        compile_while_statement(struct e_compiler* cc, int node);
-static int        compile_binary_op(struct e_compiler* cc, int node);
-static int        compile_unary_op(struct e_compiler* cc, int node);
-static int        compile(struct e_compiler* cc, int node);
+static inline e_opcode e_binary_operator_to_opcode(e_operator op);
+static char*           mk_name(const e_compiler* cc, const char* name);
+
+static inline ecc_defer_scope* defer_push_scope(e_compiler* cc);
+static inline void             defer_pop_scope(e_compiler* cc);
+static inline int              defer_emit_current_scope(e_compiler* cc);
+static inline int              defer_emit_all_scopes(e_compiler* cc);
+static inline u32              defer_get_current_depth(e_compiler* cc);
+static inline int              defer_emit_to_depth(e_compiler* cc, u32 target_depth);
+
+static inline u32  label_find(u32 label_id, const ecc_label_table* table);
+static inline void emit_and_record_jmp(e_compiler* cc, e_opcode opcode, u32 label_id);
+static inline void define_and_emit_label(e_compiler* cc, u32 label_id);
+
+static inline void                   append_defer_entry(e_compiler* cc, int* exprs, u32 nexprs);
+static int                           append_function_entry(e_arena* a, ecc_function_table* funcs, const e_function* func);
+static int                           append_struct_decleration(e_arena* a, const char* name, ecc_struct_information* deposit);
+static inline ecc_label_jumps_table* append_label_entry(e_arena* a, u32 label_id, ecc_label_table* table);
+
+static int collect_struct_declerations(e_compiler* cc, int* stmts, u32 nstmts, ecc_struct_information* deposit);
+
+static inline int  compiler_make_fork(const e_compiler* old_c, e_compiler* new_c);
+static inline void compiler_join_fork(const e_compiler* copy, e_compiler* cc);
+
+static int compile_literal_variable(e_compiler* cc, e_var v);
+static int compile_literal(e_compiler* cc, int node);
+static int compile_list(e_compiler* cc, int node);
+static int compile_map(e_compiler* cc, int node);
+static int compile_function_definition(e_compiler* cc, int node);
+static int compile_binary_op(e_compiler* cc, int node);
+static int compile_unary_op(e_compiler* cc, int node);
+static int compile_index(e_compiler* cc, int node);
+static int compile_index_assign(e_compiler* cc, int node);
+static int compile_index_compound(e_compiler* cc, int node);
+static int compile_function_call(e_compiler* cc, int node);
+static int compile_if_statement(e_compiler* cc, int node);
+static int compile_while_statement(e_compiler* cc, int node);
+static int compile_for_statement(e_compiler* cc, int node);
+static int compile_member_access(e_compiler* cc, int node);
+static int compile_assign(e_compiler* cc, int node);
+static int compile_return(e_compiler* cc, int node);
+static int compile_struct_constructor(e_compiler* fork, e_filespan span, const ecc_struct_information* struc);
+static int compile_struct_decleration(e_compiler* cc, int node);
+static int compile_variable_decleration(e_compiler* cc, int node);
+static int compile_variable_load(e_compiler* cc, int node);
+static int compile_namespace_decleration(e_compiler* cc, int node);
+static int compile_builtin_structure(e_compiler* cc, const e_builtin_struct* b);
+static int compile_builtin_structures(e_compiler* cc);
+static int compile_root(e_compiler* cc, int node);
+static int compile(e_compiler* cc, int node);
 
 static inline ecc_defer_scope*
 defer_push_scope(e_compiler* cc)
@@ -645,7 +686,10 @@ ns_pop(e_compiler* cc)
   /* free(cc->ns->namespaces[--cc->ns->nnamespaces]); */
 }
 
-/** */
+/**
+ * Use the namespace stack to build
+ * a fully qualified name for the variable.
+ */
 static char*
 mk_name(const e_compiler* cc, const char* name)
 {
@@ -658,16 +702,17 @@ mk_name(const e_compiler* cc, const char* name)
   char* out = e_arnalloc(cc->arena, len);
   out[0]    = '\0';
 
+  char* p = out;
   for (u32 i = 0; i < cc->ns->nnamespaces; i++) {
-    strcat(out, cc->ns->namespaces[i]);
-    strcat(out, "::");
+    p = e_strlpcat(p, cc->ns->namespaces[i], out, len);
+    p = e_strlpcat(p, "::", out, len);
   }
 
-  strcat(out, name);
+  p = e_strlpcat(p, name, out, len);
   return out;
 }
 
-static inline int
+static int
 compile_literal_variable(e_compiler* cc, e_var v)
 {
   ecc_literal_table* literals = cc->lit_table;
@@ -732,7 +777,7 @@ compile_literal_variable(e_compiler* cc, e_var v)
   return 0;
 }
 
-static inline int
+static int
 compile_literal(e_compiler* cc, int node)
 {
   e_var v = { 0 };
@@ -742,7 +787,39 @@ compile_literal(e_compiler* cc, int node)
 }
 
 static int
-add_function_entry(e_arena* a, ecc_function_table* funcs, const e_function* func)
+compile_list(e_compiler* cc, int node)
+{
+  u32 nelems = E_GET_NODE(cc->ast, node)->list.nelems;
+  for (u32 i = 0; i < nelems; i++) {
+    int elem_node = E_GET_NODE(cc->ast, node)->list.elems[i];
+    compile(cc, elem_node);
+  }
+
+  e_emit_instruction(cc, E_OPCODE_MK_LIST);
+  e_emit_u32(cc, nelems);
+
+  return 0;
+}
+
+static int
+compile_map(e_compiler* cc, int node)
+{
+  u32 nelems = E_GET_NODE(cc->ast, node)->map.npairs;
+  for (u32 i = 0; i < nelems; i++) {
+    int key = E_GET_NODE(cc->ast, node)->map.keys[i];
+    int val = E_GET_NODE(cc->ast, node)->map.values[i];
+    compile(cc, key);
+    compile(cc, val);
+  }
+
+  e_emit_instruction(cc, E_OPCODE_MK_MAP);
+  e_emit_u32(cc, nelems);
+
+  return 0;
+}
+
+static int
+append_function_entry(e_arena* a, ecc_function_table* funcs, const e_function* func)
 {
   if (funcs->functions_count >= funcs->functions_capacity) {
     u32         new_capacity  = funcs->functions_capacity * 2;
@@ -760,7 +837,7 @@ add_function_entry(e_arena* a, ecc_function_table* funcs, const e_function* func
 }
 
 static int
-compile_function_definition(struct e_compiler* cc, int node)
+compile_function_definition(e_compiler* cc, int node)
 {
   const char* function_name = E_GET_NODE(cc->ast, node)->func.name;
   char*       full          = mk_name(cc, function_name);
@@ -837,7 +914,7 @@ compile_function_definition(struct e_compiler* cc, int node)
     .nargs     = nargs,
   };
 
-  e = add_function_entry(cc->arena, cc->function_table, &f);
+  e = append_function_entry(cc->arena, cc->function_table, &f);
   if (e) return e;
 
   e_stack_pop_frame(cc->stack);
@@ -846,7 +923,7 @@ compile_function_definition(struct e_compiler* cc, int node)
 }
 
 static int
-compile_binary_op(struct e_compiler* cc, int node)
+compile_binary_op(e_compiler* cc, int node)
 {
   e_lval lv = { 0 };
   int    e  = 0;
@@ -907,7 +984,7 @@ err:
 }
 
 static int
-compile_unary_op(struct e_compiler* cc, int node)
+compile_unary_op(e_compiler* cc, int node)
 {
   e_opcode opcode = -1;
 
@@ -972,6 +1049,55 @@ err:
   return -1;
 }
 
+static int
+compile_index(e_compiler* cc, int node)
+{
+  int e = compile(cc, E_GET_NODE(cc->ast, node)->index.base);
+  if (e < 0) return e;
+
+  e = compile(cc, E_GET_NODE(cc->ast, node)->index.index);
+  if (e < 0) return e;
+
+  e_emit_instruction(cc, E_OPCODE_INDEX);
+  return 0;
+}
+
+static int
+compile_index_assign(e_compiler* cc, int node)
+{
+  int value = E_GET_NODE(cc->ast, node)->index_assign.value;
+
+  if (!e_can_make_value(cc->ast, node)) {
+    e_filespan left_span = E_GET_NODE(cc->ast, node)->index_assign.span;
+    cerror(left_span, "Can not assign to indexed expression: Failed to lower to lvalue\n");
+    return -1;
+  }
+
+  e_lval v = e_make_value(cc, node);
+  int    e = e_emit_lvalue_assign(cc, value, v);
+  e_free_value(&v);
+
+  return e;
+}
+
+static int
+compile_index_compound(e_compiler* cc, int node)
+{
+  int value = E_GET_NODE(cc->ast, node)->index_compound.value;
+
+  if (!e_can_make_value(cc->ast, node)) {
+    e_filespan left_span = E_GET_NODE(cc->ast, node)->common.span;
+    cerror(left_span, "Can not assign to indexed compound expression: Failed to lower to lvalue\n");
+    return -1;
+  }
+
+  e_lval v = e_make_value(cc, node);
+  int    e = e_emit_lvalue_assign(cc, value, v);
+  e_free_value(&v);
+
+  return e;
+}
+
 static inline bool
 is_builtin_func(const char* name)
 {
@@ -991,7 +1117,7 @@ get_builtin_func(const char* name)
 }
 
 static int
-compile_function_call(struct e_compiler* cc, int node)
+compile_function_call(e_compiler* cc, int node)
 {
   e_filespan function_span = E_GET_NODE(cc->ast, node)->common.span;
   u32        nargs         = E_GET_NODE(cc->ast, node)->call.nargs;
@@ -1066,7 +1192,7 @@ compile_function_call(struct e_compiler* cc, int node)
 
 // This is the dirtiest of them all...
 static int
-compile_if_statement(struct e_compiler* cc, int node)
+compile_if_statement(e_compiler* cc, int node)
 {
   /* Label after if statements body */
   u32 end_label = make_label_id(cc);
@@ -1172,7 +1298,7 @@ compile_if_statement(struct e_compiler* cc, int node)
 }
 
 static int
-compile_while_statement(struct e_compiler* cc, int node)
+compile_while_statement(e_compiler* cc, int node)
 {
   /* Computes the condition and jumps to the end label (breaks) if condition is false */
   const u32 pre_condition_label = make_label_id(cc);
@@ -1239,7 +1365,7 @@ compile_while_statement(struct e_compiler* cc, int node)
 }
 
 static int
-compile_for_statement(struct e_compiler* cc, int node)
+compile_for_statement(e_compiler* cc, int node)
 {
   int initializers = -1;
   int condition    = -1;
@@ -1363,7 +1489,7 @@ err:
 }
 
 static int
-e_compile_member_access(e_compiler* cc, int node)
+compile_member_access(e_compiler* cc, int node)
 {
   e_lval lv = e_make_value(cc, node);
   return e_emit_lvalue_load(cc, lv);
@@ -1413,6 +1539,26 @@ compile_assign(e_compiler* cc, int node)
 
   if (e) return e;
 
+  return 0;
+}
+
+static int
+compile_return(e_compiler* cc, int node)
+{
+  if (E_GET_NODE(cc->ast, node)->ret.has_return_value) {
+    /* Compile the return value */
+    compile(cc, E_GET_NODE(cc->ast, node)->ret.expr_id);
+
+    defer_emit_all_scopes(cc);
+
+    e_emit_instruction(cc, E_OPCODE_RETURN);
+    e_emit_u8(cc, true); // Specify that we're returning a value
+  } else {
+    defer_emit_all_scopes(cc);
+
+    e_emit_instruction(cc, E_OPCODE_RETURN);
+    e_emit_u8(cc, false); /* Returning void! */
+  }
   return 0;
 }
 
@@ -1525,7 +1671,7 @@ compile_struct_constructor(e_compiler* fork, e_filespan span, const ecc_struct_i
     .nargs     = struc->fields_count,
   };
 
-  int e = add_function_entry(fork->arena, fork->function_table, &f);
+  int e = append_function_entry(fork->arena, fork->function_table, &f);
   if (e) return e;
 
   return 0;
@@ -1575,7 +1721,181 @@ compile_struct_decleration(e_compiler* cc, int node)
 }
 
 static int
-compile(struct e_compiler* cc, int node)
+compile_variable_decleration(e_compiler* cc, int node)
+{
+  const char* name = E_GET_NODE(cc->ast, node)->let.name;
+  char*       full = mk_name(cc, name);
+
+  u32 hash        = e_hash_fnv(full, strlen(full));
+  int initializer = E_GET_NODE(cc->ast, node)->let.initializer;
+
+  e_var* exists = e_stack_find_in_current_scope(cc->stack, hash);
+  if (exists != nullptr) {
+    cerror(
+        E_GET_NODE(cc->ast, node)->common.span,
+        "Variable %s redeclared in same scope. Earlier occurence at [%s:%i:%i]\n",
+        full,
+        E_VAR_AS_INFO(exists)->span.file,
+        E_VAR_AS_INFO(exists)->span.line,
+        E_VAR_AS_INFO(exists)->span.col);
+    return -1;
+  }
+
+  // free(full);
+
+  /* Add variable entry to stack */
+  e_var* r = e_stack_push_variable(hash, cc->stack);
+
+  /* Acquire a refdobj */
+  r->type                         = E_VARTYPE_CC_VARIABLE;
+  r->val.var_info                 = e_refdobj_pool_acquire(&ge_pool);
+  E_VAR_AS_INFO(r)->initializer   = initializer;
+  E_VAR_AS_INFO(r)->current_value = initializer; // current value is initializer, -1 if none
+  E_VAR_AS_INFO(r)->name_hash     = hash;
+  E_VAR_AS_INFO(r)->span          = E_GET_NODE(cc->ast, node)->common.span;
+  E_VAR_AS_INFO(r)->is_const      = E_GET_NODE(cc->ast, node)->let.is_const;
+
+  int e = 0;
+  if (initializer >= 0) { e = compile(cc, initializer); }
+  if (e) return e;
+
+  e_emit_instruction(cc, E_OPCODE_INIT);
+  e_emit_u32(cc, hash);
+
+  // is_compound
+  e_emit_u8(cc, initializer >= 0);
+
+  return 0;
+}
+
+static int
+compile_root(e_compiler* cc, int node)
+{
+  /**
+   * Initializes all global variables and namespaced
+   * variables.
+   *
+   * Shouldn't take lots of time if the user hasn't
+   * done something extremely stupid.
+   * AKA. initializing a global variable to the
+   * value of a non trivial function call.
+   */
+  e_ast_node* root = E_GET_NODE(cc->ast, node);
+  for (u32 i = 0; i < root->root.nstmts; i++) {
+    int e = compile(cc, root->root.stmts[i]);
+    if (e) { return e; }
+  }
+
+  // Compiling headless. Emit a halt and return.
+  if (!cc->info->executable) {
+    e_emit_instruction(cc, E_OPCODE_HALT);
+    e_emit_u32(cc, 0);
+    return 0; // Done!
+  }
+
+  const char* custom_entry_point = cc->info->custom_entry_point;
+
+  /* main if not specified. */
+  u32 entry_point_hash = e_hash_fnv("main", strlen("main"));
+  if (custom_entry_point != nullptr) { entry_point_hash = e_hash_fnv(custom_entry_point, strlen(custom_entry_point)); }
+
+  /* Find entry point and ensure it doesn't ask for any arguments. */
+  ecc_function_table* func_table = cc->function_table;
+
+  bool found             = false;
+  u32  entry_point_nargs = 0;
+  for (u32 i = 0; i < func_table->functions_count; i++) {
+    if (func_table->functions[i].name_hash == entry_point_hash) {
+      found             = true;
+      entry_point_nargs = func_table->functions[i].nargs;
+    }
+  }
+
+  if (!found) {
+    cerror(root->common.span, "Entry point undefined\n");
+    return -1;
+  }
+
+  if (entry_point_nargs > 1) {
+    cerror(root->common.span, "Entry point must either accept 1 argument (command line argument list) or no arguments at all.\n");
+    return -1;
+  }
+
+  /* Push command line argument list to the stack, right before main as an argument. */
+  if (entry_point_nargs == 1) { e_emit_instruction(cc, E_OPCODE_LOAD_ARG_LIST); }
+
+  /* CALL to main */
+  e_emit_instruction(cc, E_OPCODE_CALL);
+  e_emit_u32(cc, entry_point_hash);
+  e_emit_u16(cc, entry_point_nargs);
+
+  return 0;
+}
+
+static int
+compile_variable_load(e_compiler* cc, int node)
+{
+  char* full = mk_name(cc, E_GET_NODE(cc->ast, node)->ident.ident);
+  u32   hash = e_hash_fnv(full, strlen(full));
+
+  for (u32 i = 0; i < cc->builtin_var_table->builtin_vars_count; i++) {
+    const e_builtin_var* builtin_var      = &cc->builtin_var_table->builtin_vars[i];
+    u32                  builtin_var_hash = cc->builtin_var_table->builtin_var_hashes[i];
+
+    if (builtin_var_hash == hash) {
+      /* Instantiate a builtin variable only if it is used. */
+      e_var v = {
+        .type = builtin_var->type,
+        .val  = builtin_var->value,
+      };
+
+      // free(full);
+      return compile_literal_variable(cc, v); // compile_literal_variable loads the value! Return.
+    }
+  }
+
+  e_var* exists = e_stack_find(cc->stack, hash);
+  if (exists == nullptr) {
+    cerror(E_GET_NODE(cc->ast, node)->common.span, "Undeclared variable '%s'\n", full);
+    return -1;
+  }
+
+  // free(full);
+
+  e_lval lv = e_make_value(cc, node);
+  if (e_emit_lvalue_load(cc, lv) < 0) {
+    e_free_value(&lv);
+    return -1;
+  }
+
+  e_free_value(&lv);
+  return 0;
+}
+
+static int
+compile_namespace_decleration(e_compiler* cc, int node)
+{
+  const char* ns_name        = E_GET_NODE(cc->ast, node)->namespace_decl.name;
+  int*        ns_decl_stmts  = E_GET_NODE(cc->ast, node)->namespace_decl.stmts;
+  u32         ns_decl_nstmts = E_GET_NODE(cc->ast, node)->namespace_decl.nstmts;
+
+  ns_push(cc, ns_name);
+
+  for (u32 i = 0; i < ns_decl_nstmts; i++) {
+    int e = compile(cc, ns_decl_stmts[i]);
+    if (e) {
+      ns_pop(cc);
+      return e;
+    }
+  }
+
+  ns_pop(cc);
+
+  return 0;
+}
+
+static int
+compile(e_compiler* cc, int node)
 {
   if (node < 0) return -1;
 
@@ -1583,73 +1903,16 @@ compile(struct e_compiler* cc, int node)
     case E_AST_NODE_NOP: return 0;
 
     case E_AST_NODE_ROOT: {
-      /**
-       * Initializes all global variables and namespaced
-       * variables.
-       *
-       * Shouldn't take lots of time if the user hasn't
-       * done something extremely stupid.
-       * AKA. initializing a global variable to the
-       * value of a non trivial function call.
-       */
-      e_ast_node* root = E_GET_NODE(cc->ast, node);
-      for (u32 i = 0; i < root->root.nstmts; i++) {
-        int e = compile(cc, root->root.stmts[i]);
-        if (e) { return e; }
-      }
-
-      // Compiling headless. Emit a halt and return.
-      if (!cc->info->executable) {
-        e_emit_instruction(cc, E_OPCODE_HALT);
-        e_emit_u32(cc, 0);
-        return 0; // Done!
-      }
-
-      const char* custom_entry_point = cc->info->custom_entry_point;
-
-      /* main if not specified. */
-      u32 entry_point_hash = e_hash_fnv("main", strlen("main"));
-      if (custom_entry_point != nullptr) { entry_point_hash = e_hash_fnv(custom_entry_point, strlen(custom_entry_point)); }
-
-      /* Find entry point and ensure it doesn't ask for any arguments. */
-      ecc_function_table* func_table = cc->function_table;
-
-      bool found             = false;
-      u32  entry_point_nargs = 0;
-      for (u32 i = 0; i < func_table->functions_count; i++) {
-        if (func_table->functions[i].name_hash == entry_point_hash) {
-          found             = true;
-          entry_point_nargs = func_table->functions[i].nargs;
-        }
-      }
-
-      if (!found) {
-        cerror(root->common.span, "Entry point undefined\n");
-        return -1;
-      }
-
-      if (entry_point_nargs > 1) {
-        cerror(root->common.span, "Entry point must either accept 1 argument (command line argument list) or no arguments at all.\n");
-        return -1;
-      }
-
-      /* Push command line argument list to the stack, right before main as an argument. */
-      if (entry_point_nargs == 1) { e_emit_instruction(cc, E_OPCODE_LOAD_ARG_LIST); }
-
-      /* CALL to main */
-      e_emit_instruction(cc, E_OPCODE_CALL);
-      e_emit_u32(cc, entry_point_hash);
-      e_emit_u16(cc, entry_point_nargs);
-
+      if (compile_root(cc, node) < 0) { return -1; }
       return 0;
     }
 
+    /* Don't push a scope */
     case E_AST_NODE_STATEMENT_LIST: {
-      /* Don't push a sccope */
-      int e = 0;
-      for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->stmts.nstmts; i++) {
-        e = compile(cc, E_GET_NODE(cc->ast, node)->stmts.stmts[i]);
-        if (e) return e;
+      u32        nstmts = E_GET_NODE(cc->ast, node)->stmts.nstmts;
+      const int* stmts  = E_GET_NODE(cc->ast, node)->stmts.stmts;
+      for (u32 i = 0; i < nstmts; i++) {
+        if (compile(cc, stmts[i]) < 0) return -1;
       }
       return 0;
     }
@@ -1662,63 +1925,48 @@ compile(struct e_compiler* cc, int node)
     }
 
     case E_AST_NODE_NAMESPACE_DECL: {
-      const char* ns_name        = E_GET_NODE(cc->ast, node)->namespace_decl.name;
-      int*        ns_decl_stmts  = E_GET_NODE(cc->ast, node)->namespace_decl.stmts;
-      u32         ns_decl_nstmts = E_GET_NODE(cc->ast, node)->namespace_decl.nstmts;
-
-      ns_push(cc, ns_name);
-
-      for (u32 i = 0; i < ns_decl_nstmts; i++) {
-        int e = compile(cc, ns_decl_stmts[i]);
-        if (e) {
-          ns_pop(cc);
-          return e;
-        }
-      }
-
-      ns_pop(cc);
-
+      if (compile_namespace_decleration(cc, node) < 0) { return -1; }
       return 0;
     }
 
     case E_AST_NODE_STRUCT_DECL: {
-      int e = compile_struct_decleration(cc, node);
-      return e;
+      if (compile_struct_decleration(cc, node) < 0) { return -1; }
+      return 0;
     }
 
     case E_AST_NODE_INDEX: {
-      int e = compile(cc, E_GET_NODE(cc->ast, node)->index.base);
-      if (e < 0) return e;
-
-      e = compile(cc, E_GET_NODE(cc->ast, node)->index.index);
-      if (e < 0) return e;
-
-      e_emit_instruction(cc, E_OPCODE_INDEX);
+      if (compile_index(cc, node) < 0) { return -1; }
       return 0;
     }
 
     case E_AST_NODE_BINARYOP: {
-      return compile_binary_op(cc, node);
+      if (compile_binary_op(cc, node) < 0) { return -1; }
+      return 0;
     }
 
     case E_AST_NODE_IF: {
-      return compile_if_statement(cc, node);
+      if (compile_if_statement(cc, node) < 0) { return -1; }
+      return 0;
     }
 
     case E_AST_NODE_UNARYOP: {
-      return compile_unary_op(cc, node);
+      if (compile_unary_op(cc, node) < 0) { return -1; }
+      return 0;
     }
 
     case E_AST_NODE_WHILE: {
-      return compile_while_statement(cc, node);
+      if (compile_while_statement(cc, node) < 0) { return -1; }
+      return 0;
     }
 
     case E_AST_NODE_FOR: {
-      return compile_for_statement(cc, node);
+      if (compile_for_statement(cc, node) < 0) { return -1; }
+      return 0;
     }
 
     case E_AST_NODE_MEMBER_ACCESS: {
-      return e_compile_member_access(cc, node);
+      if (compile_member_access(cc, node) < 0) { return -1; }
+      return 0;
     }
 
     case E_AST_NODE_BREAK: {
@@ -1744,105 +1992,17 @@ compile(struct e_compiler* cc, int node)
     }
 
     case E_AST_NODE_RETURN: {
-      if (E_GET_NODE(cc->ast, node)->ret.has_return_value) {
-        /* Compile the return value */
-        compile(cc, E_GET_NODE(cc->ast, node)->ret.expr_id);
-
-        defer_emit_all_scopes(cc);
-
-        e_emit_instruction(cc, E_OPCODE_RETURN);
-        e_emit_u8(cc, true); // Specify that we're returning a value
-      } else {
-        defer_emit_all_scopes(cc);
-
-        e_emit_instruction(cc, E_OPCODE_RETURN);
-        e_emit_u8(cc, false); /* Returning void! */
-      }
+      if (compile_return(cc, node) < 0) { return -1; }
       return 0;
     }
 
     case E_AST_NODE_VARIABLE: {
-      char* full = mk_name(cc, E_GET_NODE(cc->ast, node)->ident.ident);
-      u32   hash = e_hash_fnv(full, strlen(full));
-
-      for (u32 i = 0; i < cc->builtin_var_table->builtin_vars_count; i++) {
-        const e_builtin_var* builtin_var      = &cc->builtin_var_table->builtin_vars[i];
-        u32                  builtin_var_hash = cc->builtin_var_table->builtin_var_hashes[i];
-
-        if (builtin_var_hash == hash) {
-          /* Instantiate a builtin variable only if it is used. */
-          e_var v = {
-            .type = builtin_var->type,
-            .val  = builtin_var->value,
-          };
-          compile_literal_variable(cc, v);
-
-          // free(full);
-          return 0; // compile_literal_variable loads the value! Return.
-        }
-      }
-
-      e_var* exists = e_stack_find(cc->stack, hash);
-      if (exists == nullptr) {
-        cerror(E_GET_NODE(cc->ast, node)->common.span, "Undeclared variable '%s'\n", full);
-        return -1;
-      }
-
-      // free(full);
-
-      e_lval lv = e_make_value(cc, node);
-      if (e_emit_lvalue_load(cc, lv) < 0) {
-        e_free_value(&lv);
-        return -1;
-      }
-
-      e_free_value(&lv);
+      if (compile_variable_load(cc, node) < 0) { return -1; }
       return 0;
     }
 
     case E_AST_NODE_VARIABLE_DECL: {
-      const char* name = E_GET_NODE(cc->ast, node)->let.name;
-      char*       full = mk_name(cc, name);
-
-      u32 hash        = e_hash_fnv(full, strlen(full));
-      int initializer = E_GET_NODE(cc->ast, node)->let.initializer;
-
-      e_var* exists = e_stack_find_in_current_scope(cc->stack, hash);
-      if (exists != nullptr) {
-        cerror(
-            E_GET_NODE(cc->ast, node)->common.span,
-            "Variable %s redeclared in same scope. Earlier occurence at [%s:%i:%i]\n",
-            full,
-            E_VAR_AS_INFO(exists)->span.file,
-            E_VAR_AS_INFO(exists)->span.line,
-            E_VAR_AS_INFO(exists)->span.col);
-        return -1;
-      }
-
-      // free(full);
-
-      /* Add variable entry to stack */
-      e_var* r = e_stack_push_variable(hash, cc->stack);
-
-      /* Acquire a refdobj */
-      r->type                         = E_VARTYPE_CC_VARIABLE;
-      r->val.var_info                 = e_refdobj_pool_acquire(&ge_pool);
-      E_VAR_AS_INFO(r)->initializer   = initializer;
-      E_VAR_AS_INFO(r)->current_value = initializer; // current value is initializer, -1 if none
-      E_VAR_AS_INFO(r)->name_hash     = hash;
-      E_VAR_AS_INFO(r)->span          = E_GET_NODE(cc->ast, node)->common.span;
-      E_VAR_AS_INFO(r)->is_const      = E_GET_NODE(cc->ast, node)->let.is_const;
-
-      int e = 0;
-      if (initializer >= 0) { e = compile(cc, initializer); }
-      if (e) return e;
-
-      e_emit_instruction(cc, E_OPCODE_INIT);
-      e_emit_u32(cc, hash);
-
-      // is_compound
-      e_emit_u8(cc, initializer >= 0);
-
+      if (compile_variable_decleration(cc, node) < 0) { return -1; }
       return 0;
     }
 
@@ -1852,39 +2012,18 @@ compile(struct e_compiler* cc, int node)
     }
 
     case E_AST_NODE_INDEX_ASSIGN: {
-      int value = E_GET_NODE(cc->ast, node)->index_assign.value;
-
-      if (!e_can_make_value(cc->ast, node)) {
-        e_filespan left_span = E_GET_NODE(cc->ast, node)->index_assign.span;
-        cerror(left_span, "Can not assign to indexed expression: Failed to lower to lvalue\n");
-        return -1;
-      }
-
-      e_lval v = e_make_value(cc, node);
-      int    e = e_emit_lvalue_assign(cc, value, v);
-      e_free_value(&v);
-
-      return e;
+      if (compile_index_assign(cc, node) < 0) { return -1; }
+      return 0;
     }
 
     case E_AST_NODE_INDEX_COMPOUND_OP: {
-      int value = E_GET_NODE(cc->ast, node)->index_compound.value;
-
-      if (!e_can_make_value(cc->ast, node)) {
-        e_filespan left_span = E_GET_NODE(cc->ast, node)->common.span;
-        cerror(left_span, "Can not assign to indexed compound expression: Failed to lower to lvalue\n");
-        return -1;
-      }
-
-      e_lval v = e_make_value(cc, node);
-      int    e = e_emit_lvalue_assign(cc, value, v);
-      e_free_value(&v);
-
-      return e;
+      if (compile_index_compound(cc, node)) { return -1; }
+      return 0;
     }
 
     case E_AST_NODE_CALL: {
-      return compile_function_call(cc, node);
+      if (compile_function_call(cc, node) < 0) { return -1; }
+      return 0;
     }
 
     case E_AST_NODE_INT:
@@ -1892,39 +2031,23 @@ compile(struct e_compiler* cc, int node)
     case E_AST_NODE_BOOL:
     case E_AST_NODE_STRING:
     case E_AST_NODE_FLOAT: {
-      return compile_literal(cc, node);
+      if (compile_literal(cc, node) < 0) { return -1; }
+      return 0;
     }
 
     case E_AST_NODE_LIST: {
-      u32 nelems = E_GET_NODE(cc->ast, node)->list.nelems;
-      for (u32 i = 0; i < nelems; i++) {
-        int elem_node = E_GET_NODE(cc->ast, node)->list.elems[i];
-        compile(cc, elem_node);
-      }
-
-      e_emit_instruction(cc, E_OPCODE_MK_LIST);
-      e_emit_u32(cc, nelems);
-
+      if (compile_list(cc, node) < 0) { return -1; }
       return 0;
     }
 
     case E_AST_NODE_MAP: {
-      u32 nelems = E_GET_NODE(cc->ast, node)->map.npairs;
-      for (u32 i = 0; i < nelems; i++) {
-        int key = E_GET_NODE(cc->ast, node)->map.keys[i];
-        int val = E_GET_NODE(cc->ast, node)->map.values[i];
-        compile(cc, key);
-        compile(cc, val);
-      }
-
-      e_emit_instruction(cc, E_OPCODE_MK_MAP);
-      e_emit_u32(cc, nelems);
-
+      if (compile_map(cc, node) < 0) return -1;
       return 0;
     }
 
     case E_AST_NODE_FUNCTION_DEFINITION: {
-      return compile_function_definition(cc, node);
+      if (compile_function_definition(cc, node) < 0) { return -1; }
+      return 0;
     }
   }
 
@@ -1937,47 +2060,74 @@ e_compile_function(e_compiler* cc, int node)
   u32  nstmts = E_GET_NODE(cc->ast, node)->func.nstmts;
   int* stmts  = E_GET_NODE(cc->ast, node)->func.stmts;
   for (u32 i = 0; i < nstmts; i++) {
-    int e = compile(cc, stmts[i]);
-    if (e) return e;
+    if (compile(cc, stmts[i]) < 0) return -1;
   }
   return 0;
 }
 
 static int
+compile_builtin_structure(e_compiler* cc, const e_builtin_struct* b)
+{
+  ecc_struct_information st = {
+    .name           = e_arnstrdup(cc->arena, b->name),
+    .fields         = e_arnalloc(cc->arena, b->fields_count * sizeof(u32)),
+    .field_hashes   = e_arnalloc(cc->arena, b->fields_count * sizeof(u32)),
+    .fields_count   = b->fields_count,
+    .field_capacity = b->fields_count,
+    .name_hash      = e_hash_fnv(b->name, strlen(b->name)),
+  };
+
+  for (u32 j = 0; j < b->fields_count; j++) { st.fields[j] = e_arnstrdup(cc->arena, b->fields[j]); }
+  for (u32 j = 0; j < b->fields_count; j++) { st.field_hashes[j] = e_hash_fnv(b->fields[j], strlen(b->fields[j])); }
+
+  /* Generate the constructor function */
+  e_compiler fork;
+
+  int e = compiler_make_fork(cc, &fork);
+  if (e) return e;
+
+  e = e_stack_push_frame(cc->stack);
+  if (e) return e;
+
+  defer_push_scope(&fork);
+
+  e = compile_struct_constructor(&fork, E_GET_NODE(cc->ast, cc->ast->root)->common.span, &st);
+  if (e) return e;
+
+  defer_pop_scope(&fork);
+  compiler_join_fork(&fork, cc);
+
+  e_stack_pop_frame(cc->stack);
+
+  return 0;
+}
+
+/**
+ * Load all builtin structures, even if they
+ * aren't used. We can not safely say a structure
+ * is used or not before compilation.
+ * (Compiling the structurs only when they are seems
+ *  to work, but will cause issues later, like with
+ *  dynamic script execution).
+ */
+static int
 compile_builtin_structures(e_compiler* cc)
 {
   for (u32 i = 0; i < E_ARRLEN(eb_structs); i++) {
-    const e_builtin_struct* b  = &eb_structs[i];
-    ecc_struct_information  st = {
-      .name           = e_arnstrdup(cc->arena, b->name),
-      .fields         = e_arnalloc(cc->arena, b->fields_count * sizeof(u32)),
-      .field_hashes   = e_arnalloc(cc->arena, b->fields_count * sizeof(u32)),
-      .fields_count   = b->fields_count,
-      .field_capacity = b->fields_count,
-      .name_hash      = e_hash_fnv(b->name, strlen(b->name)),
-    };
+    const e_builtin_struct* b = &eb_structs[i];
 
-    for (u32 j = 0; j < b->fields_count; j++) { st.fields[j] = e_arnstrdup(cc->arena, b->fields[j]); }
-    for (u32 j = 0; j < b->fields_count; j++) { st.field_hashes[j] = e_hash_fnv(b->fields[j], strlen(b->fields[j])); }
-
-    /* Generate the constructor function */
-    e_compiler fork;
-
-    int e = compiler_make_fork(cc, &fork);
+    int e = compile_builtin_structure(cc, b);
     if (e) return e;
+  }
 
-    e = e_stack_push_frame(cc->stack);
+  /**
+   * Compile all hooked builtin structures.
+   */
+  for (u32 i = 0; i < cc->info->nhooked_structs; i++) {
+    const e_builtin_struct* b = &cc->info->hook_structs[i];
+
+    int e = compile_builtin_structure(cc, b);
     if (e) return e;
-
-    defer_push_scope(&fork);
-
-    e = compile_struct_constructor(&fork, E_GET_NODE(cc->ast, cc->ast->root)->common.span, &st);
-    if (e) return e;
-
-    defer_pop_scope(&fork);
-    compiler_join_fork(&fork, cc);
-
-    e_stack_pop_frame(cc->stack);
   }
 
   return 0;
@@ -2008,11 +2158,36 @@ e_compile(const ecc_info* info, e_compilation_result* result)
     .capacity    = init_namespaces_capacity,
   };
 
-  u32* builtin_variable_hashes = (u32*)e_arnalloc(arena, sizeof(u32) * E_ARRLEN(eb_vars));
+  /**
+   * Compiler's builtin variables and the hooked variables combined.
+   */
+  u32 total_builtin_variable_count = E_ARRLEN(eb_vars) + info->nhooked_vars;
+
+  u32*           builtin_variable_hashes = (u32*)e_arnalloc(arena, sizeof(u32) * total_builtin_variable_count);
+  e_builtin_var* builtin_variables       = (e_builtin_var*)e_arnalloc(arena, sizeof(e_builtin_var) * total_builtin_variable_count);
   if (!builtin_variable_hashes) return -1;
+  if (!builtin_variables) return -1;
 
-  for (u32 i = 0; i < E_ARRLEN(eb_vars); i++) { builtin_variable_hashes[i] = e_hash_fnv(eb_vars[i].name, strlen(eb_vars[i].name)); }
+  /**
+   * Load up every hash and variable into the arrays.
+   * First, the compiler's builtins, and then the hooked variables.
+   * This ensures the compiler's definitions are seen earlier
+   * than the later ones, preventing overshadowing of primitive types.
+   */
+  u32 builtin_var_ctr = 0;
+  for (u32 i = 0; i < E_ARRLEN(eb_vars); i++, builtin_var_ctr++) {
+    builtin_variable_hashes[builtin_var_ctr] = e_hash_fnv(eb_vars[i].name, strlen(eb_vars[i].name));
+    memcpy(&builtin_variables[builtin_var_ctr], &eb_vars[i], sizeof(e_builtin_var));
+  }
+  for (u32 i = 0; i < info->nhooked_vars; i++, builtin_var_ctr++) {
+    builtin_variable_hashes[builtin_var_ctr] = e_hash_fnv(info->hook_vars[i].name, strlen(info->hook_vars[i].name));
+    memcpy(&builtin_variables[builtin_var_ctr], &info->hook_vars[i], sizeof(e_builtin_var));
+  }
 
+  /**
+   * Temporary stack to track variables.
+   * No values are assigned.
+   */
   e_stack stack = { 0 };
 
   ecc_literal_table lit_table = {
@@ -2023,9 +2198,9 @@ e_compile(const ecc_info* info, e_compilation_result* result)
   };
 
   ecc_builtin_variables_table builtin_var_table = {
+    .builtin_vars       = builtin_variables,
     .builtin_var_hashes = builtin_variable_hashes,
-    .builtin_vars_count = E_ARRLEN(eb_vars),
-    .builtin_vars       = eb_vars,
+    .builtin_vars_count = total_builtin_variable_count,
   };
 
   ecc_function_table func_table = {
@@ -2062,7 +2237,7 @@ e_compile(const ecc_info* info, e_compilation_result* result)
   if ((e = e_stack_init(256, 32, 32, &stack))) return e;
 
   /**
-   * Generate constructors for all builtin
+   * Generate constructors for all builtin && hooked
    * structures.
    */
   e = compile_builtin_structures(&cc);

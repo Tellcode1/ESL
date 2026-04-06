@@ -27,6 +27,8 @@
 
 #include "arena.h"
 #include "bc.h"
+#include "bfunc.h"
+#include "bstructs.h"
 #include "bvar.h"
 #include "cerr.h"
 #include "fn.h"
@@ -45,34 +47,81 @@ struct e_ast;
 typedef struct ecc_info {
   e_arena* arena; // If NULL, cc initializes its own arena
 
-  struct e_ast* ast;  // Must not be NULL
-  int           root; // Must be a valid node.
+  struct e_ast* ast; // Must not be NULL
+
+  /**
+   * Must be a valid node.
+   * Need node have the ROOT type, anything works.
+   */
+  int root;
 
   // If NULL, main is used.
   const char* custom_entry_point;
+
+  /**
+   * Include additional structures defined during
+   * compilation stage.
+   * NOT checked for duplicates.
+   * Must not collide with any other structures, if it does,
+   * the order LOCAL > GLOBAL > BUILTIN is used.
+   */
+  const e_builtin_struct* hook_structs;
+  u32                     nhooked_structs;
+
+  /**
+   * Same deal as structures.
+   * NOT checked for duplicates.
+   */
+  const e_builtin_var* hook_vars;
+  u32                  nhooked_vars;
 
   /**
    * If true, the compiler will emit code to
    * jump to main on start.
    * Otherwise, the program will HALT after global
    * initialization is finished.
+   *
+   * If a program is compiled without this flag, and
+   * is attempted to be run using eexec, the function
+   * will simply initialize global variables and then exit.
    */
   bool executable;
 
   int opt_level; // 0 or 1/2/3
 } ecc_info;
 
+/**
+ * Loop location structure.
+ * Filled in before while and for loops are compiled
+ * so break and continue statements within them know
+ * where to go.
+ *
+ * Both "label"s are the label IDs, generated during
+ * compile time.
+ * The defer_depth is the depth in the ecc_defer_scope
+ * struct, used to determine which defer scopes to clear
+ * on break/continue and return statements inside loops.
+ */
 typedef struct ecc_loop_location {
   u32 continue_label;
   u32 break_label;
   u32 defer_depth;
 } ecc_loop_location;
 
-typedef struct ecc_callframe {
-  bool is_function;
-  u32  restore_sp; // The stack pointer to return to when the scope exits.
-} ecc_callframe;
-
+/**
+ * The namespace list, in order.
+ * Used by the compiler to generate the correct absolute
+ * name for variables.
+ *
+ * For instance, we have two namespaces, big and small.
+ * small is within big.
+ * So like: namespace big { namespace small { let guy; } }
+ * The namespace stack will be ["big", "small"]
+ * The compiler will then generate the absolute name:
+ * "big::small::guy"
+ * This identifier is then hashed, and the result is used
+ * as if it were a normal variable ID.
+ */
 typedef struct ecc_namespace_stack {
   char** namespaces;
   u32    nnamespaces;
@@ -89,6 +138,9 @@ typedef struct ecc_variable_information {
   bool       is_const;
 } ecc_variable_information;
 
+/**
+ * Data deposit for a structure.
+ */
 typedef struct ecc_struct_information {
   char*  name;
   char** fields;
@@ -98,12 +150,23 @@ typedef struct ecc_struct_information {
   u32    name_hash;
 } ecc_struct_information;
 
+/**
+ * Stored information about all structures.
+ * Filled in as the compiler runs.
+ */
 typedef struct ecc_struct_table {
   ecc_struct_information* structs;
   u32                     structs_count;
   u32                     structs_capacity;
 } ecc_struct_table;
 
+/**
+ * Stored information about all literal variables
+ * Filled in as the compiler runs.
+ *
+ * Serialized, and used by the executor to reduce
+ * memory usage.
+ */
 typedef struct ecc_literal_table {
   e_var* literals;
   u16*   literal_hashes;
