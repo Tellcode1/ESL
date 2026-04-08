@@ -26,6 +26,7 @@
 #define E_BUILTIN_FUNCTIONS_H
 
 #include "stdafx.h"
+#include "struct.h"
 #include "var.h"
 
 #include <math.h>
@@ -244,7 +245,7 @@ evar_to_int(e_var v)
     case E_VARTYPE_STRING: return atoi(E_VAR_AS_STRING(&v)->s);
     case E_VARTYPE_LIST: return E_VAR_AS_LIST(&v)->size;
     case E_VARTYPE_MAP: return E_VAR_AS_MAP(&v)->size;
-    case E_VARTYPE_STRUCT: return E_VAR_AS_STRUCT(&v)->nmembers;
+    case E_VARTYPE_STRUCT: return E_VAR_AS_STRUCT(&v)->member_count;
     default: return 0;
   }
 }
@@ -275,7 +276,7 @@ evar_to_bool(e_var v)
     case E_VARTYPE_STRING: return strlen(E_VAR_AS_STRING(&v)->s) != 0;
     case E_VARTYPE_LIST: return E_VAR_AS_LIST(&v)->size != 0;
     case E_VARTYPE_MAP: return E_VAR_AS_MAP(&v)->size != 0;
-    case E_VARTYPE_STRUCT: return E_VAR_AS_STRUCT(&v)->nmembers != 0;
+    case E_VARTYPE_STRUCT: return E_VAR_AS_STRUCT(&v)->member_count != 0;
     default: return false;
   }
 }

@@ -66,6 +66,11 @@ e_ast_node_free(e_ast* ast, int id)
       e_ast_node_free(ast, node->index_assign.value);
       break;
 
+    case E_AST_NODE_MEMBER_ASSIGN:
+      e_ast_node_free(ast, node->member_assign.left);
+      e_ast_node_free(ast, node->member_assign.value);
+      break;
+
     case E_AST_NODE_INDEX_COMPOUND_OP:
       e_ast_node_free(ast, node->index_compound.base);
       e_ast_node_free(ast, node->index_compound.index);

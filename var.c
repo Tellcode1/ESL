@@ -80,10 +80,10 @@ e_var_deep_cpy(const e_var* var, e_var* dst)
     case E_VARTYPE_STRUCT: {
       e_struct* s = E_VAR_AS_STRUCT(var);
 
-      e_var* members = calloc(s->nmembers, sizeof(e_var));
-      u32*   hashes  = calloc(s->nmembers, sizeof(u32));
+      e_var* members = calloc(s->member_count, sizeof(e_var));
+      u32*   hashes  = calloc(s->member_count, sizeof(u32));
 
-      for (u32 i = 0; i < s->nmembers; i++) {
+      for (u32 i = 0; i < s->member_count; i++) {
         e_var_deep_cpy(&s->members[i], &members[i]);
         hashes[i] = s->member_hashes[i];
       }
@@ -91,7 +91,7 @@ e_var_deep_cpy(const e_var* var, e_var* dst)
       dst->val.struc                      = e_refdobj_pool_acquire(&ge_pool);
       E_VAR_AS_STRUCT(dst)->members       = members;
       E_VAR_AS_STRUCT(dst)->member_hashes = hashes;
-      E_VAR_AS_STRUCT(dst)->nmembers      = s->nmembers;
+      E_VAR_AS_STRUCT(dst)->member_count  = s->member_count;
 
       return 0;
     }
@@ -186,7 +186,7 @@ e_var_free(e_var* var)
       break;
 
     case E_VARTYPE_STRUCT:
-      for (u32 i = 0; i < E_VAR_AS_STRUCT(var)->nmembers; i++) { e_var_release(&E_VAR_AS_STRUCT(var)->members[i]); }
+      for (u32 i = 0; i < E_VAR_AS_STRUCT(var)->member_count; i++) { e_var_release(&E_VAR_AS_STRUCT(var)->members[i]); }
 
       free(E_VAR_AS_STRUCT(var)->members);
       free(E_VAR_AS_STRUCT(var)->member_hashes);
@@ -236,9 +236,9 @@ e_var_print(const struct e_var* v, FILE* f)
     }
     case E_VARTYPE_STRUCT: {
       fputc('{', f);
-      for (u32 i = 0; i < E_VAR_AS_STRUCT(v)->nmembers; i++) {
+      for (u32 i = 0; i < E_VAR_AS_STRUCT(v)->member_count; i++) {
         e_var_print(&E_VAR_AS_STRUCT(v)->members[i], f);
-        if (i < E_VAR_AS_STRUCT(v)->nmembers - 1) { fputs(", ", f); }
+        if (i < E_VAR_AS_STRUCT(v)->member_count - 1) { fputs(", ", f); }
       }
       fputc('}', f);
       break;
@@ -380,7 +380,7 @@ e_var_hash(const e_var* var)
       return e_combine_hash((const void**)(E_VAR_AS_MAP(var)->keys), (E_VAR_AS_MAP(var)->size), sizeof(e_var))
           + 13 * e_combine_hash((const void**)(E_VAR_AS_MAP(var)->vals), (E_VAR_AS_MAP(var)->size), sizeof(e_var));
     case E_VARTYPE_STRUCT: {
-      return e_combine_hash((const void**)E_VAR_AS_STRUCT(var)->members, E_VAR_AS_STRUCT(var)->nmembers, sizeof(e_var));
+      return e_combine_hash((const void**)E_VAR_AS_STRUCT(var)->members, E_VAR_AS_STRUCT(var)->member_count, sizeof(e_var));
     }
     default: return e_hash_fnv(&var->val, sizeof(var->val));
   }
@@ -410,8 +410,8 @@ e_var_equal(const e_var* a, const e_var* b)
       return true;
     case E_VARTYPE_STRUCT:
       if (b->type != E_VARTYPE_STRUCT) return false;
-      if (E_VAR_AS_STRUCT(a)->nmembers != E_VAR_AS_STRUCT(b)->nmembers) return false;
-      for (size_t i = 0; i < E_VAR_AS_STRUCT(a)->nmembers; i++) {
+      if (E_VAR_AS_STRUCT(a)->member_count != E_VAR_AS_STRUCT(b)->member_count) return false;
+      for (size_t i = 0; i < E_VAR_AS_STRUCT(a)->member_count; i++) {
         if (E_VAR_AS_STRUCT(a)->member_hashes[i] != E_VAR_AS_STRUCT(b)->member_hashes[i]) return false;
         if (!e_var_equal(&E_VAR_AS_STRUCT(a)->members[i], &E_VAR_AS_STRUCT(b)->members[i])) return false;
       }
@@ -437,4 +437,13 @@ e_make_var_from_string(char* s)
   ret.val.s                = e_refdobj_pool_acquire(&ge_pool);
   E_VAR_AS_STRING(&ret)->s = s; // we just allocated
   return ret;
+}
+
+struct e_var*
+e_struct_get_member(u32 hash, const e_struct* s)
+{
+  for (u32 i = 0; i < s->member_count; i++) {
+    if (s->member_hashes[i] == hash) { return &s->members[i]; }
+  }
+  return nullptr;
 }

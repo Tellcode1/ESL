@@ -106,6 +106,9 @@ static int collect_struct_declerations(e_compiler* cc, int* stmts, u32 nstmts, e
 static inline int  compiler_make_fork(const e_compiler* old_c, e_compiler* new_c);
 static inline void compiler_join_fork(const e_compiler* copy, e_compiler* cc);
 
+static inline int emit_lvalue_assign_prologue(e_compiler* cc, e_lval lv);
+static inline int emit_lvalue_assign_epilogue(e_compiler* cc, e_lval lv);
+
 static int compile_literal_variable(e_compiler* cc, e_var v);
 static int compile_literal(e_compiler* cc, int node);
 static int compile_list(e_compiler* cc, int node);
@@ -412,6 +415,81 @@ static inline u32
 make_label_id(e_compiler* cc)
 { return cc->next_label++; }
 
+e_lval
+e_make_value(e_compiler* cc, int node)
+{
+  switch (E_GET_NODE(cc->ast, node)->type) {
+    case E_AST_NODE_VARIABLE: {
+      char* name = mk_name(cc, E_GET_NODE(cc->ast, node)->ident.ident);
+
+      e_lval l;
+      l.span         = &E_GET_NODE(cc->ast, node)->common.span;
+      l.type         = E_LVAL_VAR;
+      l.val.var.id   = e_hash_fnv(name, strlen(name));
+      l.val.var.name = name;
+      return l;
+    }
+
+    case E_AST_NODE_INDEX: {
+      e_lval l;
+      l.span                 = &E_GET_NODE(cc->ast, node)->common.span;
+      l.type                 = E_LVAL_INDEX;
+      l.val.index.left_node  = E_GET_NODE(cc->ast, node)->index.base;
+      l.val.index.index_node = E_GET_NODE(cc->ast, node)->index.index;
+      return l;
+    }
+
+    case E_AST_NODE_INDEX_ASSIGN: {
+      e_lval l;
+      l.span                 = &E_GET_NODE(cc->ast, node)->common.span;
+      l.type                 = E_LVAL_INDEX;
+      l.val.index.left_node  = E_GET_NODE(cc->ast, node)->index_assign.base;
+      l.val.index.index_node = E_GET_NODE(cc->ast, node)->index_assign.index;
+      return l;
+    }
+
+    case E_AST_NODE_INDEX_COMPOUND_OP: {
+      e_lval l;
+      l.span                 = &E_GET_NODE(cc->ast, node)->common.span;
+      l.type                 = E_LVAL_INDEX;
+      l.val.index.left_node  = E_GET_NODE(cc->ast, node)->index_compound.base;
+      l.val.index.index_node = E_GET_NODE(cc->ast, node)->index_compound.index;
+      return l;
+    }
+
+    case E_AST_NODE_MEMBER_ACCESS: {
+      e_lval l;
+      l.span              = &E_GET_NODE(cc->ast, node)->common.span;
+      l.type              = E_LVAL_MEMBER;
+      l.val.member.base   = E_GET_NODE(cc->ast, node)->member_access.left;
+      l.val.member.member = E_GET_NODE(cc->ast, node)->member_access.right;
+      return l;
+    }
+
+    case E_AST_NODE_MEMBER_ASSIGN: {
+      e_lval l;
+      l.span              = &E_GET_NODE(cc->ast, node)->common.span;
+      l.type              = E_LVAL_MEMBER;
+      l.val.member.base   = E_GET_NODE(cc->ast, node)->member_assign.left;
+      l.val.member.member = E_GET_NODE(cc->ast, node)->member_assign.right;
+      return l;
+    }
+
+    default:
+      cerror(E_GET_NODE(cc->ast, node)->common.span, "%i can not be represented as a value (it is %u)\n", node, E_GET_NODE(cc->ast, node)->type);
+      exit(-1);
+  }
+
+  return (e_lval){ .type = E_LVAL_UNKNOWN };
+}
+
+void
+e_free_value(e_lval* lv)
+{
+  if (lv->type == E_LVAL_VAR) { /* free(lv->val.var.name); */
+  }
+}
+
 /* Returns 0 on succcess. */
 static inline int
 emit_lvalue_assign_prologue(e_compiler* cc, e_lval lv)
@@ -421,7 +499,17 @@ emit_lvalue_assign_prologue(e_compiler* cc, e_lval lv)
   }
   /* LVAL_INDEX handles all three of INDEX, INDEX_ASSIGN and INDEX_COMPOUND */
   else if (lv.type == E_LVAL_INDEX) {
-    int e = compile(cc, lv.val.index.left_node);
+    if (!e_can_make_value(cc->ast, lv.val.index.left_node)) {
+      cerror(*lv.span, "Can not assign back to indexed structure\n");
+      return -1;
+    }
+
+    e_lval left = e_make_value(cc, lv.val.index.left_node);
+    emit_lvalue_assign_prologue(cc, left);
+
+    // int e = compile(cc, lv.val.index.left_node);
+    // if (e < 0) return e;
+    int e = e_emit_lvalue_load(cc, left);
     if (e < 0) return e;
 
     e = compile(cc, lv.val.index.index_node);
@@ -429,8 +517,15 @@ emit_lvalue_assign_prologue(e_compiler* cc, e_lval lv)
 
     return 0;
   } else if (lv.type == E_LVAL_MEMBER) {
-    int left = lv.val.member.base;
-    int e    = compile(cc, left);
+    if (!e_can_make_value(cc->ast, lv.val.member.base)) {
+      cerror(*lv.span, "Can not assign back to structure member\n");
+      return -1;
+    }
+
+    e_lval base = e_make_value(cc, lv.val.member.base);
+    emit_lvalue_assign_prologue(cc, base);
+
+    int e = e_emit_lvalue_load(cc, base);
     if (e) return e;
 
     return 0;
@@ -439,6 +534,7 @@ emit_lvalue_assign_prologue(e_compiler* cc, e_lval lv)
   return -1;
 }
 
+/* Returns 0 on succcess. */
 static inline int
 emit_lvalue_assign_epilogue(e_compiler* cc, e_lval lv)
 {
@@ -448,16 +544,19 @@ emit_lvalue_assign_epilogue(e_compiler* cc, e_lval lv)
     return 0;
   }
   /* LVAL_INDEX handles all three of INDEX, INDEX_ASSIGN and INDEX_COMPOUND */
-  if (lv.type == E_LVAL_INDEX && lv.val.index.left_is_var) {
-    e_emit_instruction(cc, E_OPCODE_INDEX_ASSIGN_VAR);
-    e_emit_u32(cc, lv.val.index.left_var_id);
-    return 0;
-  } else if (lv.type == E_LVAL_INDEX) {
+  else if (lv.type == E_LVAL_INDEX) {
     e_emit_instruction(cc, E_OPCODE_INDEX_ASSIGN);
+
+    e_lval base = e_make_value(cc, lv.val.index.left_node);
+    emit_lvalue_assign_epilogue(cc, base);
     return 0;
   } else if (lv.type == E_LVAL_MEMBER) {
     e_emit_instruction(cc, E_OPCODE_MEMBER_ASSIGN);
     e_emit_u32(cc, e_hash_fnv(lv.val.member.member, strlen(lv.val.member.member)));
+
+    e_lval base = e_make_value(cc, lv.val.member.base);
+    emit_lvalue_assign_epilogue(cc, base);
+
     return 0;
   }
   return -1;
@@ -521,103 +620,6 @@ lower_node_to_literal(const e_compiler* cc, int node, e_var* o)
     default: return 1;
   }
   return 1;
-}
-
-e_lval
-e_make_value(e_compiler* cc, int node)
-{
-  switch (E_GET_NODE(cc->ast, node)->type) {
-    case E_AST_NODE_VARIABLE: {
-      char* name = mk_name(cc, E_GET_NODE(cc->ast, node)->ident.ident);
-
-      e_lval l;
-      l.span         = &E_GET_NODE(cc->ast, node)->common.span;
-      l.type         = E_LVAL_VAR;
-      l.val.var.id   = e_hash_fnv(name, strlen(name));
-      l.val.var.name = name;
-      return l;
-    }
-
-    case E_AST_NODE_INDEX: {
-      e_lval l;
-      l.span                 = &E_GET_NODE(cc->ast, node)->common.span;
-      l.type                 = E_LVAL_INDEX;
-      l.val.index.left_node  = E_GET_NODE(cc->ast, node)->index.base;
-      l.val.index.index_node = E_GET_NODE(cc->ast, node)->index.index;
-
-      int base = l.val.index.left_node;
-      if (E_GET_NODE(cc->ast, base)->type == E_AST_NODE_VARIABLE) {
-        char* name              = mk_name(cc, E_GET_NODE(cc->ast, base)->ident.ident);
-        l.val.index.left_is_var = true;
-        l.val.index.left_var_id = e_hash_fnv(name, strlen(name));
-      } else {
-        l.val.index.left_is_var = false;
-        l.val.index.left_var_id = 0;
-      }
-
-      return l;
-    }
-
-    case E_AST_NODE_INDEX_ASSIGN: {
-      e_lval l;
-      l.span                 = &E_GET_NODE(cc->ast, node)->common.span;
-      l.type                 = E_LVAL_INDEX;
-      l.val.index.left_node  = E_GET_NODE(cc->ast, node)->index_assign.base;
-      l.val.index.index_node = E_GET_NODE(cc->ast, node)->index_assign.index;
-
-      int base = l.val.index.left_node;
-      if (E_GET_NODE(cc->ast, base)->type == E_AST_NODE_VARIABLE) {
-        char* name              = mk_name(cc, E_GET_NODE(cc->ast, base)->ident.ident);
-        l.val.index.left_is_var = true;
-        l.val.index.left_var_id = e_hash_fnv(name, strlen(name));
-      } else {
-        l.val.index.left_is_var = false;
-        l.val.index.left_var_id = 0;
-      }
-      return l;
-    }
-
-    case E_AST_NODE_INDEX_COMPOUND_OP: {
-      e_lval l;
-      l.span                 = &E_GET_NODE(cc->ast, node)->common.span;
-      l.type                 = E_LVAL_INDEX;
-      l.val.index.left_node  = E_GET_NODE(cc->ast, node)->index_compound.base;
-      l.val.index.index_node = E_GET_NODE(cc->ast, node)->index_compound.index;
-
-      int base = l.val.index.left_node;
-      if (E_GET_NODE(cc->ast, base)->type == E_AST_NODE_VARIABLE) {
-        char* name              = mk_name(cc, E_GET_NODE(cc->ast, base)->ident.ident);
-        l.val.index.left_is_var = true;
-        l.val.index.left_var_id = e_hash_fnv(name, strlen(name));
-      } else {
-        l.val.index.left_is_var = false;
-        l.val.index.left_var_id = 0;
-      }
-      return l;
-    }
-
-    case E_AST_NODE_MEMBER_ACCESS: {
-      e_lval l;
-      l.span              = &E_GET_NODE(cc->ast, node)->common.span;
-      l.type              = E_LVAL_MEMBER;
-      l.val.member.base   = E_GET_NODE(cc->ast, node)->member_access.left;
-      l.val.member.member = E_GET_NODE(cc->ast, node)->member_access.right;
-      return l;
-    }
-
-    default:
-      cerror(E_GET_NODE(cc->ast, node)->common.span, "%i can not be represented as a value (it is %u)\n", node, E_GET_NODE(cc->ast, node)->type);
-      exit(-1);
-  }
-
-  return (e_lval){ .type = E_LVAL_UNKNOWN };
-}
-
-void
-e_free_value(e_lval* lv)
-{
-  if (lv->type == E_LVAL_VAR) { /* free(lv->val.var.name); */
-  }
 }
 
 int
@@ -1543,6 +1545,23 @@ compile_assign(e_compiler* cc, int node)
 }
 
 static int
+compile_member_assign(e_compiler* cc, int node)
+{
+  int value = E_GET_NODE(cc->ast, node)->member_assign.value;
+
+  if (!e_can_make_value(cc->ast, node)) {
+    cerror(E_GET_NODE(cc->ast, node)->common.span, "Can not assign to member access\n");
+    return -1;
+  }
+
+  e_lval lv = e_make_value(cc, node);
+  int    e  = e_emit_lvalue_assign(cc, value, lv);
+  e_free_value(&lv);
+
+  return e;
+}
+
+static int
 compile_return(e_compiler* cc, int node)
 {
   if (E_GET_NODE(cc->ast, node)->ret.has_return_value) {
@@ -2013,6 +2032,11 @@ compile(e_compiler* cc, int node)
 
     case E_AST_NODE_INDEX_ASSIGN: {
       if (compile_index_assign(cc, node) < 0) { return -1; }
+      return 0;
+    }
+
+    case E_AST_NODE_MEMBER_ASSIGN: {
+      if (compile_member_assign(cc, node) < 0) { return -1; }
       return 0;
     }
 

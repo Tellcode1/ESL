@@ -22,7 +22,6 @@
  * SOFTWARE.
  */
 
-
 #include "pool.h"
 
 #include "stdafx.h"
@@ -106,8 +105,8 @@ e_refdobj_pool_acquire(e_refdobj_pool* pool)
 
   /* br is free */
   for (u32 i = 0; i < E_REFLEAVE_COUNT; i++) {
-    if (!br->leaves_in_use[i]) {
-      br->leaves_in_use[i] = true;
+    if (!(br->leaves_in_use & (1 << i))) {
+      br->leaves_in_use |= 1 << i;
       br->free_leaves--;
       br->pool = pool;
 
@@ -150,10 +149,10 @@ e_refdobj_pool_return(e_refdobj_pool* pool, e_refdobj* obj)
   if (!br || leaf_index == UINT32_MAX) return;
 
   /* Explicit double free check. */
-  if (!br->leaves_in_use[leaf_index]) return;
+  if (!(br->leaves_in_use & (1 << leaf_index))) return;
 
   br->free_leaves++;
-  br->leaves_in_use[leaf_index] = false;
+  br->leaves_in_use &= ~(1 << leaf_index);
 }
 
 void

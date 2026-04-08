@@ -68,7 +68,7 @@ e_can_make_value(const e_ast* ast, int node)
   if (ast == nullptr || node < 0) return false;
   return E_GET_NODE(ast, node)->type == E_AST_NODE_VARIABLE || E_GET_NODE(ast, node)->type == E_AST_NODE_INDEX
       || E_GET_NODE(ast, node)->type == E_AST_NODE_INDEX_ASSIGN || E_GET_NODE(ast, node)->type == E_AST_NODE_INDEX_COMPOUND_OP
-      || E_GET_NODE(ast, node)->type == E_AST_NODE_MEMBER_ACCESS;
+      || E_GET_NODE(ast, node)->type == E_AST_NODE_MEMBER_ACCESS || E_GET_NODE(ast, node)->type == E_AST_NODE_MEMBER_ASSIGN;
 }
 
 e_lval e_make_value(e_compiler* cc, int node);

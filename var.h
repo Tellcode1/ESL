@@ -118,12 +118,6 @@ typedef struct e_var {
   e_varval  val;
 } e_var;
 
-typedef struct e_struct {
-  e_var* members;
-  u32*   member_hashes;
-  u32    nmembers;
-} e_struct;
-
 e_var e_make_var_from_string(char* s);
 
 int e_var_shallow_cpy(const e_var* var, e_var* dst);
@@ -184,5 +178,13 @@ e_var_type_to_string(e_vartype type)
   }
   return "unknown";
 }
+
+static inline e_var
+e_var_from_int(int x)
+{ return (e_var){ .type = E_VARTYPE_INT, .val.i = x }; }
+
+static inline e_var
+e_var_from_float(double x)
+{ return (e_var){ .type = E_VARTYPE_FLOAT, .val.f = x }; }
 
 #endif // ESL_H

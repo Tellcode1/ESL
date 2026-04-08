@@ -1397,6 +1397,26 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
         E_GET_NODE(p, leftidx)->type             = E_AST_NODE_NOP;
 
         return node;
+      } else if (e_ast_get_node(p, leftidx)->type == E_AST_NODE_MEMBER_ACCESS) {
+        int rightidx = e_ast_expr(p, rbp);
+        if (rightidx < 0) {
+          asterror(peek(p)->span, "Invalid RHS in member assignment\n");
+
+          return -1;
+        }
+
+        const char* right = E_GET_NODE(p, leftidx)->member_access.right;
+
+        E_GET_NODE(p, node)->type                = E_AST_NODE_MEMBER_ASSIGN;
+        E_GET_NODE(p, node)->member_assign.left  = E_GET_NODE(p, leftidx)->member_assign.left;
+        E_GET_NODE(p, node)->member_assign.right = right;
+        E_GET_NODE(p, node)->member_assign.value = rightidx;
+
+        // we stole lefts' children, we don't want to recursively free it.
+        E_GET_NODE(p, leftidx)->common.span.file = NULL;
+        E_GET_NODE(p, leftidx)->type             = E_AST_NODE_NOP;
+
+        return node;
       }
 
       int rightidx = e_ast_expr(p, rbp);

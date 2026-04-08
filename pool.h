@@ -36,7 +36,7 @@
  */
 
 /**
- * Must be a power of 2!
+ * Must be a power of 2 less than (or equal to) 64!
  */
 #define E_REFLEAVE_COUNT 32
 
@@ -69,7 +69,7 @@ typedef struct e_refdobj {
 typedef struct e_refdobj_branch {
   /* If a leaf is in use or not */
   e_refdobj leaves[E_REFLEAVE_COUNT];
-  bool      leaves_in_use[E_REFLEAVE_COUNT];
+  u64       leaves_in_use;
 
   /* Number of free leaves on this branch */
   u32 free_leaves;

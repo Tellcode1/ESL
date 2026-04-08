@@ -25,7 +25,6 @@
 #ifndef E_AST_H
 #define E_AST_H
 
-#include "arena.h"
 #include "cerr.h"
 #include "lex.h"
 #include "strint.h"
@@ -61,6 +60,7 @@ typedef enum e_ast_nodetype {
 
   // x.y
   E_AST_NODE_MEMBER_ACCESS,
+  E_AST_NODE_MEMBER_ASSIGN,
 
   E_AST_NODE_NAMESPACE_DECL,
   E_AST_NODE_STRUCT_DECL,
@@ -280,6 +280,7 @@ typedef union e_ast_node_val {
     e_ast_node_type type;
     e_filespan      span;
     int             left;
+    const char*     right;
     int             value;
   } member_assign;
 
@@ -510,8 +511,8 @@ e_ast_make_node(e_ast* p)
 static inline bool
 e_ast_is_limiter_exempt(e_ast_node_type t)
 {
-  return t == E_AST_NODE_IF || t == E_AST_NODE_WHILE || t == E_AST_NODE_FOR || t == E_AST_NODE_FUNCTION_DEFINITION || t == E_AST_NODE_DEFER
-      || t == E_AST_NODE_NOP;
+  return (bool)(t == E_AST_NODE_IF || t == E_AST_NODE_WHILE || t == E_AST_NODE_FOR || t == E_AST_NODE_FUNCTION_DEFINITION || t == E_AST_NODE_DEFER
+                || t == E_AST_NODE_NOP);
 }
 
 int e_ast_parse(e_ast* p, int* root_nodeID);

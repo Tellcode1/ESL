@@ -171,7 +171,7 @@ typedef enum e_opcode_bck {
    * (vectors, generally.)
    * INDEX_ASSIGN_VAR [varID : u32]
    */
-  E_OPCODE_INDEX_ASSIGN_VAR,
+  // E_OPCODE_INDEX_ASSIGN_VAR,
 
   /**
    * Push a variable to the stack, and set its ID on the variable table.

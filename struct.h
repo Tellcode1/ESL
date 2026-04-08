@@ -35,4 +35,6 @@ typedef struct e_struct {
   u32           member_count;
 } e_struct;
 
+struct e_var* e_struct_get_member(u32 hash, const e_struct* s);
+
 #endif // E_STRUCT_H

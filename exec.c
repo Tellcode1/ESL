@@ -203,13 +203,12 @@ e_exec(const e_exec_info* info)
 
     ip += sizeof(e_opcode);
 
-    // fputs("[ ", stdout);
-
+    // fputs("STACK[ ", stdout);
     // for (u32 i = 0; i < info->stack->size; i++) {
     //   eb_print(&info->stack->stack[i], 1);
     //   fputs(", ", stdout);
     // }
-    // fputs(" ]\n", stdout);
+    // fputs(" ]\n\n", stdout);
 
     switch (opcode) {
       /* NOOPs */
@@ -315,9 +314,9 @@ e_exec(const e_exec_info* info)
       }
 
       case E_OPCODE_MK_STRUCT: {
-        u32  nmembers = e_read_u32(&ip);
-        u32* fields   = calloc(sizeof(u32), nmembers);
-        for (u32 i = 0; i < nmembers; i++) { fields[i] = e_read_u32(&ip); }
+        u32  member_count = e_read_u32(&ip);
+        u32* fields       = calloc(sizeof(u32), member_count);
+        for (u32 i = 0; i < member_count; i++) { fields[i] = e_read_u32(&ip); }
 
         e_var st = {
           .type      = E_VARTYPE_STRUCT,
@@ -325,10 +324,10 @@ e_exec(const e_exec_info* info)
         };
 
         E_VAR_AS_STRUCT(&st)->member_hashes = fields;
-        E_VAR_AS_STRUCT(&st)->members       = (e_var*)calloc(sizeof(e_var), nmembers);
-        E_VAR_AS_STRUCT(&st)->nmembers      = nmembers;
+        E_VAR_AS_STRUCT(&st)->members       = (e_var*)calloc(sizeof(e_var), member_count);
+        E_VAR_AS_STRUCT(&st)->member_count  = member_count;
 
-        for (u32 i = 0; i < nmembers; i++) { E_VAR_AS_STRUCT(&st)->members[i] = (e_var){ .type = E_VARTYPE_NULL }; }
+        for (u32 i = 0; i < member_count; i++) { E_VAR_AS_STRUCT(&st)->members[i] = (e_var){ .type = E_VARTYPE_NULL }; }
 
         TRY_V(e_stack_push(info->stack, &st));
         e_var_release(&st); // Stack owns it now
@@ -358,7 +357,7 @@ e_exec(const e_exec_info* info)
           };
         } else {
           e_struct* st = E_VAR_AS_STRUCT(e_stack_top(info->stack));
-          for (u32 i = 0; i < st->nmembers; i++) {
+          for (u32 i = 0; i < st->member_count; i++) {
             if (st->member_hashes[i] == member) {
               e_var_shallow_cpy(&st->members[i], &push);
               e_var_acquire(&push); // acquire tmp
@@ -383,19 +382,25 @@ e_exec(const e_exec_info* info)
         e_var* struc = e_stack_top(info->stack) - 1;
 
         e_vartype type = struc->type;
+
         if (type == E_VARTYPE_VEC2 || type == E_VARTYPE_VEC3 || type == E_VARTYPE_VEC4) {
-          if (member == e_hash_fnv("x", 1)) {
+          const u32 x = e_hash_fnv("x", 1);
+          const u32 y = e_hash_fnv("y", 1);
+          const u32 z = e_hash_fnv("z", 1);
+          const u32 w = e_hash_fnv("w", 1);
+          // printf("Vector assign\n");
+          if (member == x) {
             struc->val.vec4.x = value->val.f;
-          } else if (member == e_hash_fnv("y", 1)) {
+          } else if (member == y) {
             struc->val.vec4.y = value->val.f;
-          } else if (type != E_VARTYPE_VEC2 && member == e_hash_fnv("z", 1)) {
+          } else if (type != E_VARTYPE_VEC2 && member == z) {
             struc->val.vec4.z = value->val.f;
-          } else if (type == E_VARTYPE_VEC4 && member == e_hash_fnv("w", 1)) {
+          } else if (type == E_VARTYPE_VEC4 && member == w) {
             struc->val.vec4.w = value->val.f;
           }
         } else if (struc->type == E_VARTYPE_STRUCT) {
           e_struct* st = E_VAR_AS_STRUCT(struc);
-          for (u32 i = 0; i < st->nmembers; i++) {
+          for (u32 i = 0; i < st->member_count; i++) {
             if (st->member_hashes[i] == member) {
               e_var_release(&st->members[i]);
               e_var_shallow_cpy(value, &st->members[i]);
@@ -405,18 +410,18 @@ e_exec(const e_exec_info* info)
           }
         }
 
-        e_var value_copy;
-        e_var_shallow_cpy(value, &value_copy);
-        e_var_acquire(&value_copy);
+        // e_var value_copy;
+        // e_var_shallow_cpy(value, &value_copy);
+        // e_var_acquire(&value_copy);
 
         /* remove value, we have a copy of it.  */
         e_stack_pop(info->stack);
 
-        /* release old struct object */
-        e_var_release(struc);
+        // /* release old struct object */
+        // e_var_release(struc);
 
-        /* replace struct slot with value copy */
-        *struc = value_copy;
+        // /* replace struct slot with value copy */
+        // *struc = value_copy;
 
         break;
       }
@@ -627,105 +632,44 @@ e_exec(const e_exec_info* info)
         e_var* stack      = info->stack->stack;
         u32    stack_size = info->stack->size;
 
-        e_vartype base_type = stack[stack_size - 3].type;
-        e_var     value     = stack[stack_size - 1];
-        e_var     index     = stack[stack_size - 2];
-
-        if (base_type == E_VARTYPE_LIST) {
-          u32     idx  = index.val.i;
-          e_list* list = E_VAR_AS_LIST(&stack[stack_size - 3]);
-
-          if (!list || idx >= list->size) break;
-
-          e_var* slot = &list->vars[idx];
-          e_var_release(slot);
-
-          e_var_shallow_cpy(&value, slot);
-          e_var_acquire(slot);
-
-          e_stack_pop(info->stack);
-          e_stack_pop(info->stack);
-          e_stack_pop(info->stack);
-
-          TRY_V(e_stack_push(info->stack, &value));
-        } else if (base_type == E_VARTYPE_MAP) {
-          e_map* map = E_VAR_AS_MAP(&stack[stack_size - 3]);
-          if (!map) break;
-
-          e_var* slot = e_map_find_or_insert(map, &index);
-          e_var_release(slot);
-
-          e_var_shallow_cpy(&value, slot);
-          e_var_acquire(slot);
-
-          e_stack_pop(info->stack);
-          e_stack_pop(info->stack);
-          e_stack_pop(info->stack);
-
-          TRY_V(e_stack_push(info->stack, &value));
-        }
-        // e_var_release(&value);
-        break;
-      }
-
-      case E_OPCODE_INDEX_ASSIGN_VAR: {
-        u32 var_id = e_read_u32(&ip);
-
-        e_var* stack      = info->stack->stack;
-        u32    stack_size = info->stack->size;
-
-        e_var* value = &stack[stack_size - 1];
-        e_var* index = &stack[stack_size - 2];
         e_var* base  = &stack[stack_size - 3];
+        e_var* index = &stack[stack_size - 2];
+        e_var* value = &stack[stack_size - 1];
 
-        if (base->type == E_VARTYPE_VEC2 || base->type == E_VARTYPE_VEC3 || base->type == E_VARTYPE_VEC4) {
-          int idx = evar_to_int(*index);
-          if (idx == 0) {
-            base->val.vec4.x = evar_to_float(*value);
-          } else if (idx == 1) {
-            base->val.vec4.y = evar_to_float(*value);
-          } else if (idx == 2) {
-            base->val.vec4.z = evar_to_float(*value);
-          } else if (idx == 3) {
-            base->val.vec4.w = evar_to_float(*value);
-          }
-
-          e_var* slot = get_variable_from_id(info->stack, var_id);
-          if (slot) {
-            e_var_release(slot);
-            e_var_shallow_cpy(base, slot);
-            e_var_acquire(slot);
-          }
-        } else if (base->type == E_VARTYPE_LIST) {
+        if (base->type == E_VARTYPE_LIST) {
           e_list* list = E_VAR_AS_LIST(base);
           int     idx  = evar_to_int(*index);
 
           e_var* slot = &list->vars[idx];
           e_var_release(slot);
-
           e_var_shallow_cpy(value, slot);
           e_var_acquire(slot);
         } else if (base->type == E_VARTYPE_MAP) {
-          e_map* map = E_VAR_AS_MAP(&stack[stack_size - 3]);
-          if (!map) break;
-
+          e_map* map  = E_VAR_AS_MAP(base);
           e_var* slot = e_map_find_or_insert(map, index);
-          e_var_release(slot);
 
+          e_var_release(slot);
           e_var_shallow_cpy(value, slot);
           e_var_acquire(slot);
+        } else if (base->type == E_VARTYPE_VEC2 || base->type == E_VARTYPE_VEC3 || base->type == E_VARTYPE_VEC4) {
+          int    idx = evar_to_int(*index);
+          double f   = evar_to_float(*value);
+
+          if (idx == 0) {
+            base->val.vec4.x = f;
+          } else if (idx == 1) {
+            base->val.vec4.y = f;
+          } else if (idx == 2) {
+            base->val.vec4.z = f;
+          } else if (idx == 3) {
+            base->val.vec4.w = f;
+          }
         }
 
-        e_var value_cp = { .type = E_VARTYPE_NULL };
-        e_var_shallow_cpy(value, &value_cp);
-        e_var_acquire(value);
+        e_stack_pop(info->stack);
+        e_stack_pop(info->stack);
+        /* base remains on stack */
 
-        e_stack_pop(info->stack);
-        e_stack_pop(info->stack);
-        e_stack_pop(info->stack);
-
-        TRY_V(e_stack_push(info->stack, &value_cp));
-        e_var_release(value);
         break;
       }
 
@@ -780,4 +724,32 @@ _RETURN: {
    */
   return retval;
 }
+}
+
+e_var
+e_script_call(e_script* s, const char* func_name, e_var* args, u32 nargs)
+{
+  u32 hash = e_hash_fnv(func_name, strlen(func_name));
+
+  for (u32 i = 0; i < s->compiled.nfunctions; i++) {
+    if (hash == s->compiled.functions[i].name_hash) {
+      e_exec_info info = {
+        .code          = s->compiled.functions[i].code,
+        .args          = args,
+        .slots         = s->compiled.functions[i].arg_slots,
+        .literals      = s->compiled.literals,
+        .funcs         = s->compiled.functions,
+        .extern_funcs  = s->extern_funcs,
+        .stack         = &s->stack,
+        .code_size     = s->compiled.functions[i].code_size,
+        .nargs         = nargs,
+        .nliterals     = s->compiled.nliterals,
+        .nfuncs        = s->compiled.nfunctions,
+        .nextern_funcs = s->nxtern_funcs,
+      };
+      return e_exec(&info);
+    }
+  }
+
+  return (e_var){ .type = E_VARTYPE_NULL };
 }
