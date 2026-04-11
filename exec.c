@@ -33,6 +33,7 @@
 #include "perr.h"
 #include "pool.h"
 #include "rwhelp.h"
+#include "script.h"
 #include "stack.h"
 #include "stdafx.h"
 #include "string.h"
@@ -47,16 +48,10 @@
 
 #define PASTE(x, y) x##y
 
-#define TRY(expr)                                                                                                                                    \
-  do {                                                                                                                                               \
-    int PASTE(__e__, __LINE__) = 0;                                                                                                                  \
-    if ((PASTE(__e__, __LINE__) = (expr))) { return PASTE(__e__, __LINE__); }                                                                        \
-  } while (0)
-#define TRY_V(expr)                                                                                                                                  \
-  do {                                                                                                                                               \
-    int PASTE(__e__, __LINE__) = (expr);                                                                                                             \
-    if (PASTE(__e__, __LINE__)) { return (e_var){ .type = E_VARTYPE_ERROR, .val.errcode = PASTE(__e__, __LINE__) }; }                                \
-  } while (0)
+// clang-format off
+#define TRY(expr) do { int PASTE(__e__, __LINE__) = 0; if ((PASTE(__e__, __LINE__) = (expr))) { return PASTE(__e__, __LINE__); } } while (0)
+#define TRY_V(expr) do {   int PASTE(__e__, __LINE__) = (expr);   if (PASTE(__e__, __LINE__)) { return (e_var){ .type = E_VARTYPE_ERROR, .val.errcode = PASTE(__e__, __LINE__) }; } } while (0)
+// clang-format on
 
 // static inline e_var*
 // stack_find_rev(const struct stack* s, u16 id)
@@ -179,9 +174,20 @@ assign(const e_exec_info* info, u32 slot, e_var value)
 e_var
 e_exec(const e_exec_info* info)
 {
+  /* Initial state check. */
+  const e_var nullvar = { .type = E_VARTYPE_NULL };
+  if (!info->stack) { return nullvar; }
+  if (info->nargs > 0 && (info->nargs == nullptr || info->slots == nullptr)) { return nullvar; }
+  if (info->code == nullptr && info->code_size != 0) { return nullvar; }
+  if (info->extern_funcs == nullptr && info->nextern_funcs > 0) { return nullvar; }
+  if (info->funcs == nullptr && info->nfuncs > 0) { return nullvar; }
+  if (info->literals == nullptr && info->nliterals > 0) { return nullvar; }
+
   for (u32 i = 0; i < info->nargs; i++) {
     e_var v = { 0 };
-    e_var_deep_cpy(&info->args[i], &v);
+
+    int e = e_var_deep_cpy(&info->args[i], &v);
+    if (e) return nullvar;
 
     e_var* slot = e_stack_push_variable(info->slots[i], info->stack);
     if (!slot) return (e_var){ .type = E_VARTYPE_ERROR, .val.errcode = E_EUNKNOWN };
@@ -220,7 +226,7 @@ e_exec(const e_exec_info* info)
       case E_OPCODE_DUP: {
         e_var v;
         // e_var_acquire(e_stack_top(info->stack)); // Don't acquire! Stack_push already does that
-        e_var_shallow_cpy(e_stack_top(info->stack), &v);
+        TRY_V(e_var_shallow_cpy(e_stack_top(info->stack), &v));
         e_stack_push(info->stack, &v);
         break;
       }
@@ -249,7 +255,9 @@ e_exec(const e_exec_info* info)
         assert(id < info->nliterals);
 
         e_var v;
-        e_var_deep_cpy(&info->literals[id], &v); // Deep copy the literal.
+
+        int e = e_var_deep_cpy(&info->literals[id], &v); // Deep copy the literal.
+        if (e) return (e_var){ .type = E_VARTYPE_NULL };
 
         TRY_V(e_stack_push(info->stack, &v));
         e_var_release(&v); // Hand over v to the stack.
@@ -274,7 +282,7 @@ e_exec(const e_exec_info* info)
         size_t stack_size = info->stack->size;
 
         e_var* elems = &stack[stack_size - nelems];
-        e_list_init(elems, nelems, list); // acquires the elements.
+        TRY_V(e_list_init(elems, nelems, list)); // acquires the elements.
 
         // Release variables from the stack.
         for (u32 i = 0; i < nelems; i++) { e_stack_pop(info->stack); }
@@ -302,7 +310,7 @@ e_exec(const e_exec_info* info)
         size_t stack_size = info->stack->size;
 
         e_var* elems = &stack[stack_size - (npairs * 2)];
-        e_map_init(elems, npairs, map); // acquires the elements.
+        TRY_V(e_map_init(elems, npairs, map)); // acquires the elements.
 
         // Release variables from the stack.
         for (u32 i = 0; i < npairs * 2; i++) { e_stack_pop(info->stack); }
@@ -359,7 +367,7 @@ e_exec(const e_exec_info* info)
           e_struct* st = E_VAR_AS_STRUCT(e_stack_top(info->stack));
           for (u32 i = 0; i < st->member_count; i++) {
             if (st->member_hashes[i] == member) {
-              e_var_shallow_cpy(&st->members[i], &push);
+              TRY_V(e_var_shallow_cpy(&st->members[i], &push));
               e_var_acquire(&push); // acquire tmp
               break;
             }
@@ -403,7 +411,7 @@ e_exec(const e_exec_info* info)
           for (u32 i = 0; i < st->member_count; i++) {
             if (st->member_hashes[i] == member) {
               e_var_release(&st->members[i]);
-              e_var_shallow_cpy(value, &st->members[i]);
+              TRY_V(e_var_shallow_cpy(value, &st->members[i]));
               e_var_acquire(&st->members[i]);
               break;
             }
@@ -555,12 +563,12 @@ e_exec(const e_exec_info* info)
           e_var* top = e_stack_top(info->stack);
 
           e_var_acquire(top);
-          e_var_shallow_cpy(top, &top_take);
+          TRY_V(e_var_shallow_cpy(top, &top_take));
 
           e_stack_pop(info->stack);
 
           e_var* v = e_stack_push_variable(hash, info->stack);
-          e_var_shallow_cpy(&top_take, v);
+          TRY_V(e_var_shallow_cpy(&top_take, v));
         } else {
           e_stack_push_variable(hash, info->stack);
         }
@@ -573,7 +581,7 @@ e_exec(const e_exec_info* info)
         e_var* slot = get_variable_from_id(info->stack, id);
 
         e_var v;
-        e_var_shallow_cpy(slot, &v);
+        TRY_V(e_var_shallow_cpy(slot, &v));
 
         TRY_V(e_stack_push(info->stack, &v));
         break;
@@ -588,6 +596,7 @@ e_exec(const e_exec_info* info)
         e_vartype left_type = stack[stack_size - 2].type;
         if (left_type == E_VARTYPE_LIST) {
           e_list* list = stack[stack_size - 2].type == E_VARTYPE_LIST ? E_VAR_AS_LIST(&stack[stack_size - 2]) : NULL;
+          if (!list) { return (e_var){ .type = E_VARTYPE_NULL }; }
 
           int idx = evar_to_int(stack[stack_size - 1]);
 
@@ -600,11 +609,13 @@ e_exec(const e_exec_info* info)
           e_map* map     = E_VAR_AS_MAP(map_var);
           e_var  key     = stack[stack_size - 1];
 
+          if (!map) { return (e_var){ .type = E_VARTYPE_NULL }; }
+
           e_var* find = e_map_find(map, &key);
           if (find) {
             push = *find;
             e_var_acquire(&push);
-          }
+          } // else push is null var
         } else if (left_type == E_VARTYPE_VEC2) {
           e_vec2 v2  = stack[stack_size - 2].val.vec2;
           int    idx = evar_to_int(stack[stack_size - 1]);
@@ -642,14 +653,16 @@ e_exec(const e_exec_info* info)
 
           e_var* slot = &list->vars[idx];
           e_var_release(slot);
-          e_var_shallow_cpy(value, slot);
+          TRY_V(e_var_shallow_cpy(value, slot));
           e_var_acquire(slot);
         } else if (base->type == E_VARTYPE_MAP) {
           e_map* map  = E_VAR_AS_MAP(base);
           e_var* slot = e_map_find_or_insert(map, index);
 
+          if (!map || !slot) { return (e_var){ .type = E_VARTYPE_NULL }; }
+
           e_var_release(slot);
-          e_var_shallow_cpy(value, slot);
+          TRY_V(e_var_shallow_cpy(value, slot));
           e_var_acquire(slot);
         } else if (base->type == E_VARTYPE_VEC2 || base->type == E_VARTYPE_VEC3 || base->type == E_VARTYPE_VEC4) {
           int    idx = evar_to_int(*index);
@@ -677,22 +690,22 @@ e_exec(const e_exec_info* info)
         u32    id   = e_read_u32(&ip);
         e_var* slot = get_variable_from_id(info->stack, id);
 
-        if (slot) {
-          e_var_release(slot); // free old value in slot
+        if (!slot) { return (e_var){ .type = E_VARTYPE_NULL }; }
 
-          /**
-           * Copy it. We need the variable on the stack to support.
-           * chained assignments
-           * let x = 16;
-           * let y = 32;
-           * let z = 64;
-           * x = y = z = 68;
-           *             ^ value needs to be on the stack!
-           */
-          e_var_shallow_cpy(e_stack_top(info->stack), slot);
+        e_var_release(slot); // free old value in slot
 
-          e_var_acquire(slot);
-        }
+        /**
+         * Copy it. We need the variable on the stack to support.
+         * chained assignments
+         * let x = 16;
+         * let y = 32;
+         * let z = 64;
+         * x = y = z = 68;
+         *             ^ value needs to be on the stack!
+         */
+        TRY_V(e_var_shallow_cpy(e_stack_top(info->stack), slot));
+
+        e_var_acquire(slot);
 
         break;
       }
@@ -701,9 +714,10 @@ e_exec(const e_exec_info* info)
         u8 has_return_value = e_read_u8(&ip);
 
         if (has_return_value) {
-          e_var_shallow_cpy(e_stack_top(info->stack), &retval);
+          TRY_V(e_var_shallow_cpy(e_stack_top(info->stack), &retval));
           e_var_acquire(&retval);
         }
+
         goto _RETURN;
       }
 
@@ -747,7 +761,12 @@ e_script_call(e_script* s, const char* func_name, e_var* args, u32 nargs)
         .nfuncs        = s->compiled.nfunctions,
         .nextern_funcs = s->nxtern_funcs,
       };
-      return e_exec(&info);
+
+      e_stack_push_frame(info.stack);
+      e_var r = e_exec(&info);
+      e_stack_pop_frame(info.stack);
+
+      return r;
     }
   }
 

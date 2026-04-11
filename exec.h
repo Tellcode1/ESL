@@ -33,16 +33,6 @@
 
 #include <stddef.h>
 
-/**
- * Script entity.
- */
-typedef struct e_script {
-  e_compilation_result compiled;
-  e_extern_function*   extern_funcs;
-  u32                  nxtern_funcs;
-  e_stack              stack;
-} e_script;
-
 typedef struct e_exec_info {
   const u8*                code;
   const e_var*             args;     // nullptr if nargs == 0
@@ -73,44 +63,5 @@ typedef struct e_exec_info {
  * of info.
  */
 e_var e_exec(const e_exec_info* info);
-
-/**
- * Ignoring the root stream, find the function within
- * the bytecode, and try to execute it (if it exists.)
- */
-e_var e_script_call(e_script* s, const char* func_name, e_var* args, u32 nargs);
-
-static inline int
-e_script_init(const e_compilation_result* r, e_extern_function* extern_funcs, u32 nextern_funcs, e_script* s)
-{
-  s->extern_funcs = extern_funcs;
-  s->nxtern_funcs = nextern_funcs;
-  s->compiled     = *r;
-  return e_stack_init(16, 4, 4, &s->stack);
-}
-
-static inline void
-e_script_free(e_script* s)
-{ e_stack_free(&s->stack); }
-
-/**
- * Find the variable with the hash specified
- * and return a RW pointer to it.
- * You can safely modify the value only when
- * the program is not running (after/before).
- */
-static inline e_var*
-e_script_get_variable(u32 name_hash, const e_script* s)
-{ return e_stack_find(&s->stack, name_hash); }
-
-static inline bool
-e_script_has_function(e_script* s, const char* func_name)
-{
-  u32 hash = e_hash_fnv(func_name, strlen(func_name));
-  for (u32 i = 0; i < s->compiled.nfunctions; i++) {
-    if (hash == s->compiled.functions[i].name_hash) return true;
-  }
-  return false;
-}
 
 #endif // E_VM_H

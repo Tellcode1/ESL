@@ -26,7 +26,6 @@
 #define E_STRING_INTERN_H
 
 #include "stdafx.h"
-#include "var.h"
 
 typedef struct e_str_interner {
   u32*   string_hashes;

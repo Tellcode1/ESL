@@ -29,9 +29,9 @@
 #include "map.h"
 #include "mathstrucs.h"
 #include "pool.h"
-#include "refcount.h"
 #include "stdafx.h"
 #include "string.h"
+#include "struct.h"
 
 #include <string.h>
 
@@ -113,10 +113,12 @@ typedef union e_varval {
   void* generic_ptr;
 } e_varval;
 
+#pragma pack(push, 16)
 typedef struct e_var {
   e_vartype type;
   e_varval  val;
 } e_var;
+#pragma pack(pop)
 
 e_var e_make_var_from_string(char* s);
 
@@ -186,5 +188,53 @@ e_var_from_int(int x)
 static inline e_var
 e_var_from_float(double x)
 { return (e_var){ .type = E_VARTYPE_FLOAT, .val.f = x }; }
+
+static inline int
+evar_to_int(e_var v)
+{
+  switch (v.type) {
+    case E_VARTYPE_NULL: return 0;
+    case E_VARTYPE_INT: return v.val.i;
+    case E_VARTYPE_FLOAT: return (int)v.val.f;
+    case E_VARTYPE_CHAR: return (int)v.val.c;
+    case E_VARTYPE_BOOL: return (int)v.val.b;
+    case E_VARTYPE_STRING: return atoi(E_VAR_AS_STRING(&v)->s);
+    case E_VARTYPE_LIST: return E_VAR_AS_LIST(&v)->size;
+    case E_VARTYPE_MAP: return E_VAR_AS_MAP(&v)->size;
+    case E_VARTYPE_STRUCT: return E_VAR_AS_STRUCT(&v)->member_count;
+    default: return 0;
+  }
+}
+
+static inline double
+evar_to_float(e_var v)
+{
+  switch (v.type) {
+    case E_VARTYPE_NULL: return 0.0;
+    case E_VARTYPE_FLOAT: return v.val.f;
+    case E_VARTYPE_INT: return (double)v.val.i;
+    case E_VARTYPE_CHAR: return (double)v.val.c;
+    case E_VARTYPE_BOOL: return (double)v.val.b;
+    case E_VARTYPE_STRING: return atof(E_VAR_AS_STRING(&v)->s);
+    default: return (double)evar_to_int(v);
+  }
+}
+
+static inline bool
+evar_to_bool(e_var v)
+{
+  switch (v.type) {
+    case E_VARTYPE_NULL: return false;
+    case E_VARTYPE_INT: return (bool)v.val.i;
+    case E_VARTYPE_FLOAT: return (bool)v.val.f;
+    case E_VARTYPE_CHAR: return (bool)v.val.c;
+    case E_VARTYPE_BOOL: return (bool)v.val.b;
+    case E_VARTYPE_STRING: return strlen(E_VAR_AS_STRING(&v)->s) != 0;
+    case E_VARTYPE_LIST: return E_VAR_AS_LIST(&v)->size != 0;
+    case E_VARTYPE_MAP: return E_VAR_AS_MAP(&v)->size != 0;
+    case E_VARTYPE_STRUCT: return E_VAR_AS_STRUCT(&v)->member_count != 0;
+    default: return false;
+  }
+}
 
 #endif // ESL_H

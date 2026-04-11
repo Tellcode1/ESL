@@ -22,44 +22,26 @@
  * SOFTWARE.
  */
 
-#ifndef E_BUILTIN_STRUCT_H
-#define E_BUILTIN_STRUCT_H
+#ifndef E_LIST_BUILTIN_FUNCTIONS_H
+#define E_LIST_BUILTIN_FUNCTIONS_H
 
-#include "stdafx.h"
+#include "var.h"
 
-typedef struct e_builtin_struct {
-  const char*  name;
-  const char** fields;
-  u32          fields_count;
-} e_builtin_struct;
+// Make list from elements
+e_var eb_list_make(e_var* args, u32 nargs);
+// append(list, value)
+e_var eb_list_append(e_var* args, u32 nargs);
+// pop(list)
+e_var eb_list_pop(e_var* args, u32 nargs); // fast
+// remove(list, index)
+e_var eb_list_remove(e_var* args, u32 nargs); // expensive
+// insert(list, index, value)
+e_var eb_list_insert(e_var* args, u32 nargs); // Replaces value if it exists!
+// find(list, value) => -1 if non existent
+e_var eb_list_find(e_var* args, u32 nargs); // Returns index, -1 if it doesn't exist.
+// reserve(list, elements_to_reserve)
+e_var eb_list_reserve(e_var* args, u32 nargs); // number of new variables to reserve
+// len(list)
+e_var eb_list_len(e_var* args, u32 nargs);
 
-static const e_builtin_struct eb_structs[] = {
-  {
-      .name         = "vec2",
-      .fields       = (const char*[]){ "x", "y" },
-      .fields_count = 2,
-  },
-  {
-      .name         = "vec3",
-      .fields       = (const char*[]){ "x", "y", "z" },
-      .fields_count = 3,
-  },
-  {
-      .name         = "vec4",
-      .fields       = (const char*[]){ "x", "y", "z", "w" },
-      .fields_count = 4,
-  },
-
-  {
-      .name         = "mat3",
-      .fields       = (const char*[]){ "x", "y", "z" },
-      .fields_count = 3,
-  },
-  {
-      .name         = "mat4",
-      .fields       = (const char*[]){ "x", "y", "z", "w" },
-      .fields_count = 4,
-  },
-};
-
-#endif // E_BUILTIN_STRUCT_H
+#endif // E_LIST_BUILTIN_FUNCTIONS_H

@@ -22,44 +22,32 @@
  * SOFTWARE.
  */
 
-#ifndef E_BUILTIN_STRUCT_H
-#define E_BUILTIN_STRUCT_H
+#ifndef E_IO_BUILTIN_FUNCTIONS_H
+#define E_IO_BUILTIN_FUNCTIONS_H
 
-#include "stdafx.h"
+#include "var.h"
 
-typedef struct e_builtin_struct {
-  const char*  name;
-  const char** fields;
-  u32          fields_count;
-} e_builtin_struct;
+char* e_read_full_line(FILE* f);
 
-static const e_builtin_struct eb_structs[] = {
-  {
-      .name         = "vec2",
-      .fields       = (const char*[]){ "x", "y" },
-      .fields_count = 2,
-  },
-  {
-      .name         = "vec3",
-      .fields       = (const char*[]){ "x", "y", "z" },
-      .fields_count = 3,
-  },
-  {
-      .name         = "vec4",
-      .fields       = (const char*[]){ "x", "y", "z", "w" },
-      .fields_count = 4,
-  },
+/* read(fp, nbytes), nbytes is the amount of bytes read. */
+e_var eb_io_read(e_var* args, u32 nargs);
+/* write(fp, str) */
+e_var eb_io_write(e_var* args, u32 nargs);
+/* seek(fp, offset, io::REL_TO_START/io::REL_TO_END/io::REL_TO_CURR)) */
+e_var eb_io_seek(e_var* args, u32 nargs);
+/* ptell(fp) */
+e_var eb_io_ptell(e_var* args, u32 nargs);
+/* Get error allocated as string. */
+e_var eb_io_error(e_var* args, u32 nargs);
 
-  {
-      .name         = "mat3",
-      .fields       = (const char*[]){ "x", "y", "z" },
-      .fields_count = 3,
-  },
-  {
-      .name         = "mat4",
-      .fields       = (const char*[]){ "x", "y", "z", "w" },
-      .fields_count = 4,
-  },
-};
+e_var eb_io_readln(e_var* args, u32 nargs);
+e_var eb_io_println(e_var* args, u32 nargs);
+e_var eb_io_print(e_var* args, u32 nargs);
+e_var eb_io_type(e_var* args, u32 nargs);
+e_var eb_io_at_eof(e_var* args, u32 nargs);
+e_var eb_io_open(e_var* args, u32 nargs);  // file path, mode
+e_var eb_io_close(e_var* args, u32 nargs); // fd
+e_var eb_io_getc(e_var* args, u32 nargs);  // fd
+e_var eb_io_putc(e_var* args, u32 nargs);  // fd, char
 
-#endif // E_BUILTIN_STRUCT_H
+#endif // E_IO_BUILTIN_FUNCTIONS_H

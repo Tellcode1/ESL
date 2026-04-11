@@ -24,7 +24,6 @@
 
 #include "var.h"
 
-#include "bfunc.h"
 #include "pool.h"
 #include "stdafx.h"
 

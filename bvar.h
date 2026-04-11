@@ -28,7 +28,6 @@
 #include "var.h"
 
 #include <float.h>
-#include <math.h>
 #include <stdint.h>
 
 /**
@@ -61,7 +60,11 @@ typedef enum eb_io_constants {
  * All variables must have constant, compile time (literal) values.
  */
 static const e_builtin_var eb_vars[] = {
+  /**
+   * Special null value, only needs the type tag.
+   */
   { .name = "null", .type = E_VARTYPE_NULL, .value = { 0 } },
+
   { .name = "math::PI", .type = E_VARTYPE_FLOAT, .value = { .f = 3.14159265358979323846 } },
   { .name = "math::PIBY2", .type = E_VARTYPE_FLOAT, .value = { .f = 1.57079632679489661923 } },
   { .name = "math::PIBY4", .type = E_VARTYPE_FLOAT, .value = { .f = 0.78539816339744830962 } },

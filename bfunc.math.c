@@ -1,3 +1,27 @@
+/**
+ * MIT License
+ *
+ * Copyright (c) 2026 Tellcode1
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 #include "bfunc.h"
 
 #include "operate.h"
@@ -10,36 +34,23 @@ e_var
 eb_vec2(e_var* args, u32 nargs)
 {
   (void)nargs;
-  return (e_var){ .type     = E_VARTYPE_VEC2,
-                  .val.vec2 = {
-                      .x = evar_to_float(args[0]),
-                      .y = evar_to_float(args[1]),
-                  } };
+  return (e_var){ .type = E_VARTYPE_VEC2, .val.vec2 = { .x = evar_to_float(args[0]), .y = evar_to_float(args[1]) } };
 }
 
 e_var
 eb_vec3(e_var* args, u32 nargs)
 {
   (void)nargs;
-  return (e_var){ .type     = E_VARTYPE_VEC3,
-                  .val.vec3 = {
-                      .x = evar_to_float(args[0]),
-                      .y = evar_to_float(args[1]),
-                      .z = evar_to_float(args[2]),
-                  } };
+  return (e_var){ .type = E_VARTYPE_VEC3, .val.vec3 = { .x = evar_to_float(args[0]), .y = evar_to_float(args[1]), .z = evar_to_float(args[2]) } };
 }
 
 e_var
 eb_vec4(e_var* args, u32 nargs)
 {
   (void)nargs;
-  return (e_var){ .type     = E_VARTYPE_VEC4,
-                  .val.vec4 = {
-                      .x = evar_to_float(args[0]),
-                      .y = evar_to_float(args[1]),
-                      .z = evar_to_float(args[2]),
-                      .w = evar_to_float(args[3]),
-                  } };
+  return (
+      e_var){ .type     = E_VARTYPE_VEC4,
+              .val.vec4 = { .x = evar_to_float(args[0]), .y = evar_to_float(args[1]), .z = evar_to_float(args[2]), .w = evar_to_float(args[3]) } };
 }
 
 e_var

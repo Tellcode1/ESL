@@ -22,44 +22,26 @@
  * SOFTWARE.
  */
 
-#ifndef E_BUILTIN_STRUCT_H
-#define E_BUILTIN_STRUCT_H
+#ifndef E_STR_BUILTIN_FUNCTIONS_H
+#define E_STR_BUILTIN_FUNCTIONS_H
 
-#include "stdafx.h"
+#include "var.h"
 
-typedef struct e_builtin_struct {
-  const char*  name;
-  const char** fields;
-  u32          fields_count;
-} e_builtin_struct;
+// Form a string from a list of characters
+e_var eb_str_from_list(e_var* args, u32 nargs);
+static inline e_var
+eb_str_equal(e_var* args, u32 nargs)
+{
+  (void)(nargs);
+  return (e_var){ .type = E_VARTYPE_BOOL, .val = { .b = strcmp(E_VAR_AS_STRING(&args[0])->s, E_VAR_AS_STRING(&args[1])->s) == 0 } };
+}
+e_var eb_str_append(e_var* args, u32 nargs);
+e_var eb_str_substr(e_var* args, u32 nargs); // substring: string, int start, int length
+e_var eb_str_repeat(e_var* args, u32 nargs); // repeat: string, int times
+e_var eb_str_ltrim(e_var* args, u32 nargs);
+e_var eb_str_rtrim(e_var* args, u32 nargs);
+e_var eb_str_trim(e_var* args, u32 nargs);
+e_var eb_str_split(e_var* args, u32 nargs); // Get list of strings partition by args[1] (string)
+e_var eb_str_len(e_var* args, u32 nargs);
 
-static const e_builtin_struct eb_structs[] = {
-  {
-      .name         = "vec2",
-      .fields       = (const char*[]){ "x", "y" },
-      .fields_count = 2,
-  },
-  {
-      .name         = "vec3",
-      .fields       = (const char*[]){ "x", "y", "z" },
-      .fields_count = 3,
-  },
-  {
-      .name         = "vec4",
-      .fields       = (const char*[]){ "x", "y", "z", "w" },
-      .fields_count = 4,
-  },
-
-  {
-      .name         = "mat3",
-      .fields       = (const char*[]){ "x", "y", "z" },
-      .fields_count = 3,
-  },
-  {
-      .name         = "mat4",
-      .fields       = (const char*[]){ "x", "y", "z", "w" },
-      .fields_count = 4,
-  },
-};
-
-#endif // E_BUILTIN_STRUCT_H
+#endif // E_STR_BUILTIN_FUNCTIONS_H

@@ -25,11 +25,13 @@
 #ifndef E_BUILTIN_FUNCTIONS_H
 #define E_BUILTIN_FUNCTIONS_H
 
+#include "bfunc.io.h"
+#include "bfunc.list.h"
+#include "bfunc.math.h"
+#include "bfunc.str.h"
 #include "stdafx.h"
-#include "struct.h"
 #include "var.h"
 
-#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -73,6 +75,11 @@ typedef struct e_builtin_func {
   e_var (*func)(e_var* args, u32 nargs);
 } e_builtin_func;
 
+// COPYPASTA
+/*
+  { "name", "desc", "fn name() -> returns", 0xFFFFFFFF, min_args, max_args, funcp },
+*/
+
 e_var eb_print(e_var* args, u32 nargs);
 e_var eb_readln(e_var* args, u32 nargs);
 
@@ -91,72 +98,6 @@ e_var eb_cast_float(e_var* args, u32 nargs);
 e_var eb_cast_string(e_var* args, u32 nargs);
 e_var eb_cast_list(e_var* args, u32 nargs);
 
-// clang-format off
-static inline e_var eb_sin(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = sin(args[0].val.f)}}; }
-static inline e_var eb_cos(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = cos(args[0].val.f)}}; }
-static inline e_var eb_tan(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = tan(args[0].val.f)}}; }
-static inline e_var eb_asin(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = asin(args[0].val.f)}}; }
-static inline e_var eb_acos(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = acos(args[0].val.f)}}; }
-static inline e_var eb_atan(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = atan(args[0].val.f)}}; }
-static inline e_var eb_atan2(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = atan2(args[0].val.f,args[1].val.f)}}; }
-static inline e_var eb_sinh(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = sinh(args[0].val.f)}}; }
-static inline e_var eb_cosh(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = cosh(args[0].val.f)}}; }
-static inline e_var eb_tanh(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = tanh(args[0].val.f)}}; }
-static inline e_var eb_acosh(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = acosh(args[0].val.f)}}; }
-static inline e_var eb_asinh(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = asinh(args[0].val.f)}}; }
-static inline e_var eb_atanh(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = atanh(args[0].val.f)}}; }
-static inline e_var eb_exp(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = exp(args[0].val.f)}}; }
-static inline e_var eb_log(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = log(args[0].val.f)}}; }
-static inline e_var eb_log10(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = log10(args[0].val.f)}}; }
-static inline e_var eb_pow(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = pow(args[0].val.f, args[1].val.f)}}; }
-static inline e_var eb_sqrt(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = sqrt(args[0].val.f)}}; }
-static inline e_var eb_ceil(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = ceil(args[0].val.f)}}; }
-static inline e_var eb_floor(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = floor(args[0].val.f)}}; }
-static inline e_var eb_fmod(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = fmod(args[0].val.f,args[1].val.f)}}; }
-static inline e_var eb_round(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = round(args[0].val.f)}}; }
-static inline e_var eb_trunc(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = trunc(args[0].val.f)}}; }
-static inline e_var eb_abs(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = fabs(args[0].val.f)}}; }
-static inline e_var eb_hypot(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = hypot(args[0].val.f, args[1].val.f)}}; }
-// clang-format on
-
-// Form a string from a list of characters
-e_var eb_str_from_list(e_var* args, u32 nargs);
-static inline e_var
-eb_str_equal(e_var* args, u32 nargs)
-{
-  (void)(nargs);
-  return (e_var){ .type = E_VARTYPE_BOOL, .val = { .b = strcmp(E_VAR_AS_STRING(&args[0])->s, E_VAR_AS_STRING(&args[1])->s) == 0 } };
-}
-e_var eb_str_append(e_var* args, u32 nargs);
-e_var eb_str_substr(e_var* args, u32 nargs); // substring: string, int start, int length
-e_var eb_str_repeat(e_var* args, u32 nargs); // repeat: string, int times
-e_var eb_str_ltrim(e_var* args, u32 nargs);
-e_var eb_str_rtrim(e_var* args, u32 nargs);
-e_var eb_str_trim(e_var* args, u32 nargs);
-e_var eb_str_split(e_var* args, u32 nargs); // Get list of strings partition by args[1] (string)
-e_var eb_str_len(e_var* args, u32 nargs);
-
-/* read(fp, nbytes), nbytes is the amount of bytes read. */
-e_var eb_io_read(e_var* args, u32 nargs);
-/* write(fp, str) */
-e_var eb_io_write(e_var* args, u32 nargs);
-/* seek(fp, offset, io::REL_TO_START/io::REL_TO_END/io::REL_TO_CURR)) */
-e_var eb_io_seek(e_var* args, u32 nargs);
-/* ptell(fp) */
-e_var eb_io_ptell(e_var* args, u32 nargs);
-/* Get error allocated as string. */
-e_var eb_io_error(e_var* args, u32 nargs);
-
-e_var eb_io_readln(e_var* args, u32 nargs);
-e_var eb_io_println(e_var* args, u32 nargs);
-e_var eb_io_print(e_var* args, u32 nargs);
-e_var eb_io_type(e_var* args, u32 nargs);
-e_var eb_io_at_eof(e_var* args, u32 nargs);
-e_var eb_io_open(e_var* args, u32 nargs);  // file path, mode
-e_var eb_io_close(e_var* args, u32 nargs); // fd
-e_var eb_io_getc(e_var* args, u32 nargs);  // fd
-e_var eb_io_putc(e_var* args, u32 nargs);  // fd, char
-
 /**
  * Duplicate a variable.
  */
@@ -168,23 +109,6 @@ eb_var_dup(e_var* args, u32 nargs)
   e_var_deep_cpy(&args[0], &v);
   return v;
 }
-
-// Make list from elements
-e_var eb_list_make(e_var* args, u32 nargs);
-// append(list, value)
-e_var eb_list_append(e_var* args, u32 nargs);
-// pop(list)
-e_var eb_list_pop(e_var* args, u32 nargs); // fast
-// remove(list, index)
-e_var eb_list_remove(e_var* args, u32 nargs); // expensive
-// insert(list, index, value)
-e_var eb_list_insert(e_var* args, u32 nargs); // Replaces value if it exists!
-// find(list, value) => -1 if non existent
-e_var eb_list_find(e_var* args, u32 nargs); // Returns index, -1 if it doesn't exist.
-// reserve(list, elements_to_reserve)
-e_var eb_list_reserve(e_var* args, u32 nargs); // number of new variables to reserve
-// len(list)
-e_var eb_list_len(e_var* args, u32 nargs);
 
 e_var eb_get_command_line_args(e_var* args, u32 nargs);
 
@@ -208,77 +132,6 @@ eb_len(e_var* args, u32 nargs)
     len = (int)E_VAR_AS_MAP(&args[0])->size;
   }
   return (e_var){ .type = E_VARTYPE_INT, .val = { .i = len } };
-}
-
-static inline void
-e_var_type_bitmask_to_string(e_vartype mask, char* buffer, size_t buffer_size)
-{
-  char* p = strncpy(buffer, "[", buffer_size - 1);
-
-  if ((bool)(mask & E_VARTYPE_INT)) p = e_strlpcat(p, "int,", buffer, buffer_size);
-  if ((bool)(mask & E_VARTYPE_BOOL)) p = e_strlpcat(p, "bool,", buffer, buffer_size);
-  if ((bool)(mask & E_VARTYPE_CHAR)) p = e_strlpcat(p, "char,", buffer, buffer_size);
-  if ((bool)(mask & E_VARTYPE_FLOAT)) p = e_strlpcat(p, "float,", buffer, buffer_size);
-  if ((bool)(mask & E_VARTYPE_STRING)) p = e_strlpcat(p, "string,", buffer, buffer_size);
-  if ((bool)(mask & E_VARTYPE_LIST)) p = e_strlpcat(p, "list,", buffer, buffer_size);
-  if ((bool)(mask & E_VARTYPE_MAP)) p = e_strlpcat(p, "map,", buffer, buffer_size);
-  if ((bool)(mask & E_VARTYPE_ERROR)) p = e_strlpcat(p, "error,", buffer, buffer_size);
-
-  /* Set last pipe to NUL */
-  char* last_comma = strrchr(buffer, ',');
-  if (last_comma != nullptr) *last_comma = 0;
-
-  p = e_strlpcat(p, "]", buffer, buffer_size);
-}
-
-char* e_read_full_line(FILE* f);
-
-static inline int
-evar_to_int(e_var v)
-{
-  switch (v.type) {
-    case E_VARTYPE_NULL: return 0;
-    case E_VARTYPE_INT: return v.val.i;
-    case E_VARTYPE_FLOAT: return (int)v.val.f;
-    case E_VARTYPE_CHAR: return (int)v.val.c;
-    case E_VARTYPE_BOOL: return (int)v.val.b;
-    case E_VARTYPE_STRING: return atoi(E_VAR_AS_STRING(&v)->s);
-    case E_VARTYPE_LIST: return E_VAR_AS_LIST(&v)->size;
-    case E_VARTYPE_MAP: return E_VAR_AS_MAP(&v)->size;
-    case E_VARTYPE_STRUCT: return E_VAR_AS_STRUCT(&v)->member_count;
-    default: return 0;
-  }
-}
-
-static inline double
-evar_to_float(e_var v)
-{
-  switch (v.type) {
-    case E_VARTYPE_NULL: return 0.0;
-    case E_VARTYPE_FLOAT: return v.val.f;
-    case E_VARTYPE_INT: return (double)v.val.i;
-    case E_VARTYPE_CHAR: return (double)v.val.c;
-    case E_VARTYPE_BOOL: return (double)v.val.b;
-    case E_VARTYPE_STRING: return atof(E_VAR_AS_STRING(&v)->s);
-    default: return (double)evar_to_int(v);
-  }
-}
-
-static inline bool
-evar_to_bool(e_var v)
-{
-  switch (v.type) {
-    case E_VARTYPE_NULL: return false;
-    case E_VARTYPE_INT: return (bool)v.val.i;
-    case E_VARTYPE_FLOAT: return (bool)v.val.f;
-    case E_VARTYPE_CHAR: return (bool)v.val.c;
-    case E_VARTYPE_BOOL: return (bool)v.val.b;
-    case E_VARTYPE_STRING: return strlen(E_VAR_AS_STRING(&v)->s) != 0;
-    case E_VARTYPE_LIST: return E_VAR_AS_LIST(&v)->size != 0;
-    case E_VARTYPE_MAP: return E_VAR_AS_MAP(&v)->size != 0;
-    case E_VARTYPE_STRUCT: return E_VAR_AS_STRUCT(&v)->member_count != 0;
-    default: return false;
-  }
 }
 
 #define E_ALL_TYPES E_VARTYPE_INT | E_VARTYPE_CHAR | E_VARTYPE_BOOL | E_VARTYPE_FLOAT | E_VARTYPE_LIST | E_VARTYPE_MAP | E_VARTYPE_STRING
@@ -334,11 +187,12 @@ static const e_builtin_func eb_funcs[] = {
   { "math::sqrt", "Compute the square root of the given argument", "fn math::sqrt(x) -> float", E_VARTYPE_FLOAT, 1, 1, eb_sqrt },
   { "math::ceil", "Round the given value up", "fn math::ceil(x) -> float", E_VARTYPE_FLOAT, 1, 1, eb_ceil },
   { "math::floor", "Round the given value down", "fn math::floor(x) -> float", E_VARTYPE_FLOAT, 1, 1, eb_floor },
-  { "math::fmod", "Compute the remainder of the given arguments", "fn math::fmod(x, y) -> float", E_VARTYPE_FLOAT, 2, 2, eb_fmod },
+  { "math::mod", "Compute the remainder of the given arguments", "fn math::mod(x, y) -> float", E_VARTYPE_FLOAT, 2, 2, eb_fmod },
   { "math::round", "Round the given argument", "fn math::round(x) -> float", E_VARTYPE_FLOAT, 1, 1, eb_round },
   { "math::trunc", "Truncate the decimal part of the argument (result is still floating point)", "fn math::trunc(x) -> float", E_VARTYPE_FLOAT,    1,    1, eb_trunc },
   { "math::abs", "Compute the absolute value of the given argument", "fn math::abs(x) -> float", E_VARTYPE_FLOAT, 1, 1, eb_abs },
   { "math::hypot", "Compute the sqrt(x^2 + y^2), with maximum accuracy", "fn math::hypot(x, y) -> float", E_VARTYPE_FLOAT, 2, 2, eb_hypot },
+  { "math::signbit", "Get the sign bit of the given floating point input (0 positive, 1 negative)", "fn math::signbit(x) -> int", E_VARTYPE_FLOAT, 1, 1, eb_signbit },
 
   { "io::open", "Open a file. null on error.", "fn io::open( path:string, mode:string ) -> fd", E_VARTYPE_INT, 2, 2, eb_io_open },
   { "io::close", "Close a file.", "fn io::close( fd ) -> null", E_VARTYPE_INT, 1, 1, eb_io_close },
