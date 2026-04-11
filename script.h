@@ -25,6 +25,7 @@
 #ifndef E_SCRIPT_H
 #define E_SCRIPT_H
 
+#include "bfunc.h"
 #include "cc.h"
 #include "fn.h"
 #include "stack.h"
@@ -37,10 +38,12 @@
  * Script entity.
  */
 typedef struct e_script {
-  e_compilation_result compiled;
-  e_extern_function*   extern_funcs;
-  u32                  nxtern_funcs;
-  e_stack              stack;
+  e_compilation_result  compiled;
+  const e_builtin_func* extern_funcs;
+  u32                   nxtern_funcs;
+  const e_builtin_var*  extern_vars;
+  u32                   nextern_vars;
+  e_stack               stack;
 } e_script;
 
 /**
@@ -51,10 +54,18 @@ typedef struct e_script {
 e_var e_script_call(e_script* s, const char* func_name, e_var* args, u32 nargs);
 
 static inline int
-e_script_init(const e_compilation_result* r, e_extern_function* extern_funcs, u32 nextern_funcs, e_script* s)
+e_script_init(
+    const e_compilation_result* r,
+    const e_builtin_func*       extern_funcs,
+    u32                         nextern_funcs,
+    const e_builtin_var*        extern_vars,
+    u32                         nextern_vars,
+    e_script*                   s)
 {
   s->extern_funcs = extern_funcs;
   s->nxtern_funcs = nextern_funcs;
+  s->extern_vars  = extern_vars;
+  s->nextern_vars = nextern_vars;
   s->compiled     = *r;
   return e_stack_init(16, 4, 4, &s->stack);
 }

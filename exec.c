@@ -86,8 +86,9 @@ call(const e_exec_info* info, u32 hash, u32 nargs)
 
   // extern
   for (u32 i = 0; i < info->nextern_funcs; i++) {
-    if (info->extern_funcs[i].hash != hash) continue;
-    if (info->extern_funcs[i].func) { return_value = info->extern_funcs[i].func(&info->stack->stack[info->stack->size - nargs]); }
+    const char* name = info->extern_funcs[i].name;
+    if (e_hash_fnv(name, strlen(name)) != hash) continue;
+    if (info->extern_funcs[i].func) { return_value = info->extern_funcs[i].func(&info->stack->stack[info->stack->size - nargs], nargs); }
     goto pop_and_ret;
   }
 
@@ -114,6 +115,8 @@ call(const e_exec_info* info, u32 hash, u32 nargs)
       .nliterals     = info->nliterals,
       .nfuncs        = info->nfuncs,
       .nextern_funcs = info->nextern_funcs,
+      .extern_vars   = info->extern_vars,
+      .nextern_vars  = info->nextern_vars,
       .stack         = info->stack,
     };
     return_value = e_exec(&fi);
@@ -180,6 +183,7 @@ e_exec(const e_exec_info* info)
   if (info->nargs > 0 && (info->nargs == nullptr || info->slots == nullptr)) { return nullvar; }
   if (info->code == nullptr && info->code_size != 0) { return nullvar; }
   if (info->extern_funcs == nullptr && info->nextern_funcs > 0) { return nullvar; }
+  if (info->extern_vars == nullptr && info->nextern_vars > 0) { return nullvar; }
   if (info->funcs == nullptr && info->nfuncs > 0) { return nullvar; }
   if (info->literals == nullptr && info->nliterals > 0) { return nullvar; }
 
@@ -268,6 +272,7 @@ e_exec(const e_exec_info* info)
         u32 nelems = e_read_u32(&ip);
 
         e_refdobj* obj = e_refdobj_pool_acquire(&ge_pool);
+        if (!obj) return nullvar;
 
         // Convert the object
         e_list* list = E_OBJ_AS_LIST(obj);
@@ -297,6 +302,7 @@ e_exec(const e_exec_info* info)
         u32 npairs = e_read_u32(&ip);
 
         e_refdobj* obj = e_refdobj_pool_acquire(&ge_pool);
+        if (!obj) return nullvar;
 
         // Convert the object
         e_map* map = E_OBJ_AS_MAP(obj);
@@ -330,6 +336,7 @@ e_exec(const e_exec_info* info)
           .type      = E_VARTYPE_STRUCT,
           .val.struc = e_refdobj_pool_acquire(&ge_pool),
         };
+        if (!st.val.struc) return nullvar;
 
         E_VAR_AS_STRUCT(&st)->member_hashes = fields;
         E_VAR_AS_STRUCT(&st)->members       = (e_var*)calloc(sizeof(e_var), member_count);
@@ -345,6 +352,8 @@ e_exec(const e_exec_info* info)
 
       case E_OPCODE_MEMBER_ACCESS: {
         u32 member = e_read_u32(&ip);
+
+        if (!info->stack) return nullvar;
 
         e_var push = { .type = E_VARTYPE_NULL };
 
@@ -578,7 +587,26 @@ e_exec(const e_exec_info* info)
       case E_OPCODE_LOAD: {
         u32 id = e_read_u32(&ip);
 
+        bool was_external = false;
+        for (u32 i = 0; i < info->nextern_vars; i++) {
+          const char* name = info->extern_vars[i].name;
+          if (e_hash_fnv(name, strlen(name)) == id) {
+            e_var v = {
+              .type = info->extern_vars[i].type,
+              .val  = info->extern_vars[i].value,
+            };
+
+            TRY_V(e_stack_push(info->stack, &v));
+
+            was_external = true;
+            break;
+          }
+        }
+
+        if (was_external) break;
+
         e_var* slot = get_variable_from_id(info->stack, id);
+        if (!slot) return nullvar;
 
         e_var v;
         TRY_V(e_var_shallow_cpy(slot, &v));
@@ -760,6 +788,8 @@ e_script_call(e_script* s, const char* func_name, e_var* args, u32 nargs)
         .nliterals     = s->compiled.nliterals,
         .nfuncs        = s->compiled.nfunctions,
         .nextern_funcs = s->nxtern_funcs,
+        .extern_vars   = s->extern_vars,
+        .nextern_vars  = s->nextern_vars,
       };
 
       e_stack_push_frame(info.stack);

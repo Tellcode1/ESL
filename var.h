@@ -42,12 +42,12 @@
 #define E_OBJ_AS_MAT3(obj) ((e_mat3*)((obj)->data))
 #define E_OBJ_AS_MAT4(obj) ((e_mat4*)((obj)->data))
 
-#define E_VAR_AS_STRING(var) ((e_string*)((var)->val.s->data))
-#define E_VAR_AS_LIST(var) ((e_list*)((var)->val.list->data))
-#define E_VAR_AS_MAP(var) ((e_map*)((var)->val.map->data))
-#define E_VAR_AS_STRUCT(var) ((e_struct*)((var)->val.map->data))
-#define E_VAR_AS_MAT3(var) ((e_mat3*)((var)->val.mat3->data))
-#define E_VAR_AS_MAT4(var) ((e_mat4*)((var)->val.mat4->data))
+#define E_VAR_AS_STRING(var) (((var)->type == E_VARTYPE_STRING) ? (e_string*)((var)->val.s->data) : NULL)
+#define E_VAR_AS_LIST(var) (((var)->type == E_VARTYPE_LIST) ? (e_list*)((var)->val.list->data) : NULL)
+#define E_VAR_AS_MAP(var) (((var)->type == E_VARTYPE_MAP) ? (e_map*)((var)->val.map->data) : NULL)
+#define E_VAR_AS_STRUCT(var) (((var)->type == E_VARTYPE_STRUCT) ? (e_struct*)((var)->val.struc->data) : NULL)
+#define E_VAR_AS_MAT3(var) (((var)->type == E_VARTYPE_MAT3) ? (e_mat3*)((var)->val.mat3->data) : NULL)
+#define E_VAR_AS_MAT4(var) (((var)->type == E_VARTYPE_MAT4) ? (e_mat4*)((var)->val.mat4->data) : NULL)
 
 struct e_var;
 struct e_list;

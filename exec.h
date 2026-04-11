@@ -25,7 +25,8 @@
 #ifndef E_VM_H
 #define E_VM_H
 
-#include "cc.h"
+#include "bfunc.h"
+#include "bvar.h"
 #include "fn.h"
 #include "stack.h"
 #include "stdafx.h"
@@ -34,12 +35,13 @@
 #include <stddef.h>
 
 typedef struct e_exec_info {
-  const u8*                code;
-  const e_var*             args;     // nullptr if nargs == 0
-  const u32*               slots;    // The IDs which the arguments take
-  const e_var*             literals; // must outlive the exec function.
-  const e_function*        funcs;
-  const e_extern_function* extern_funcs;
+  const u8*             code;
+  const e_var*          args;     // nullptr if nargs == 0
+  const u32*            slots;    // The IDs which the arguments take
+  const e_var*          literals; // must outlive the exec function.
+  const e_function*     funcs;
+  const e_builtin_func* extern_funcs;
+  const e_builtin_var*  extern_vars;
 
   /**
    * Must not be NULL.
@@ -52,6 +54,7 @@ typedef struct e_exec_info {
   u32 nliterals;
   u32 nfuncs;
   u32 nextern_funcs;
+  u32 nextern_vars;
 } e_exec_info;
 
 /**

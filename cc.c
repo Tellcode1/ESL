@@ -626,11 +626,11 @@ int
 e_emit_lvalue_load(e_compiler* cc, e_lval lv)
 {
   if (lv.type == E_LVAL_VAR) {
-    e_var* exists = e_stack_find(cc->stack, lv.val.var.id);
-    if (exists == nullptr) {
-      cerror(lv.span ? *lv.span : (e_filespan){ 0 }, "Variable %s undeclared [variable value load]\n", lv.val.var.name);
-      return -1;
-    }
+    // e_var* exists = e_stack_find(cc->stack, lv.val.var.id);
+    // if (exists == nullptr) {
+    //   cerror(lv.span ? *lv.span : (e_filespan){ 0 }, "Variable %s undeclared [variable value load]\n", lv.val.var.name);
+    //   return -1;
+    // }
 
     // This breaks for arguments. TODO: Add fix.
     // if (E_VAR_AS_INFO(exists)->initializer < 0 && E_VAR_AS_INFO(exists)->current_value < 0) {
@@ -1873,11 +1873,11 @@ compile_variable_load(e_compiler* cc, int node)
     }
   }
 
-  e_var* exists = e_stack_find(cc->stack, hash);
-  if (exists == nullptr) {
-    cerror(E_GET_NODE(cc->ast, node)->common.span, "Undeclared variable '%s'\n", full);
-    return -1;
-  }
+  // e_var* exists = e_stack_find(cc->stack, hash);
+  // if (exists == nullptr) {
+  //   cerror(E_GET_NODE(cc->ast, node)->common.span, "Undeclared variable '%s'\n", full);
+  //   return -1;
+  // }
 
   // free(full);
 
