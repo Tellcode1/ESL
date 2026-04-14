@@ -24,11 +24,16 @@ free_if_stmt(e_ast* ast, e_if_stmt* ifs)
 void
 e_ast_node_free(e_ast* ast, int id)
 {
+  printf("%i, %i\n", id, ast->nodes[id].type);
   if (!ast || id < 0) return;
 
   e_ast_node_val* node = &ast->nodes[id];
 
+  // if (node->type == E_AST_NODE_SENTINEL) return;
+  // node->type = E_AST_NODE_SENTINEL;
+
   switch (node->type) {
+    case E_AST_NODE_SENTINEL:
     case E_AST_NODE_NOP:
     case E_AST_NODE_INT:
     case E_AST_NODE_CHAR:
@@ -44,8 +49,8 @@ e_ast_node_free(e_ast* ast, int id)
       break;
 
     case E_AST_NODE_ASSIGN:
-      e_ast_node_free(ast, node->member_assign.left);
-      e_ast_node_free(ast, node->member_assign.value);
+      e_ast_node_free(ast, node->assign.left);
+      e_ast_node_free(ast, node->assign.right);
       break;
 
     case E_AST_NODE_BINARYOP:
@@ -86,7 +91,8 @@ e_ast_node_free(e_ast* ast, int id)
 
     case E_AST_NODE_FUNCTION_DEFINITION:
 
-      for (u32 i = 0; i < node->func.nargs; i++) free(node->func.args[i]);
+      // Strings are interned. Don't free.
+      // for (u32 i = 0; i < node->func.nargs; i++) free(node->func.args[i]);
       free(node->func.args);
 
       for (u32 i = 0; i < node->func.nstmts; i++) e_ast_node_free(ast, node->func.stmts[i]);
@@ -94,10 +100,18 @@ e_ast_node_free(e_ast* ast, int id)
       break;
 
     case E_AST_NODE_DEFER:
+      for (u32 i = 0; i < node->defer.nstmts; i++) e_ast_node_free(ast, node->defer.stmts[i]);
+      free(node->defer.stmts);
+      break;
+
     case E_AST_NODE_STATEMENT_LIST:
-    case E_AST_NODE_ROOT:
       for (u32 i = 0; i < node->stmts.nstmts; i++) e_ast_node_free(ast, node->stmts.stmts[i]);
       free(node->stmts.stmts);
+      break;
+
+    case E_AST_NODE_ROOT:
+      for (u32 i = 0; i < node->root.nstmts; i++) e_ast_node_free(ast, node->root.stmts[i]);
+      free(node->root.stmts);
       break;
 
     case E_AST_NODE_NAMESPACE_DECL:

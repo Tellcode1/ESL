@@ -53,7 +53,7 @@ extern "C" {
 #endif
 
 #ifndef E_ARR_ALLOC
-#  define E_ARR_ALLOC(elem_type, n) ((elem_type*)calloc(sizeof(elem_type), (n)))
+#  define E_ARR_ALLOC(elem_type, n) ((elem_type*)calloc((n), sizeof(elem_type)))
 #endif
 
 #ifndef E_ARR_REALLOC
@@ -136,7 +136,7 @@ static inline char*
 e_strdup(const char* s)
 {
   size_t len = strlen(s) + 1;
-  char*  p   = malloc(len);
+  char*  p   = calloc(1, len);
   if (p) { memcpy(p, s, len); }
   return p;
 }

@@ -94,7 +94,7 @@ file_read(e_var* args, u32 nargs)
   fseek(f, 0, SEEK_END);
   long size = ftell(f);
 
-  char* str = malloc(size + 1);
+  char* str = calloc(1, size + 1);
 
   fseek(f, 0, SEEK_SET);
   fread(str, size, 1, f);

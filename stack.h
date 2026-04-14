@@ -127,12 +127,12 @@ e_stack_init(u32 capacity, u32 frame_capacity, u32 variable_capacity, e_stack* s
 
   stack->depth          = 0;
   stack->frame_capacity = frame_capacity;
-  stack->frames         = (e_stack_frame*)malloc(sizeof(e_stack_frame) * frame_capacity);
+  stack->frames         = (e_stack_frame*)calloc(frame_capacity, sizeof(e_stack_frame));
   if (stack->frames == nullptr) return E_EMALLOC;
 
   stack->variable_capacity = variable_capacity;
   stack->nvariables        = 0;
-  stack->variables         = (e_var_entry*)malloc(sizeof(e_var_entry) * variable_capacity);
+  stack->variables         = (e_var_entry*)calloc(variable_capacity, sizeof(e_var_entry));
   if (stack->variables == nullptr) return E_EMALLOC;
 
   return 0;
@@ -166,7 +166,7 @@ e_stack_push_frame(e_stack* stack)
   return 0;
 }
 
-static inline int
+static inline void
 e_stack_pop_frame(e_stack* stack)
 {
   // printf("Popped frame [depth=%u]\n", stack->depth - 1);
@@ -177,8 +177,6 @@ e_stack_pop_frame(e_stack* stack)
 
   stack->size       = frame->stack_size;
   stack->nvariables = frame->variable_offset;
-
-  return 0;
 }
 
 static inline int

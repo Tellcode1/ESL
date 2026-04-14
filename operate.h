@@ -58,33 +58,6 @@ is_scalar(e_var v)
 { return (bool)(v.type == E_VARTYPE_INT || v.type == E_VARTYPE_FLOAT || v.type == E_VARTYPE_CHAR || v.type == E_VARTYPE_BOOL); }
 
 static inline e_var
-e_make_vec4(double x, double y, double z, double w)
-{
-  e_var out    = { 0 };
-  out.type     = E_VARTYPE_VEC4;
-  out.val.vec4 = (e_vec4){ .x = x, .y = y, .z = z, .w = w };
-  return out;
-}
-
-static inline e_var
-e_make_vec3(double x, double y, double z)
-{
-  e_var out    = { 0 };
-  out.type     = E_VARTYPE_VEC3;
-  out.val.vec3 = (e_vec3){ .x = x, .y = y, .z = z };
-  return out;
-}
-
-static inline e_var
-e_make_vec2(double x, double y)
-{
-  e_var out    = { 0 };
-  out.type     = E_VARTYPE_VEC2;
-  out.val.vec4 = (e_vec4){ .x = x, .y = y };
-  return out;
-}
-
-static inline e_var
 v4_operate(e_var l, e_var r, e_opcode op)
 {
   if (l.type != E_VARTYPE_VEC4 && r.type != E_VARTYPE_VEC4) return (e_var){ 0 };

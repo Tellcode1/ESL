@@ -54,6 +54,7 @@ e_var_deep_cpy(const e_var* var, e_var* dst)
 {
   if (!dst || !var) return -1;
 
+  *dst      = (e_var){ .type = E_VARTYPE_NULL };
   dst->type = var->type;
 
   switch (var->type) {
@@ -69,11 +70,20 @@ e_var_deep_cpy(const e_var* var, e_var* dst)
     case E_VARTYPE_VEC4:
     case E_VARTYPE_FLOAT: dst->val = var->val; break;
     case E_VARTYPE_STRING:
-      dst->val.s              = e_refdobj_pool_acquire(&ge_pool);
+      dst->val.s = e_refdobj_pool_acquire(&ge_pool);
+      if (!dst->val.s) {
+        dst->type = E_VARTYPE_NULL;
+        return -1;
+      }
       E_VAR_AS_STRING(dst)->s = e_strdup(E_VAR_AS_STRING(var)->s);
       break;
     case E_VARTYPE_LIST: {
       dst->val.list = e_refdobj_pool_acquire(&ge_pool);
+      if (!dst->val.list) {
+        dst->type = E_VARTYPE_NULL;
+        return -1;
+      }
+
       return e_list_init(E_VAR_AS_LIST(var)->vars, E_VAR_AS_LIST(var)->size, E_VAR_AS_LIST(dst));
     }
     case E_VARTYPE_STRUCT: {
@@ -87,10 +97,12 @@ e_var_deep_cpy(const e_var* var, e_var* dst)
         hashes[i] = s->member_hashes[i];
       }
 
-      dst->val.struc                      = e_refdobj_pool_acquire(&ge_pool);
-      E_VAR_AS_STRUCT(dst)->members       = members;
-      E_VAR_AS_STRUCT(dst)->member_hashes = hashes;
-      E_VAR_AS_STRUCT(dst)->member_count  = s->member_count;
+      dst->val.struc = e_refdobj_pool_acquire(&ge_pool);
+      if (dst->val.struc) {
+        E_VAR_AS_STRUCT(dst)->members       = members;
+        E_VAR_AS_STRUCT(dst)->member_hashes = hashes;
+        E_VAR_AS_STRUCT(dst)->member_count  = s->member_count;
+      }
 
       return 0;
     }
@@ -100,7 +112,8 @@ e_var_deep_cpy(const e_var* var, e_var* dst)
        * Create an array of all key value pairs as a map
        * And use it to create the map.
        */
-      e_var* flattened = malloc(sizeof(e_var) * 2 * E_VAR_AS_MAP(var)->size);
+      u32    npairs    = E_VAR_AS_MAP(var)->size;
+      e_var* flattened = calloc(npairs, sizeof(e_var) * 2);
       memcpy(flattened, E_VAR_AS_MAP(var)->keys, sizeof(e_var) * E_VAR_AS_MAP(var)->size);
       memcpy(flattened + E_VAR_AS_MAP(var)->size, E_VAR_AS_MAP(var)->vals, sizeof(e_var) * E_VAR_AS_MAP(var)->size);
       int e = e_map_init(flattened, E_VAR_AS_MAP(var)->size, E_VAR_AS_MAP(dst));
@@ -109,12 +122,12 @@ e_var_deep_cpy(const e_var* var, e_var* dst)
     }
     case E_VARTYPE_MAT3: {
       dst->val.mat3 = e_refdobj_pool_acquire(&ge_pool);
-      memcpy(E_VAR_AS_MAT3(dst), E_VAR_AS_MAT3(var), sizeof(e_mat3));
+      if (dst->val.mat3 && var->val.mat3) { memcpy(dst->val.mat3->data, var->val.mat3->data, sizeof(e_mat3)); }
       return 0;
     }
     case E_VARTYPE_MAT4: {
       dst->val.mat4 = e_refdobj_pool_acquire(&ge_pool);
-      memcpy(E_VAR_AS_MAT4(dst), E_VAR_AS_MAT4(var), sizeof(e_mat4));
+      if (dst->val.mat4 && var->val.mat4) { memcpy(dst->val.mat4->data, var->val.mat4->data, sizeof(e_mat4)); }
       return 0;
     }
 
@@ -441,6 +454,7 @@ e_make_var_from_string(char* s)
 struct e_var*
 e_struct_get_member(u32 hash, const e_struct* s)
 {
+  if (!s) return nullptr;
   for (u32 i = 0; i < s->member_count; i++) {
     if (s->member_hashes[i] == hash) { return &s->members[i]; }
   }

@@ -27,6 +27,8 @@
 
 #include "stdafx.h"
 
+#include <stdlib.h>
+
 typedef struct e_str_interner {
   u32*   string_hashes;
   char** strings;
@@ -37,8 +39,9 @@ typedef struct e_str_interner {
 static inline int
 e_str_interner_init(u32 capacity, e_str_interner* table)
 {
-  table->string_hashes    = (u32*)malloc(sizeof(u32) * capacity);
-  table->strings          = (char**)malloc(sizeof(char*) * capacity);
+  if (capacity <= 0) capacity = 4;
+  table->string_hashes    = (u32*)calloc(capacity, sizeof(u32));
+  table->strings          = (char**)calloc(capacity, sizeof(char*));
   table->strings_count    = 0;
   table->strings_capacity = capacity;
   return 0;
@@ -53,18 +56,26 @@ e_str_intern(const char* s, e_str_interner* table)
   }
 
   if (table->strings_count >= table->strings_capacity) {
-    u32    new_capacity  = table->strings_capacity * 2;
-    u32*   string_hashes = (u32*)realloc(table->string_hashes, sizeof(u32) * new_capacity);
-    char** strings       = (char**)realloc(table->strings, sizeof(char*) * new_capacity);
-    if (string_hashes == nullptr || strings == nullptr) return nullptr;
+    u32 new_capacity = MAX(table->strings_capacity * 2, 4);
 
-    table->string_hashes    = string_hashes;
-    table->strings          = strings;
+    u32* new_hashes = realloc(table->string_hashes, sizeof(u32) * new_capacity);
+    if (!new_hashes) return nullptr;
+
+    char** new_strings = realloc(table->strings, sizeof(char*) * new_capacity);
+    if (!new_strings) {
+      table->string_hashes = new_hashes;
+      return nullptr;
+    }
+
+    table->string_hashes    = new_hashes;
+    table->strings          = new_strings;
     table->strings_capacity = new_capacity;
   }
 
-  u32   i                 = table->strings_count;
-  char* sdup              = e_strdup(s);
+  u32   i    = table->strings_count;
+  char* sdup = e_strdup(s);
+  if (!sdup) return nullptr;
+
   table->strings[i]       = sdup;
   table->string_hashes[i] = hash;
   table->strings_count++;

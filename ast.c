@@ -117,7 +117,7 @@ parse_braces(e_ast* p, int** outstmts, u32* outnstmts)
 {
   u32  capacity = 16;
   u32  nstmts   = 0;
-  int* stmts    = calloc(sizeof(int), capacity);
+  int* stmts    = calloc(capacity, sizeof(int));
   if (!stmts) goto err;
 
   while (peek(p) != nullptr && peek(p)->type != E_TOKEN_TYPE_CLOSEBRACE) {
@@ -171,7 +171,7 @@ parse_braces(e_ast* p, int** outstmts, u32* outnstmts)
 err:
   if (outstmts) *outstmts = nullptr;
   if (outnstmts) *outnstmts = 0;
-
+  free(stmts);
   return -1;
 }
 
@@ -229,6 +229,7 @@ parse_body(e_ast* p, int** outstmts, u32* outnstmts)
   return 0;
 
 err:
+  free(stmts);
   return -1;
 }
 
@@ -252,12 +253,8 @@ e_ast_expr(e_ast* p, int rbp)
   while (e_ast_peek(p)) {
     e_token* op = e_ast_peek(p);
 
-    // printf("peek: %s\n", e_token_type_to_string(op->type));
-
     int left_bp = 0, right_bp = 0;
     e_getbp(op->type, &left_bp, &right_bp);
-
-    // printf("bp: %d %d\n", left_bp, right_bp);
 
     if (left_bp <= rbp) break;
 
@@ -277,11 +274,11 @@ parse_variable_decleration(e_ast* ast, bool is_const, int node)
 
   u32         capacity = 16;
   u32         ndecls   = 0;
-  int*        decls    = calloc(sizeof(int), capacity);
+  int*        decls    = calloc(capacity, sizeof(int));
   const char* name     = nullptr;
   if (!decls) goto err;
 
-  while (true) {
+  while (peek(ast)) {
     e_token* name_tk = peek(ast);
     if (!name_tk || name_tk->type != E_TOKEN_TYPE_IDENT) {
       asterror(name_tk->span, "Expected identifier after 'let', got '%s' [variable decleration]\n", e_token_type_to_string(name_tk->type));
@@ -358,6 +355,7 @@ parse_variable_decleration(e_ast* ast, bool is_const, int node)
   return node;
 
 err:
+  free(decls);
   return -1;
 }
 
@@ -368,7 +366,7 @@ parse_if(e_ast* p, int node)
 
   u32        cap_else_ifs = 4;
   u32        num_else_ifs = 0;
-  e_if_stmt* else_ifs     = calloc(sizeof(e_if_stmt), cap_else_ifs);
+  e_if_stmt* else_ifs     = calloc(cap_else_ifs, sizeof(e_if_stmt));
 
   int* body   = nullptr;
   u32  nstmts = 0;
@@ -443,7 +441,7 @@ parse_if(e_ast* p, int node)
 
         body_span = peek(p)->span;
         if (parse_body(p, &else_if_body, &else_if_nstmts)) {
-          asterror(body_span, "Error in parsing body, but got '%s' [if statement :: else if]\n", e_token_type_to_string(prev(p)->type));
+          asterror(body_span, "Error in parsing body, got '%s' [if statement :: else if]\n", e_token_type_to_string(prev(p)->type));
           goto err;
         }
 
@@ -457,7 +455,7 @@ parse_if(e_ast* p, int node)
         e_filespan else_span = peek(p)->span;
 
         if (parse_body(p, &else_body, &nelse_stmts)) {
-          asterror(else_span, "Error in parsing body, but got '%s' [if statement :: else]\n", e_token_type_to_string(prev(p)->type));
+          asterror(else_span, "Error in parsing body, got '%s' [if statement :: else]\n", e_token_type_to_string(prev(p)->type));
           goto err;
         }
 
@@ -478,6 +476,13 @@ parse_if(e_ast* p, int node)
 
   return node;
 err:
+  for (u32 i = 0; i < num_else_ifs; i++) {
+    free(else_ifs[i].body);
+    e_ast_node_free(p, else_ifs[i].condition);
+  }
+  free(else_ifs);
+  free(else_body);
+  free(body);
   return -1;
 }
 
@@ -534,9 +539,13 @@ parse_for(e_ast* p, int node)
   int init = -1;
   int cond = -1;
 
+  int* stmts  = NULL;
+  u32  nstmts = 0;
+
   u32  niterators = 0;
   u32  capacity   = 8;
   int* iterators  = calloc(capacity, sizeof(int));
+  if (!iterators) goto err;
 
   // (
   if (e_ast_expect(p, E_TOKEN_TYPE_OPENPAREN)) {
@@ -619,8 +628,6 @@ parse_for(e_ast* p, int node)
 
   e_filespan prev_span = peek(p)->span;
 
-  int* stmts;
-  u32  nstmts;
   if (parse_body(p, &stmts, &nstmts)) {
     asterror(prev_span, "Failed to parse body [for statement]\n");
     goto err;
@@ -637,6 +644,8 @@ parse_for(e_ast* p, int node)
   return node;
 
 err:
+  free(iterators);
+  free(stmts);
   return -1;
 }
 
@@ -645,14 +654,14 @@ parse_function(e_ast* p, bool external, int node)
 {
   if (node < 0) return node;
 
-  u32         names_capacity = 0;
-  u32         arg_names_size = 0;
-  char**      arg_names      = nullptr;
-  const char* function_name  = nullptr;
-  char*       arg_name       = nullptr;
-  e_token*    name_tk        = nullptr;
-  int*        stmts          = nullptr;
-  u32         nstmts         = 0;
+  u32          names_capacity = 0;
+  u32          arg_names_size = 0;
+  const char** arg_names      = nullptr;
+  const char*  function_name  = nullptr;
+  const char*  arg_name       = nullptr;
+  e_token*     name_tk        = nullptr;
+  int*         stmts          = nullptr;
+  u32          nstmts         = 0;
 
   name_tk = peek(p);
   if (e_ast_expect(p, E_TOKEN_TYPE_IDENT)) {
@@ -669,7 +678,7 @@ parse_function(e_ast* p, bool external, int node)
 
   names_capacity = 8; // NON ZERO
   arg_names_size = 0;
-  arg_names      = calloc(sizeof(char*), names_capacity);
+  arg_names      = calloc(names_capacity, sizeof(char*));
 
   while (peek(p) && peek(p)->type != E_TOKEN_TYPE_CLOSEPAREN) {
     e_token* tk = peek(p);
@@ -680,8 +689,8 @@ parse_function(e_ast* p, bool external, int node)
     next(p);
 
     if (arg_names_size >= names_capacity) {
-      u32    new_capacity = names_capacity * 2;
-      char** new_names    = realloc(arg_names, sizeof(char*) * new_capacity);
+      u32          new_capacity = names_capacity * 2;
+      const char** new_names    = realloc(arg_names, sizeof(char*) * new_capacity);
 
       if (!new_names) {
         asterror(peek(p)->span, "Allocation error! [function header]\n");
@@ -692,7 +701,7 @@ parse_function(e_ast* p, bool external, int node)
       names_capacity = new_capacity;
     }
 
-    arg_name = e_strdup(tk->val.ident);
+    arg_name = e_str_intern(tk->val.ident, p->interner);
     if (!arg_name) {
       asterror(peek(p)->span, "Alloc error [function argument name]\n");
       goto err;
@@ -719,7 +728,7 @@ parse_function(e_ast* p, bool external, int node)
   if (external) {
     if (e_ast_expect(p, E_TOKEN_TYPE_SEMICOLON)) {
       asterror(prev(p)->span, "Expected ')', got '%s' [external function decleration]\n", e_token_type_to_string(prev(p)->type));
-      return -1;
+      goto err;
     }
   } else {
     if (parse_body(p, &stmts, &nstmts)) {
@@ -738,6 +747,7 @@ parse_function(e_ast* p, bool external, int node)
   return node;
 
 err:
+  free(arg_names);
   return -1;
 }
 
@@ -796,6 +806,7 @@ parse_function_call(e_ast* p, e_token* tk, int node)
   return node;
 
 err:
+  free(args);
   return -1;
 }
 
@@ -833,7 +844,7 @@ parse_list(e_ast* p, int node)
 {
   u32  capelems = 16;
   u32  nelems   = 0;
-  int* elems    = calloc(sizeof(int), capelems);
+  int* elems    = calloc(capelems, sizeof(int));
 
   while (peek(p) && peek(p)->type != E_TOKEN_TYPE_CLOSEBRACKET) {
     int elem = e_ast_expr(p, 0);
@@ -880,34 +891,45 @@ parse_map(e_ast* p, int node)
   //   asterror(prev(p)->span, "Expected '{' after '#' [map literal]\n");
   //   return -1;
   // }
+  int e = 0;
 
   u32 capacity = 8;
   u32 npairs   = 0;
 
-  int* keys   = malloc(sizeof(int) * capacity);
-  int* values = malloc(sizeof(int) * capacity);
+  int* keys   = calloc(capacity, sizeof(int));
+  int* values = calloc(capacity, sizeof(int));
 
-  if (!keys || !values) return -1;
+  if (!keys || !values) goto ERR;
 
   while (peek(p) && peek(p)->type != E_TOKEN_TYPE_CLOSEBRACE) {
     // key
     int key = e_ast_expr(p, 0);
-    if (key < 0) return -1;
+    if (key < 0) goto ERR;
 
     if (e_ast_expect(p, E_TOKEN_TYPE_COLON)) {
       asterror(prev(p)->span, "Expected ':' [map literal]\n");
-      return -1;
+      goto ERR;
     }
 
     // value
     int value = e_ast_expr(p, 0);
-    if (value < 0) return -1;
+    if (value < 0) goto ERR;
 
     if (npairs >= capacity) {
-      u32 newcap = capacity * 2;
-      keys       = realloc(keys, sizeof(int) * newcap);
-      values     = realloc(values, sizeof(int) * newcap);
-      capacity   = newcap;
+      u32  newcap     = capacity * 2;
+      int* new_keys   = realloc(keys, sizeof(int) * newcap);
+      int* new_values = realloc(values, sizeof(int) * newcap);
+      if (!new_keys || !new_values) {
+        free(new_keys);
+        free(new_values);
+        keys   = NULL; // If either of them successfully reallocated
+        values = NULL; // we don't want to double free it.
+        goto ERR;
+      }
+
+      keys     = new_keys;
+      values   = new_values;
+      capacity = newcap;
     }
 
     keys[npairs]   = key;
@@ -918,13 +940,13 @@ parse_map(e_ast* p, int node)
 
     if (e_ast_expect(p, E_TOKEN_TYPE_COMMA)) {
       asterror(prev(p)->span, "Expected ',' or '}' [map literal]\n");
-      return -1;
+      goto ERR;
     }
   }
 
   if (e_ast_expect(p, E_TOKEN_TYPE_CLOSEBRACE)) {
     asterror(prev(p)->span, "Expected '}' [map literal]\n");
-    return -1;
+    goto ERR;
   }
 
   E_GET_NODE(p, node)->type       = E_AST_NODE_MAP;
@@ -933,27 +955,34 @@ parse_map(e_ast* p, int node)
   E_GET_NODE(p, node)->map.npairs = npairs;
 
   return node;
+
+ERR:
+  free(keys);
+  free(values);
+  return e ? e : -1;
 }
 
 static int
 parse_namespace_decleration(e_ast* p, int node)
 {
+  int  e      = 0;
+  int* stmts  = NULL;
+  u32  nstmts = 0;
+
   if (!peek(p) || peek(p)->type != E_TOKEN_TYPE_IDENT) {
     asterror(peek(p)->span, "Expected namespace name, got '%s' [namespace decleration]\n", e_token_type_to_string(prev(p)->type));
-    return -1;
+    goto ERR;
   }
 
   e_token* name_tk = next(p);
 
   if (e_ast_expect(p, E_TOKEN_TYPE_OPENBRACE)) {
     asterror(prev(p)->span, "Expected '{' after namespace name, got '%s' [namespace decleration]\n", e_token_type_to_string(prev(p)->type));
-    return -1;
+    goto ERR;
   }
 
-  int* stmts  = NULL;
-  u32  nstmts = 0;
-
-  if (parse_braces(p, &stmts, &nstmts)) { return -1; }
+  e = parse_braces(p, &stmts, &nstmts);
+  if (e) { goto ERR; }
 
   for (u32 i = 0; i < nstmts; i++) {
     e_ast_node_type type = E_GET_NODE(p, stmts[i])->common.type;
@@ -968,7 +997,7 @@ parse_namespace_decleration(e_ast* p, int node)
             && type != E_AST_NODE_VARIABLE_DECL) {
           asterror(span, "Expected only function definitions, variable declerations or namespace declerations in namespace scope\n");
 
-          return -1;
+          goto ERR;
         }
       }
     } else if (
@@ -976,16 +1005,23 @@ parse_namespace_decleration(e_ast* p, int node)
         && type != E_AST_NODE_VARIABLE_DECL) {
       asterror(span, "Expected only function definitions, variable declerations or namespace declerations in namespace scope\n");
 
-      return -1;
+      goto ERR;
     }
   }
 
+  const char* ident = e_str_intern(name_tk->val.ident, p->interner);
+  if (!ident) { goto ERR; }
+
   E_GET_NODE(p, node)->type                  = E_AST_NODE_NAMESPACE_DECL;
-  E_GET_NODE(p, node)->namespace_decl.name   = e_str_intern(name_tk->val.ident, p->interner);
+  E_GET_NODE(p, node)->namespace_decl.name   = ident;
   E_GET_NODE(p, node)->namespace_decl.stmts  = stmts;
   E_GET_NODE(p, node)->namespace_decl.nstmts = nstmts;
 
   return node;
+
+ERR:
+  free(stmts);
+  return e ? e : -1;
 }
 
 static int
@@ -993,8 +1029,8 @@ parse_namespace_call(e_ast* p, char* name, int node)
 {
   u32  capacity = 16;
   u32  nargs    = 0;
-  int* args     = calloc(sizeof(int), capacity);
-  if (!args) { return -1; }
+  int* args     = calloc(capacity, sizeof(int));
+  if (!args) { goto ERR; }
 
   next(p); // '('
 
@@ -1002,10 +1038,7 @@ parse_namespace_call(e_ast* p, char* name, int node)
     if (nargs >= capacity) {
       u32  newcap   = MAX(capacity * 2, 1);
       int* new_args = realloc(args, sizeof(int) * newcap);
-      if (!new_args) {
-        free(args);
-        return -1;
-      }
+      if (!new_args) { goto ERR; }
       args     = new_args;
       capacity = newcap;
     }
@@ -1016,8 +1049,7 @@ parse_namespace_call(e_ast* p, char* name, int node)
 
     if (e_ast_expect(p, E_TOKEN_TYPE_COMMA)) {
       asterror(prev(p)->span, "Expected ',' or ')' [qualified function call]\n");
-      free(args);
-      return -1;
+      goto ERR;
     }
   }
 
@@ -1029,6 +1061,10 @@ parse_namespace_call(e_ast* p, char* name, int node)
   E_GET_NODE(p, node)->call.nargs         = nargs;
 
   return node;
+
+ERR:
+  free(args);
+  return -1;
 }
 
 static int
@@ -1042,18 +1078,18 @@ parse_namespace_access(e_ast* p, int leftidx, int node)
 
   e_token* ident = next(p);
 
-  e_ast_node* left = E_GET_NODE(p, leftidx);
+  const char* left_name = E_GET_NODE(p, leftidx)->ident.ident;
 
-  if (left->type != E_AST_NODE_VARIABLE) {
+  if (E_GET_NODE(p, leftidx)->type != E_AST_NODE_VARIABLE) {
     asterror(peek(p)->span, "LHS of :: must be an identifier [namespace access]\n");
     return -1;
   }
 
-  size_t len      = strlen(left->ident.ident) + strlen(ident->val.ident) + 3; // +2 for ::, 1 for \0
-  char*  fullname = calloc(len, 1);
+  size_t len      = strlen(left_name) + strlen(ident->val.ident) + 3; // +2 for ::, 1 for \0
+  char*  fullname = calloc(1, len);
   if (!fullname) { return -1; }
 
-  snprintf(fullname, len, "%s::%s", left->ident.ident, ident->val.ident);
+  snprintf(fullname, len, "%s::%s", left_name, ident->val.ident);
 
   const char* interned = e_str_intern(fullname, p->interner);
 
@@ -1079,22 +1115,25 @@ parse_namespace_access(e_ast* p, int leftidx, int node)
 static int
 parse_struct_decleration(e_ast* p, int node)
 {
+  int e = 0;
+
+  int* stmts  = NULL;
+  u32  nstmts = 0;
+
   if (!peek(p) || peek(p)->type != E_TOKEN_TYPE_IDENT) {
     asterror(peek(p)->span, "Expected structure name, got '%s' [structure decleration]\n", e_token_type_to_string(prev(p)->type));
-    return -1;
+    goto ERR;
   }
 
   e_token* name_tk = next(p);
 
   if (e_ast_expect(p, E_TOKEN_TYPE_OPENBRACE)) {
     asterror(prev(p)->span, "Expected '{' after structure name, got '%s' [structure decleration]\n", e_token_type_to_string(prev(p)->type));
-    return -1;
+    goto ERR;
   }
 
-  int* stmts  = NULL;
-  u32  nstmts = 0;
-
-  if (parse_braces(p, &stmts, &nstmts)) { return -1; }
+  e = parse_braces(p, &stmts, &nstmts);
+  if (e) { goto ERR; }
 
   for (u32 i = 0; i < nstmts; i++) {
     e_ast_node_type type = E_GET_NODE(p, stmts[i])->common.type;
@@ -1109,21 +1148,28 @@ parse_struct_decleration(e_ast* p, int node)
         type = E_GET_NODE(p, list_stmts[j])->common.type;
         if (type != E_AST_NODE_FUNCTION_DEFINITION && type != E_AST_NODE_VARIABLE_DECL) {
           asterror(span, "%s", s);
-          return -1;
+          goto ERR;
         }
       }
     } else if (type != E_AST_NODE_FUNCTION_DEFINITION && type != E_AST_NODE_VARIABLE_DECL) {
       asterror(span, "%s", s);
-      return -1;
+      goto ERR;
     }
   }
 
+  const char* name = e_str_intern(name_tk->val.ident, p->interner);
+  if (!name) goto ERR;
+
   E_GET_NODE(p, node)->type               = E_AST_NODE_STRUCT_DECL;
-  E_GET_NODE(p, node)->struct_decl.name   = e_str_intern(name_tk->val.ident, p->interner);
+  E_GET_NODE(p, node)->struct_decl.name   = name;
   E_GET_NODE(p, node)->struct_decl.stmts  = stmts;
   E_GET_NODE(p, node)->struct_decl.nstmts = nstmts;
 
   return node;
+
+ERR:
+  free(stmts);
+  return e ? e : -1;
 }
 
 int
@@ -1426,9 +1472,9 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
         return -1;
       }
 
-      E_GET_NODE(p, node)->type           = E_AST_NODE_ASSIGN;
-      E_GET_NODE(p, node)->binaryop.left  = leftidx;
-      E_GET_NODE(p, node)->binaryop.right = rightidx;
+      E_GET_NODE(p, node)->type         = E_AST_NODE_ASSIGN;
+      E_GET_NODE(p, node)->assign.left  = leftidx;
+      E_GET_NODE(p, node)->assign.right = rightidx;
 
       return node;
     }
@@ -1576,14 +1622,14 @@ e_ast_parse(e_ast* p, int* out_root_node)
   int* stmts  = calloc(cap, sizeof(int));
 
   int rootnode = e_ast_make_node(p);
-  if (rootnode < 0) return -1;
+  if (rootnode < 0) goto ERR;
 
   p->root = rootnode;
   if (out_root_node) *out_root_node = rootnode;
 
   e_ast_get_node(p, rootnode)->type = E_AST_NODE_ROOT;
 
-  if (!stmts) { goto err; }
+  if (!stmts) { goto ERR; }
 
   // for (int i = 0; i < p->ntoks; i++) // Only run from 0 to ntoks-1 because the last token is EOF.
   while (peek(p) && peek(p)->type != E_TOKEN_TYPE_EOF) {
@@ -1592,7 +1638,7 @@ e_ast_parse(e_ast* p, int* out_root_node)
     node = e_ast_expr(p, 0);
     if (node < 0) {
       asterror(take_span, "Error parsing expression [Root statement compilation failed, retreating]\n");
-      goto err;
+      goto ERR;
     }
 
     e_ast_node_type type = E_GET_NODE(p, node)->type;
@@ -1603,18 +1649,19 @@ e_ast_parse(e_ast* p, int* out_root_node)
           take_span,
           "Expected only function definitions, variable declerations, namespace declerations or struct declerations in global scope (%i)\n",
           type);
-      goto err;
+      goto ERR;
     }
 
     if (!e_ast_is_limiter_exempt(e_ast_get_node(p, node)->type) && e_ast_expect(p, E_TOKEN_TYPE_SEMICOLON)) {
       asterror(prev(p)->span, "Expected semicolon after expression\n");
-      goto err;
+      goto ERR;
     }
 
     if (nstmts >= cap) {
       u32  newcap   = MAX(cap * 2, 1);
       int* newstmts = realloc(stmts, newcap * sizeof(int));
-      if (!newstmts) { goto err; }
+      if (!newstmts) { goto ERR; }
+
       stmts = newstmts;
       cap   = newcap;
     }
@@ -1628,7 +1675,8 @@ e_ast_parse(e_ast* p, int* out_root_node)
 
   return 0;
 
-err:
+ERR:
+  free(stmts);
   return -1;
 }
 
@@ -1639,13 +1687,14 @@ e_ast_init(e_token* toks, u32 ntoks, e_str_interner* interner, e_ast* prsr)
     const u32 init_nodes = 64;
 
     *prsr = (e_ast){
-      .nodes    = calloc(sizeof(e_ast_node), init_nodes),
+      .nodes    = calloc(init_nodes, sizeof(e_ast_node)),
       .nnodes   = 0,
-      .interner = interner,
       .capacity = init_nodes,
+      .interner = interner,
       .toks     = toks,
       .ntoks    = ntoks,
       .head     = 0,
+      .root     = -1,
     };
     if (!prsr->nodes) return -1;
   }
@@ -1655,6 +1704,6 @@ e_ast_init(e_token* toks, u32 ntoks, e_str_interner* interner, e_ast* prsr)
 void
 e_ast_free(e_ast* prsr)
 {
-  e_ast_node_free(prsr, prsr->root);
+  if (prsr->root >= 0) e_ast_node_free(prsr, prsr->root);
   free(prsr->nodes);
 }

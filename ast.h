@@ -33,6 +33,7 @@
 #include <stdlib.h>
 
 typedef enum e_ast_nodetype {
+  E_AST_NODE_SENTINEL,
   E_AST_NODE_NOP,
 
   E_AST_NODE_ROOT,
@@ -215,7 +216,7 @@ typedef union e_ast_node_val {
     int             right;
     e_operator      op;
     bool            is_compound;
-  } binaryop;
+  } binaryop, assign;
 
   struct {
     e_ast_node_type type;
@@ -280,7 +281,7 @@ typedef union e_ast_node_val {
     e_ast_node_type type;
     e_filespan      span;
     int             left;
-    const char*     right;
+    const char*     right; /* interned string ; DO NOT FREE */
     int             value;
   } member_assign;
 
@@ -303,7 +304,7 @@ typedef union e_ast_node_val {
     e_ast_node_type type;
     e_filespan      span;
     const char*     name;  /* interned string ; DO NOT FREE */
-    char**          args;  // Allocated, + each string is allocated individually.
+    const char**    args;  // Each string is interned. DO NOT FREE INDIVIDUALS.
     int*            stmts; // Function body
     u32             nargs;
     u32             nstmts;
@@ -489,8 +490,8 @@ e_ast_get_node(const e_ast* p, int idx)
 static inline int
 e_ast_make_node(e_ast* p)
 {
-  if (p->nnodes + 1 >= p->capacity) {
-    u32         newcap   = MAX(p->capacity * 2, 1);
+  if (p->nnodes >= p->capacity) {
+    u32         newcap   = MAX(p->capacity * 2, p->nnodes + 1);
     e_ast_node* newnodes = (e_ast_node*)realloc(p->nodes, newcap * sizeof(e_ast_node));
     if (newnodes == NULL) {
       perror("Allocation failed");

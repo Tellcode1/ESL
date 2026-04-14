@@ -125,7 +125,7 @@ call(const e_exec_info* info, u32 hash, u32 nargs)
      * Restore to the depth that we
      * were in
      */
-    while (info->stack->depth > depth_restore) TRY_V(e_stack_pop_frame(info->stack));
+    while (info->stack->depth > depth_restore) e_stack_pop_frame(info->stack);
 
     goto pop_and_ret;
   }
@@ -329,7 +329,7 @@ e_exec(const e_exec_info* info)
 
       case E_OPCODE_MK_STRUCT: {
         u32  member_count = e_read_u32(&ip);
-        u32* fields       = calloc(sizeof(u32), member_count);
+        u32* fields       = calloc(member_count, sizeof(u32));
         for (u32 i = 0; i < member_count; i++) { fields[i] = e_read_u32(&ip); }
 
         e_var st = {
@@ -339,7 +339,7 @@ e_exec(const e_exec_info* info)
         if (!st.val.struc) return nullvar;
 
         E_VAR_AS_STRUCT(&st)->member_hashes = fields;
-        E_VAR_AS_STRUCT(&st)->members       = (e_var*)calloc(sizeof(e_var), member_count);
+        E_VAR_AS_STRUCT(&st)->members       = (e_var*)calloc(member_count, sizeof(e_var));
         E_VAR_AS_STRUCT(&st)->member_count  = member_count;
 
         for (u32 i = 0; i < member_count; i++) { E_VAR_AS_STRUCT(&st)->members[i] = (e_var){ .type = E_VARTYPE_NULL }; }
@@ -372,7 +372,7 @@ e_exec(const e_exec_info* info)
             .type  = d == DBL_MAX ? E_VARTYPE_NULL : E_VARTYPE_FLOAT, // if member not in vec2, return a null var
             .val.f = d,
           };
-        } else {
+        } else if (type == E_VARTYPE_STRUCT) {
           e_struct* st = E_VAR_AS_STRUCT(e_stack_top(info->stack));
           for (u32 i = 0; i < st->member_count; i++) {
             if (st->member_hashes[i] == member) {
@@ -381,6 +381,8 @@ e_exec(const e_exec_info* info)
               break;
             }
           }
+        } else {
+          push = nullvar;
         }
 
         // pop off struct
@@ -749,8 +751,8 @@ e_exec(const e_exec_info* info)
         goto _RETURN;
       }
 
-      case E_OPCODE_POP_VARIABLES: TRY_V(e_stack_pop_frame(info->stack)); break;
       case E_OPCODE_PUSH_VARIABLES: TRY_V(e_stack_push_frame(info->stack)); break;
+      case E_OPCODE_POP_VARIABLES: e_stack_pop_frame(info->stack); break;
 
       // Non fatal return
       case E_OPCODE_HALT: goto _RETURN;

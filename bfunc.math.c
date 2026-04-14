@@ -24,11 +24,12 @@
 
 #include "bfunc.h"
 
-#include "operate.h"
 #include "pool.h"
 #include "var.h"
 
 #include <assert.h>
+#include <cglm/cglm.h>
+#include <cglm/types.h>
 
 e_var
 eb_vec2(e_var* args, u32 nargs)
@@ -91,5 +92,23 @@ evector_zero_extend(const e_var* v)
   if (v->type == E_VARTYPE_VEC2) { return e_make_vec4(v->val.vec2.x, v->val.vec2.y, 0.0, 0.0); }
   if (v->type == E_VARTYPE_VEC3) { return e_make_vec4(v->val.vec3.x, v->val.vec3.y, v->val.vec3.z, 0.0); }
   if (v->type == E_VARTYPE_VEC4) { return e_make_vec4(v->val.vec4.x, v->val.vec4.y, v->val.vec4.z, v->val.vec4.w); }
+  return (e_var){ .type = E_VARTYPE_NULL };
+}
+
+e_var
+evector_length(const e_var* v)
+{
+  if (v->type == E_VARTYPE_VEC2) {
+    vec2 transform = { (float)v->val.vec2.x, (float)v->val.vec2.y };
+    return e_var_from_float(glm_vec2_norm(transform));
+  }
+  if (v->type == E_VARTYPE_VEC3) {
+    vec3 transform = { (float)v->val.vec3.x, (float)v->val.vec3.y, (float)v->val.vec3.z };
+    return e_var_from_float(glm_vec3_norm(transform));
+  }
+  if (v->type == E_VARTYPE_VEC4) {
+    vec4 transform = { (float)v->val.vec4.x, (float)v->val.vec4.y, (float)v->val.vec4.z, (float)v->val.vec4.w };
+    return e_var_from_float(glm_vec4_norm(transform));
+  }
   return (e_var){ .type = E_VARTYPE_NULL };
 }

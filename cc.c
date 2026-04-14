@@ -141,8 +141,8 @@ defer_push_scope(e_compiler* cc)
 {
   const u32 init_defer_entry_capacity = 8;
 
-  ecc_defer_scope* scope = malloc(sizeof(ecc_defer_scope));
-  scope->entries         = malloc(sizeof(ecc_defer_entry) * init_defer_entry_capacity);
+  ecc_defer_scope* scope = calloc(1, sizeof(ecc_defer_scope));
+  scope->entries         = calloc(init_defer_entry_capacity, sizeof(ecc_defer_entry));
   scope->count           = 0;
   scope->capacity        = init_defer_entry_capacity;
   scope->parent          = cc->defer_stack;
@@ -385,7 +385,7 @@ compiler_make_fork(const e_compiler* old_c, e_compiler* new_c)
     .next_label        = old_c->next_label,
     .ns                = old_c->ns,
     .stack             = old_c->stack,
-    .emit              = (u8*)malloc(init_code_capacity),
+    .emit              = (u8*)calloc(1, init_code_capacity),
     .num_bytes_emitted = 0,
     .emit_capacity     = init_code_capacity,
   };
@@ -409,6 +409,16 @@ compiler_join_fork(const e_compiler* copy, e_compiler* cc)
 
   cc->ns = copy->ns;
   /* Can't modify builtin variable count */
+}
+
+/**
+ * for error paths. Free everything owned by this fork.
+ */
+static inline void
+compiler_free_fork_entirely(e_compiler* cc)
+{
+  free(cc->emit);
+  while (cc->defer_stack) defer_pop_scope(cc);
 }
 
 static inline u32
@@ -710,7 +720,7 @@ mk_name(const e_compiler* cc, const char* name)
     p = e_strlpcat(p, "::", out, len);
   }
 
-  p = e_strlpcat(p, name, out, len);
+  e_strlpcat(p, name, out, len);
   return out;
 }
 
@@ -782,9 +792,11 @@ compile_literal_variable(e_compiler* cc, e_var v)
 static int
 compile_literal(e_compiler* cc, int node)
 {
-  e_var v = { 0 };
+  // Convert the node to a variable and
+  e_var v = { .type = E_VARTYPE_NULL };
   if (lower_node_to_literal(cc, node, &v)) return -1;
 
+  // Compile it
   return compile_literal_variable(cc, v);
 }
 
@@ -841,17 +853,22 @@ append_function_entry(e_arena* a, ecc_function_table* funcs, const e_function* f
 static int
 compile_function_definition(e_compiler* cc, int node)
 {
+  e_compiler fork = { 0 };
+
   const char* function_name = E_GET_NODE(cc->ast, node)->func.name;
   char*       full          = mk_name(cc, function_name);
 
   const u32 hash = e_hash_fnv(full, strlen(full));
+
+  int e = 0;
 
   // free(full);
 
   /**
    * Push frame for (our/compiler only) stack
    */
-  e_stack_push_frame(cc->stack);
+  e = e_stack_push_frame(cc->stack);
+  if (e) goto ERR;
 
   /* Ensure it doesn't already exist */
   const ecc_function_table* func_table = cc->function_table;
@@ -859,7 +876,8 @@ compile_function_definition(e_compiler* cc, int node)
     e_function* func = &func_table->functions[i];
     if (func->name_hash == hash) {
       cerror(E_GET_NODE(cc->ast, node)->common.span, "Multiple definitions of function \"%s\"\n", function_name);
-      return -1;
+      e = -1;
+      goto ERR;
     }
   }
 
@@ -868,17 +886,22 @@ compile_function_definition(e_compiler* cc, int node)
   u32* arg_slots = nullptr;
   if (nargs > 0) {
     arg_slots = (u32*)e_arnalloc(cc->arena, sizeof(u32) * nargs);
+    if (!arg_slots) goto ERR;
+
     for (u32 i = 0; i < nargs; i++) {
       const char* arg_name = E_GET_NODE(cc->ast, node)->func.args[i];
 
       char* full_arg_name = mk_name(cc, arg_name);
-      u32   arg_hash      = e_hash_fnv(full_arg_name, strlen(full_arg_name));
+      if (!full_arg_name) goto ERR;
+
+      u32 arg_hash = e_hash_fnv(full_arg_name, strlen(full_arg_name));
       // free(full_arg_name);
 
       arg_slots[i] = arg_hash;
 
       /* Add variable entry to stack */
       e_var* r = e_stack_push_variable(arg_hash, cc->stack);
+      if (!r) goto ERR;
 
       /* Acquire a refdobj */
       r->val.var_info                 = e_refdobj_pool_acquire(&ge_pool);
@@ -890,38 +913,44 @@ compile_function_definition(e_compiler* cc, int node)
     }
   }
 
-  e_compiler copy;
-  compiler_make_fork(cc, &copy);
+  e = compiler_make_fork(cc, &fork);
+  if (e) goto ERR;
 
-  defer_push_scope(&copy);
+  if (!defer_push_scope(&fork)) goto ERR;
 
-  int e = e_compile_function(&copy, node);
+  e = e_compile_function(&fork, node);
+  if (e) goto ERR;
 
   // emit the defer before the return you asshole
-  defer_emit_current_scope(&copy);
+  e = defer_emit_current_scope(&fork);
+  if (e) goto ERR;
 
   /* Always return void if no other return value was specified */
-  e_emit_instruction(&copy, E_OPCODE_RETURN);
-  e_emit_u8(&copy, false);
+  e_emit_instruction(&fork, E_OPCODE_RETURN);
+  e_emit_u8(&fork, false);
 
-  defer_pop_scope(&copy);
+  defer_pop_scope(&fork);
 
-  compiler_join_fork(&copy, cc);
+  compiler_join_fork(&fork, cc);
 
   e_function f = {
-    .code      = copy.emit,
-    .code_size = copy.num_bytes_emitted,
+    .code      = fork.emit,
+    .code_size = fork.num_bytes_emitted,
     .arg_slots = arg_slots,
     .name_hash = hash,
     .nargs     = nargs,
   };
 
   e = append_function_entry(cc->arena, cc->function_table, &f);
-  if (e) return e;
+  if (e) goto ERR;
 
   e_stack_pop_frame(cc->stack);
 
   return e;
+
+ERR:
+  compiler_free_fork_entirely(&fork);
+  return e == 0 ? -1 : e;
 }
 
 static int
@@ -1210,25 +1239,30 @@ compile_if_statement(e_compiler* cc, int node)
 
   // condition
   int e = compile(cc, E_GET_NODE(cc->ast, node)->if_stmt.condition);
-  if (e) return e;
+  if (e) goto ERR;
 
   // condition failed :<
   emit_and_record_jmp(cc, E_OPCODE_JZ, next_in_chain_label); // Jump to the next in chain
   // Possibly else if or else
 
-  e_stack_push_frame(cc->stack);
+  e = e_stack_push_frame(cc->stack);
+  if (e) goto ERR;
+
   e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES);
-  defer_push_scope(cc);
+  if (!defer_push_scope(cc)) goto ERR;
 
   // BODY OF ROOT IF STATEMENT
   for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->if_stmt.nstmts; i++) {
     e = compile(cc, E_GET_NODE(cc->ast, node)->if_stmt.body[i]);
-    if (e) return e;
+    if (e) goto ERR;
   }
 
   e_emit_instruction(cc, E_OPCODE_POP_VARIABLES);
   e_stack_pop_frame(cc->stack);
-  defer_emit_current_scope(cc);
+
+  e = defer_emit_current_scope(cc);
+  if (e) goto ERR;
+
   defer_pop_scope(cc);
 
   // Still inside the body, JMP over all other branches
@@ -1246,24 +1280,29 @@ compile_if_statement(e_compiler* cc, int node)
 
     // CONDITION
     e = compile(cc, if_stmt->condition);
-    if (e) return e;
+    if (e) goto ERR;
 
     /* Failed. Jump to the next in chain. */
     emit_and_record_jmp(cc, E_OPCODE_JZ, next_in_chain_label);
 
-    e_stack_push_frame(cc->stack);
+    e = e_stack_push_frame(cc->stack);
+    if (e) goto ERR;
+
     e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES);
-    defer_push_scope(cc);
+    if (!defer_push_scope(cc)) goto ERR;
 
     /* Condition true! Execute the body */
     for (u32 i = 0; i < if_stmt->nstmts; i++) {
       e = compile(cc, if_stmt->body[i]);
-      if (e) return e;
+      if (e) goto ERR;
     }
 
     e_stack_pop_frame(cc->stack);
+
     e_emit_instruction(cc, E_OPCODE_POP_VARIABLES);
-    defer_emit_current_scope(cc);
+    e = defer_emit_current_scope(cc);
+    if (e) goto ERR;
+
     defer_pop_scope(cc);
 
     /* JMP over all other branches. */
@@ -1273,21 +1312,26 @@ compile_if_statement(e_compiler* cc, int node)
   /* Emit the final next in chain label for the else statement. */
   define_and_emit_label(cc, next_in_chain_label); // BAM!
 
-  e_stack_push_frame(cc->stack);
+  e = e_stack_push_frame(cc->stack);
+  if (e) goto ERR;
+
   e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES);
-  defer_push_scope(cc);
+  if (!defer_push_scope(cc)) goto ERR;
 
   /* ELSE BODY */
   for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->if_stmt.nelse_stmts; i++) {
     e = compile(cc, E_GET_NODE(cc->ast, node)->if_stmt.else_body[i]);
-    if (e) return e;
+    if (e) goto ERR;
 
     /* No need to jump! we're already at the end :> */
   }
 
   e_stack_pop_frame(cc->stack);
+
   e_emit_instruction(cc, E_OPCODE_POP_VARIABLES);
-  defer_emit_current_scope(cc);
+  e = defer_emit_current_scope(cc);
+  if (e) goto ERR;
+
   defer_pop_scope(cc);
 
   /* END LABEL. There's still one instruction after this and it's to ensure we always pop our variables. */
@@ -1297,11 +1341,16 @@ compile_if_statement(e_compiler* cc, int node)
   e_emit_instruction(cc, E_OPCODE_POP_VARIABLES);
 
   return 0;
+
+ERR:
+  return e ? e : -1;
 }
 
 static int
 compile_while_statement(e_compiler* cc, int node)
 {
+  int e = 0;
+
   /* Computes the condition and jumps to the end label (breaks) if condition is false */
   const u32 pre_condition_label = make_label_id(cc);
 
@@ -1311,8 +1360,11 @@ compile_while_statement(e_compiler* cc, int node)
   /**
    * Push frame for the stack
    */
-  defer_push_scope(cc);
-  e_stack_push_frame(cc->stack);
+  if (!defer_push_scope(cc)) goto ERR;
+
+  e = e_stack_push_frame(cc->stack);
+  if (e) goto ERR;
+
   e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES);
 
   /* Append a loop entry to our compiler. */
@@ -1331,8 +1383,8 @@ compile_while_statement(e_compiler* cc, int node)
   //
 
   /* CONDITION */
-  int e = compile(cc, E_GET_NODE(cc->ast, node)->while_stmt.condition);
-  if (e) return e;
+  e = compile(cc, E_GET_NODE(cc->ast, node)->while_stmt.condition);
+  if (e) goto ERR;
 
   // Break out of loop if condition is false.
   emit_and_record_jmp(cc, E_OPCODE_JZ, end_label);
@@ -1340,7 +1392,7 @@ compile_while_statement(e_compiler* cc, int node)
   // WHILE BODY
   for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->while_stmt.nstmts; i++) {
     e = compile(cc, E_GET_NODE(cc->ast, node)->while_stmt.stmts[i]);
-    if (e) return e;
+    if (e) goto ERR;
   }
 
   /* Jump to condition, body is done executing */
@@ -1349,7 +1401,8 @@ compile_while_statement(e_compiler* cc, int node)
   // End label.
   define_and_emit_label(cc, end_label);
 
-  defer_emit_current_scope(cc);
+  e = defer_emit_current_scope(cc);
+  if (e) goto ERR;
   defer_pop_scope(cc);
 
   /**
@@ -1363,7 +1416,10 @@ compile_while_statement(e_compiler* cc, int node)
   // swap the old loop metadata back in
   cc->loop = last;
 
-  return e;
+  return 0;
+
+ERR:
+  return e ? e : -1;
 }
 
 static int
@@ -1374,8 +1430,10 @@ compile_for_statement(e_compiler* cc, int node)
 
   /* Push a new scope */
   e_emit_instruction(cc, E_OPCODE_PUSH_VARIABLES);
+
   /* For the compiler too */
-  e_stack_push_frame(cc->stack);
+  int e = e_stack_push_frame(cc->stack);
+  if (e) goto ERR;
 
   /**
    * The for statement is compiled as:
@@ -1410,7 +1468,7 @@ compile_for_statement(e_compiler* cc, int node)
   initializers = E_GET_NODE(cc->ast, node)->for_stmt.initializers;
   if (initializers >= 0 && compile(cc, initializers) < 0) {
     cerror(E_GET_NODE(cc->ast, initializers)->common.span, "Failed to compile initializers [for statement]\n");
-    goto err;
+    goto ERR;
   }
 
   // TOP_LABEL
@@ -1421,12 +1479,12 @@ compile_for_statement(e_compiler* cc, int node)
   if (condition < 0) {
     // Can't use condition's span!
     cerror(E_GET_NODE(cc->ast, initializers)->common.span, "Empty for statement conditions are not currently supported [for statement]\n");
-    goto err;
+    goto ERR;
   }
 
   if (condition >= 0 && compile(cc, condition) < 0) {
     cerror(E_GET_NODE(cc->ast, condition)->common.span, "Failed to compile condition [for statement]");
-    goto err;
+    goto ERR;
   }
 
   // JZ END_LABEL
@@ -1443,7 +1501,7 @@ compile_for_statement(e_compiler* cc, int node)
     int stmt = E_GET_NODE(cc->ast, node)->for_stmt.stmts[i];
     if (compile(cc, stmt) < 0) {
       cerror(E_GET_NODE(cc->ast, stmt)->common.span, "Failed to compile statement in body [for statement]");
-      goto err;
+      goto ERR;
     }
   }
 
@@ -1466,7 +1524,7 @@ compile_for_statement(e_compiler* cc, int node)
   for (u32 i = 0; i < niterators; i++) {
     if (compile(cc, iterators[i]) < 0) {
       cerror(E_GET_NODE(cc->ast, iterators[i])->common.span, "Failed to compile iterators [for statement]");
-      goto err;
+      goto ERR;
     }
   }
 
@@ -1486,13 +1544,18 @@ compile_for_statement(e_compiler* cc, int node)
 
   return 0;
 
-err:
-  return -1;
+ERR:
+  return e ? e : -1;
 }
 
 static int
 compile_member_access(e_compiler* cc, int node)
 {
+  if (!e_can_make_value(cc->ast, node)) {
+    e_filespan span = E_GET_NODE(cc->ast, node)->common.span;
+    cerror(span, "Failed to compile member access: Failed to lower to rvalue\n");
+    return -1;
+  }
   e_lval lv = e_make_value(cc, node);
   return e_emit_lvalue_load(cc, lv);
 }
@@ -1500,8 +1563,8 @@ compile_member_access(e_compiler* cc, int node)
 static int
 compile_assign(e_compiler* cc, int node)
 {
-  int right = E_GET_NODE(cc->ast, node)->binaryop.right;
-  int left  = E_GET_NODE(cc->ast, node)->binaryop.left;
+  int right = E_GET_NODE(cc->ast, node)->assign.right;
+  int left  = E_GET_NODE(cc->ast, node)->assign.left;
 
   if (!e_can_make_value(cc->ast, left)) {
     e_filespan left_span = E_GET_NODE(cc->ast, left)->common.span;
@@ -1538,7 +1601,6 @@ compile_assign(e_compiler* cc, int node)
 
   int e = e_emit_lvalue_assign(cc, right, lv);
   e_free_value(&lv);
-
   if (e) return e;
 
   return 0;
@@ -1550,7 +1612,7 @@ compile_member_assign(e_compiler* cc, int node)
   int value = E_GET_NODE(cc->ast, node)->member_assign.value;
 
   if (!e_can_make_value(cc->ast, node)) {
-    cerror(E_GET_NODE(cc->ast, node)->common.span, "Can not assign to member access\n");
+    cerror(E_GET_NODE(cc->ast, node)->common.span, "Can not assign to member access: Failed to lower to lvalue\n");
     return -1;
   }
 
@@ -1564,21 +1626,22 @@ compile_member_assign(e_compiler* cc, int node)
 static int
 compile_return(e_compiler* cc, int node)
 {
+  int e = 0;
   if (E_GET_NODE(cc->ast, node)->ret.has_return_value) {
     /* Compile the return value */
     compile(cc, E_GET_NODE(cc->ast, node)->ret.expr_id);
 
-    defer_emit_all_scopes(cc);
+    e = defer_emit_all_scopes(cc);
 
     e_emit_instruction(cc, E_OPCODE_RETURN);
     e_emit_u8(cc, true); // Specify that we're returning a value
   } else {
-    defer_emit_all_scopes(cc);
+    e = defer_emit_all_scopes(cc);
 
     e_emit_instruction(cc, E_OPCODE_RETURN);
     e_emit_u8(cc, false); /* Returning void! */
   }
-  return 0;
+  return e;
 }
 
 static int
@@ -1587,12 +1650,16 @@ append_struct_decleration(e_arena* a, const char* name, ecc_struct_information* 
   char* dup  = e_arnstrdup(a, name);
   u32   hash = e_hash_fnv(name, strlen(name));
 
-  if (deposit->fields_count >= deposit->field_capacity) {
+  if (deposit->fields_count >= deposit->field_capacity || !deposit->fields || !deposit->field_hashes) {
     u32    field_cap_new    = deposit->field_capacity * 2;
     char** fields_new       = (char**)realloc(deposit->fields, field_cap_new * sizeof(char*));
     u32*   field_hashes_new = (u32*)realloc(deposit->field_hashes, field_cap_new * sizeof(u32));
 
-    if (!fields_new) return -1;
+    if (!fields_new || !field_hashes_new) {
+      if (fields_new) free(fields_new);
+      if (field_hashes_new) free(field_hashes_new);
+      return -1;
+    }
 
     deposit->fields         = fields_new;
     deposit->field_capacity = field_cap_new;
@@ -1626,7 +1693,8 @@ collect_struct_declerations(e_compiler* cc, int* stmts, u32 nstmts, ecc_struct_i
       }
 
       const char* name = E_GET_NODE(cc->ast, stmts[i])->let.name;
-      append_struct_decleration(cc->arena, name, deposit);
+      int         e    = append_struct_decleration(cc->arena, name, deposit);
+      if (e) return e;
     } else {
       const char* member_name = E_GET_NODE(cc->ast, stmts[i])->let.name;
       cerror(E_GET_NODE(cc->ast, stmts[i])->let.span, "Member index %u, with name %s is not allowed in a struct\n", i, member_name);
@@ -1648,9 +1716,12 @@ compile_struct_constructor(e_compiler* fork, e_filespan span, const ecc_struct_i
 
     /* Add variable entry to stack */
     e_var* arg = e_stack_push_variable(arg_hash, fork->stack);
+    if (!arg) return -1;
 
     /* Acquire a refdobj */
-    arg->val.var_info                 = e_refdobj_pool_acquire(&ge_pool);
+    arg->val.var_info = e_refdobj_pool_acquire(&ge_pool);
+    if (!arg->val.var_info) return -1;
+
     E_VAR_AS_INFO(arg)->initializer   = -1; // Arguments aren't initialized.
     E_VAR_AS_INFO(arg)->current_value = -1; // Or initialized to null if you think about it.
     E_VAR_AS_INFO(arg)->name_hash     = arg_hash;
@@ -1699,6 +1770,10 @@ compile_struct_constructor(e_compiler* fork, e_filespan span, const ecc_struct_i
 static int
 compile_struct_decleration(e_compiler* cc, int node)
 {
+  int                    e           = 0;
+  e_compiler             fork        = { 0 };
+  ecc_struct_information struct_data = { 0 };
+
   const char* struct_name        = E_GET_NODE(cc->ast, node)->struct_decl.name;
   int*        struct_decl_stmts  = E_GET_NODE(cc->ast, node)->struct_decl.stmts;
   u32         struct_decl_nstmts = E_GET_NODE(cc->ast, node)->struct_decl.nstmts;
@@ -1707,29 +1782,36 @@ compile_struct_decleration(e_compiler* cc, int node)
   const u32 init_fields_capacity = 16;
 
   /* Gather all information the user provided into one big structure. */
-  ecc_struct_information struct_data = {
+  struct_data = (ecc_struct_information){
     .name           = e_arnstrdup(cc->arena, struct_name),
     .name_hash      = struct_name_hash,
-    .fields         = (char**)e_arnalloc(cc->arena, init_fields_capacity * sizeof(char*)),
-    .field_hashes   = (u32*)e_arnalloc(cc->arena, init_fields_capacity * sizeof(u32)),
+    .fields         = (char**)calloc(init_fields_capacity, sizeof(char*)),
+    .field_hashes   = (u32*)calloc(init_fields_capacity, sizeof(u32)),
     .field_capacity = init_fields_capacity,
     .fields_count   = 0,
   };
-  collect_struct_declerations(cc, struct_decl_stmts, struct_decl_nstmts, &struct_data);
+  if (!struct_data.fields || !struct_data.field_hashes) goto ERR;
+
+  e = collect_struct_declerations(cc, struct_decl_stmts, struct_decl_nstmts, &struct_data);
+  if (e) goto ERR;
 
   /* Generate the constructor function */
-  e_compiler fork;
-
-  int e = compiler_make_fork(cc, &fork);
-  if (e) return e;
+  e = compiler_make_fork(cc, &fork);
+  if (e) goto ERR;
 
   e = e_stack_push_frame(cc->stack);
-  if (e) return e;
+  if (e) goto ERR;
 
-  defer_push_scope(&fork);
+  if (!defer_push_scope(&fork)) goto ERR;
 
   e = compile_struct_constructor(&fork, E_GET_NODE(cc->ast, node)->common.span, &struct_data);
-  if (e) return e;
+  if (e) goto ERR;
+
+  free(struct_data.fields);
+  struct_data.fields = NULL;
+
+  free(struct_data.field_hashes);
+  struct_data.field_hashes = NULL;
 
   defer_pop_scope(&fork);
   compiler_join_fork(&fork, cc);
@@ -1737,6 +1819,12 @@ compile_struct_decleration(e_compiler* cc, int node)
   e_stack_pop_frame(cc->stack);
 
   return 0;
+
+ERR:
+  if (struct_data.fields) free(struct_data.fields);
+  if (struct_data.field_hashes) free(struct_data.field_hashes);
+  compiler_free_fork_entirely(&fork);
+  return e ? e : -1;
 }
 
 static int
@@ -1744,6 +1832,7 @@ compile_variable_decleration(e_compiler* cc, int node)
 {
   const char* name = E_GET_NODE(cc->ast, node)->let.name;
   char*       full = mk_name(cc, name);
+  if (!full) return -1;
 
   u32 hash        = e_hash_fnv(full, strlen(full));
   int initializer = E_GET_NODE(cc->ast, node)->let.initializer;
@@ -1764,6 +1853,7 @@ compile_variable_decleration(e_compiler* cc, int node)
 
   /* Add variable entry to stack */
   e_var* r = e_stack_push_variable(hash, cc->stack);
+  if (!r) return -1;
 
   /* Acquire a refdobj */
   r->type                         = E_VARTYPE_CC_VARIABLE;
@@ -1993,7 +2083,8 @@ compile(e_compiler* cc, int node)
         cerror(E_GET_NODE(cc->ast, node)->common.span, "break used outside loop\n");
         return -1;
       }
-      defer_emit_to_depth(cc, cc->loop->defer_depth);
+      int e = defer_emit_to_depth(cc, cc->loop->defer_depth);
+      if (e) return e;
 
       emit_and_record_jmp(cc, E_OPCODE_JMP, cc->loop->break_label);
       return 0;
@@ -2004,7 +2095,8 @@ compile(e_compiler* cc, int node)
         cerror(E_GET_NODE(cc->ast, node)->common.span, "continue used outside loop\n");
         return -1;
       }
-      defer_emit_to_depth(cc, cc->loop->defer_depth);
+      int e = defer_emit_to_depth(cc, cc->loop->defer_depth);
+      if (e) return e;
 
       emit_and_record_jmp(cc, E_OPCODE_JMP, cc->loop->continue_label);
       return 0;
@@ -2092,6 +2184,9 @@ e_compile_function(e_compiler* cc, int node)
 static int
 compile_builtin_structure(e_compiler* cc, const e_builtin_struct* b)
 {
+  e_compiler fork = { 0 };
+  int        e    = 0;
+
   ecc_struct_information st = {
     .name           = e_arnstrdup(cc->arena, b->name),
     .fields         = e_arnalloc(cc->arena, b->fields_count * sizeof(u32)),
@@ -2100,23 +2195,28 @@ compile_builtin_structure(e_compiler* cc, const e_builtin_struct* b)
     .field_capacity = b->fields_count,
     .name_hash      = e_hash_fnv(b->name, strlen(b->name)),
   };
+  if (!st.name || !st.fields || !st.field_hashes) { goto ERR; }
 
-  for (u32 j = 0; j < b->fields_count; j++) { st.fields[j] = e_arnstrdup(cc->arena, b->fields[j]); }
-  for (u32 j = 0; j < b->fields_count; j++) { st.field_hashes[j] = e_hash_fnv(b->fields[j], strlen(b->fields[j])); }
+  for (u32 j = 0; j < b->fields_count; j++) {
+    st.fields[j] = e_arnstrdup(cc->arena, b->fields[j]);
+    if (!st.fields[j]) goto ERR;
+  }
+  for (u32 j = 0; j < b->fields_count; j++) {
+    st.field_hashes[j] = e_hash_fnv(b->fields[j], strlen(b->fields[j]));
+    if (!st.field_hashes[j]) goto ERR;
+  }
 
   /* Generate the constructor function */
-  e_compiler fork;
-
-  int e = compiler_make_fork(cc, &fork);
-  if (e) return e;
+  e = compiler_make_fork(cc, &fork);
+  if (e) goto ERR;
 
   e = e_stack_push_frame(cc->stack);
-  if (e) return e;
+  if (e) goto ERR;
 
-  defer_push_scope(&fork);
+  if (!defer_push_scope(&fork)) goto ERR;
 
   e = compile_struct_constructor(&fork, E_GET_NODE(cc->ast, cc->ast->root)->common.span, &st);
-  if (e) return e;
+  if (e) goto ERR;
 
   defer_pop_scope(&fork);
   compiler_join_fork(&fork, cc);
@@ -2124,6 +2224,10 @@ compile_builtin_structure(e_compiler* cc, const e_builtin_struct* b)
   e_stack_pop_frame(cc->stack);
 
   return 0;
+
+ERR:
+  compiler_free_fork_entirely(&fork);
+  return e >= 0 ? -1 : e;
 }
 
 /**
@@ -2250,25 +2354,26 @@ e_compile(const ecc_info* info, e_compilation_result* result)
     .builtin_var_table = &builtin_var_table,
     .function_table    = &func_table,
     .label_table       = &label_table,
-    .emit              = (u8*)malloc(init_code_capacity),
+    .emit              = (u8*)calloc(1, init_code_capacity),
     .num_bytes_emitted = 0,
     .emit_capacity     = init_code_capacity,
   };
+  if (!cc.emit) return -1;
 
-  defer_push_scope(&cc);
+  if (!defer_push_scope(&cc)) return -1;
 
-  int e = 0;
-  if ((e = e_stack_init(256, 32, 32, &stack))) return e;
+  int e = e_stack_init(256, 32, 32, &stack);
+  if (e) goto ERR;
 
   /**
    * Generate constructors for all builtin && hooked
    * structures.
    */
   e = compile_builtin_structures(&cc);
-  if (e) return e;
+  if (e) goto ERR;
 
   e = compile(&cc, info->root);
-  if (e) return e;
+  if (e) goto ERR;
 
   defer_pop_scope(&cc);
 
@@ -2294,4 +2399,9 @@ e_compile(const ecc_info* info, e_compilation_result* result)
   // e_print_instruction_stream(cc.emit, cc.emitted);
 
   return e;
+
+ERR:
+  compiler_free_fork_entirely(&cc);
+  e_stack_free(&stack);
+  return e ? e : -1;
 }

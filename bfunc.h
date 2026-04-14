@@ -29,6 +29,7 @@
 #include "bfunc.list.h"
 #include "bfunc.math.h"
 #include "bfunc.str.h"
+#include "bfunc.vec.h"
 #include "stdafx.h"
 #include "var.h"
 
@@ -231,7 +232,13 @@ static const e_builtin_func eb_funcs[] = {
   { "list::reserve", "Reserve capacity for n elements.", "fn list::reserve(list, elems_to_reserve:int) -> null", E_VARTYPE_LIST | E_VARTYPE_INT, 2, 2, eb_list_reserve },
   { "list::len", "Get number of elements in list.", "fn list::len(list) -> int", E_VARTYPE_LIST, 1, 1, eb_list_len },
 
-  { "sys::get_command_line_args", "Get the command line arguments passed, as a list", "fn sys::get_command_line_args() -> list|null", E_VARTYPE_VOID, 0, 0, eb_get_command_line_args }
+  { "sys::get_command_line_args", "Get the command line arguments passed, as a list", "fn sys::get_command_line_args() -> list|null", E_VARTYPE_VOID, 0, 0, eb_get_command_line_args },
+
+  { "vec::norm", "Get the normalized vector", "fn vec::norm(vec) -> vec2|null", E_VARTYPE_VEC2|E_VARTYPE_VEC3|E_VARTYPE_VEC4, 1, 1, eb_vec_norm },
+  { "vec::len", "Get the length (magnitude) of a vector", "fn vec::len(vec) -> float|null", E_VARTYPE_VEC2|E_VARTYPE_VEC3|E_VARTYPE_VEC4, 1, 1, eb_vec_len },
+  { "vec::len2", "Get the squared length (magnitude) of a vector", "fn vec::len2(vec) -> float|null", E_VARTYPE_VEC2|E_VARTYPE_VEC3|E_VARTYPE_VEC4, 1, 1, eb_vec_len2 },
+  { "vec::dist", "Get (euclidean) distance between two vectors", "fn vec::dist(v1,v2) -> float|null", E_VARTYPE_VEC2|E_VARTYPE_VEC3|E_VARTYPE_VEC4, 1, 1, eb_vec_dist },
+  { "vec::dist2", "Get squared (euclidean) distance between two vectors", "fn vec::dist2(v1,v2) -> float|null", E_VARTYPE_VEC2|E_VARTYPE_VEC3|E_VARTYPE_VEC4, 1, 1, eb_vec_dist2 },
 };
 // clang-format on
 

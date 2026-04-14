@@ -58,7 +58,7 @@ __advance(const char** s, int* line, int* col)
 static inline char*
 parse_backslash_sequences(const char* s, size_t max)
 {
-  char*  news = malloc(max + 1);
+  char*  news = calloc(1, max + 1);
   size_t r    = 0;
   size_t w    = 0;
 
@@ -118,11 +118,8 @@ tklist_resize(struct tklist* toks, u32 newcap)
 {
   if (newcap == 0) { newcap = 1; }
 
-  e_token* newtoks = malloc(sizeof(e_token) * newcap);
+  e_token* newtoks = realloc(toks->toks, newcap * sizeof(e_token));
   if (!newtoks) { return -1; }
-
-  memcpy(newtoks, toks->toks, sizeof(e_token) * toks->ntoks);
-  free(toks->toks);
 
   toks->toks     = newtoks;
   toks->capacity = newcap;
@@ -166,7 +163,7 @@ _strndup(const char* s, size_t n)
   size_t l  = strlen(s);
   size_t cp = MIN(l, n);
 
-  char* new = malloc(cp + 1);
+  char* new = calloc(1, cp + 1);
   strncpy(new, s, cp);
   new[cp] = 0;
 
@@ -194,7 +191,22 @@ e_tokenize(const char* input, const char* advertised_file, e_str_interner* inter
     if (s[0] && s[0] == '/' && s[1] == '/') {
       advance(s, line, col); // skip over comment start
       advance(s, line, col);
-      while (*s != '\n') { advance(s, line, col); }
+      while (*s && *s != '\n') { advance(s, line, col); }
+      continue;
+    } else if (s[0] == '/' && s[1] == '*') {
+      advance(s, line, col); // /*
+      advance(s, line, col);
+
+      while (*s && !(s[0] == '*' && s[1] == '/')) { advance(s, line, col); }
+
+      if (*s) {
+        advance(s, line, col); // */
+        advance(s, line, col);
+      } else {
+        lexerror(line, col, "Unterminated multiline comment\n");
+        goto err;
+      }
+
       continue;
     }
 

@@ -28,25 +28,26 @@
 #include "pool.h"
 #include "var.h"
 
+#include <stdlib.h>
+
 int
 e_map_init(e_var* vars, u32 npairs, e_map* map)
 {
   if (!map) return -1;
-
   memset(map, 0, sizeof(*map));
 
   u32 capacity = MAX(8, npairs);
 
   map->size     = npairs;
   map->capacity = capacity;
-  map->keys     = (e_var*)malloc(sizeof(e_var) * capacity);
-  map->vals     = (e_var*)malloc(sizeof(e_var) * capacity);
-  map->hashes   = (u32*)malloc(sizeof(u32) * capacity);
-  if (!map->keys || !map->vals) return -1;
+  map->keys     = (e_var*)calloc(capacity, sizeof(e_var));
+  map->vals     = (e_var*)calloc(capacity, sizeof(e_var));
+  map->hashes   = (u32*)calloc(capacity, sizeof(u32));
+  if (!map->keys || !map->vals || !map->hashes) goto err;
 
   for (u32 i = 0, j = 0; i < (npairs * 2); i += 2, j++) {
-    e_var_shallow_cpy(&vars[i], &map->keys[j]);
-    e_var_shallow_cpy(&vars[i + 1], &map->vals[j]);
+    if (e_var_shallow_cpy(&vars[i], &map->keys[j])) goto err;
+    if (e_var_shallow_cpy(&vars[i + 1], &map->vals[j])) goto err;
 
     e_var_acquire(&map->keys[j]);
     e_var_acquire(&map->vals[j]);
@@ -58,6 +59,12 @@ e_map_init(e_var* vars, u32 npairs, e_map* map)
     // eb_println(&map->vals[j], 1);
   }
   return 0;
+
+err:
+  if (map->keys) free(map->keys);
+  if (map->vals) free(map->vals);
+  if (map->hashes) free(map->hashes);
+  return -1;
 }
 
 void

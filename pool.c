@@ -47,12 +47,12 @@ e_refdobj_pool_init(u32 nbranches, e_refdobj_pool* pool)
   pool->nbranches = nbranches;
 
   // array of pointers to branches!
-  pool->branches = (e_refdobj_branch**)malloc(sizeof(e_refdobj_branch*) * nbranches);
+  pool->branches = (e_refdobj_branch**)calloc(nbranches, sizeof(e_refdobj_branch*));
 
   if (!pool->branches) return -1;
 
   for (u32 i = 0; i < nbranches; i++) {
-    pool->branches[i] = (e_refdobj_branch*)malloc(sizeof(e_refdobj_branch));
+    pool->branches[i] = (e_refdobj_branch*)calloc(1, sizeof(e_refdobj_branch));
     if (!pool->branches[i]) return -1;
 
     __branch_init(pool, pool->branches[i]);
@@ -93,7 +93,7 @@ e_refdobj_pool_acquire(e_refdobj_pool* pool)
 
     /* Setup all new branches. Running from old branch count to new branch count. */
     for (u32 i = old_branch_count; i < pool->nbranches; i++) {
-      pool->branches[i] = (e_refdobj_branch*)malloc(sizeof(e_refdobj_branch));
+      pool->branches[i] = (e_refdobj_branch*)calloc(1, sizeof(e_refdobj_branch));
       if (!pool->branches[i]) return nullptr;
 
       __branch_init(pool, pool->branches[i]);

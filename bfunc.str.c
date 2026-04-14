@@ -40,7 +40,7 @@ eb_str_append(e_var* args, u32 nargs)
   u32 total_len = 0;
   for (u32 i = 0; i < nargs; i++) { total_len += strlen(E_VAR_AS_STRING(&args[0])->s); }
 
-  char* big_s = calloc(total_len + 1, 1);
+  char* big_s = calloc(1, total_len + 1);
 
   char* p = big_s;
   p[0]    = 0;
@@ -63,7 +63,7 @@ eb_str_substr(e_var* args, u32 nargs)
 
   size_t copy_len = MIN(len, s_len - start);
 
-  char* new_s = malloc(copy_len + 1);
+  char* new_s = calloc(1, copy_len + 1);
   strncpy(new_s, s + start, copy_len);
   new_s[copy_len] = 0;
 
@@ -80,7 +80,7 @@ eb_str_repeat(e_var* args, u32 nargs)
 
   int new_len = (int)strlen(s) * times;
 
-  char* new_s = calloc(new_len + 1, 1);
+  char* new_s = calloc(1, new_len + 1);
   new_s[0]    = 0;
 
   char* p = new_s;
@@ -113,7 +113,7 @@ eb_str_rtrim(e_var* args, u32 nargs)
   while (end >= s && isspace(*end)) { end--; }
 
   size_t len   = (end - s) + 1; // include end character
-  char*  new_s = malloc(len + 1);
+  char*  new_s = calloc(1, len + 1);
   strncpy(new_s, s, len);
   new_s[len] = 0;
 
@@ -132,7 +132,7 @@ eb_str_trim(e_var* args, u32 nargs)
   while (end >= s && isspace(*end)) end--;
 
   size_t len   = end - s + 1; // include end
-  char*  new_s = malloc(len + 1);
+  char*  new_s = calloc(1, len);
   strncpy(new_s, s, len);
   new_s[len] = 0;
 
