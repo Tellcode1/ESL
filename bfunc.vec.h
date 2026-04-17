@@ -34,12 +34,15 @@ static inline e_var
 eb_vec_norm(e_var* args, u32 nargs)
 {
   double len = evector_length(&args[0]).val.f;
-  e_vec4 zx  = evector_zero_extend(&args[0]).val.vec4;
+
+  e_vec4 zx;
+  evector_zero_extend(&args[0], zx);
+
   (void)nargs;
   switch (args[0].type) {
-    case E_VARTYPE_VEC2: return e_make_vec2(zx.x / len, zx.y / len);
-    case E_VARTYPE_VEC3: return e_make_vec3(zx.x / len, zx.y / len, zx.x / len);
-    case E_VARTYPE_VEC4: return e_make_vec4(zx.x / len, zx.y / len, zx.x / len, zx.w / len);
+    case E_VARTYPE_VEC2: return e_make_vec2(zx[0] / len, zx[1] / len);
+    case E_VARTYPE_VEC3: return e_make_vec3(zx[0] / len, zx[1] / len, zx[0] / len);
+    case E_VARTYPE_VEC4: return e_make_vec4(zx[0] / len, zx[1] / len, zx[0] / len, zx[3] / len);
     default: break;
   }
   return (e_var){ .type = E_VARTYPE_NULL };
@@ -62,12 +65,13 @@ static inline e_var
 eb_vec_len2(e_var* args, u32 nargs)
 {
   (void)nargs;
-  e_vec4 zx = evector_zero_extend(&args[0]).val.vec4;
+  e_vec4 zx;
+  evector_zero_extend(&args[0], zx);
 
   switch (args[0].type) {
-    case E_VARTYPE_VEC2: return e_var_from_float(zx.x * zx.x + zx.y * zx.y);
-    case E_VARTYPE_VEC3: return e_var_from_float(zx.x * zx.x + zx.y * zx.y + zx.z * zx.z);
-    case E_VARTYPE_VEC4: return e_var_from_float(zx.x * zx.x + zx.y * zx.y + zx.z * zx.z + zx.w * zx.w);
+    case E_VARTYPE_VEC2: return e_var_from_float(zx[0] * zx[0] + zx[1] * zx[1]);
+    case E_VARTYPE_VEC3: return e_var_from_float(zx[0] * zx[0] + zx[1] * zx[1] + zx[2] * zx[2]);
+    case E_VARTYPE_VEC4: return e_var_from_float(zx[0] * zx[0] + zx[1] * zx[1] + zx[2] * zx[2] + zx[3] * zx[3]);
     default: break;
   }
   return (e_var){ .type = E_VARTYPE_NULL };
@@ -77,13 +81,16 @@ static inline e_var
 eb_vec_dist(e_var* args, u32 nargs)
 {
   (void)nargs;
-  e_vec4 x = evector_zero_extend(&args[0]).val.vec4;
-  e_vec4 y = evector_zero_extend(&args[0]).val.vec4;
+  e_vec4 x;
+  e_vec4 y;
 
-  double xl = x.x - y.x;
-  double yl = x.y - y.y;
-  double zl = x.z - y.z; // 0 if not vec3, zero extended
-  double wl = x.w - y.w; // 0 if not vec4, zero extended
+  evector_zero_extend(&args[0], x);
+  evector_zero_extend(&args[1], y);
+
+  double xl = x[0] - y[0];
+  double yl = x[1] - y[1];
+  double zl = x[2] - y[2]; // 0 if not vec3, zero extended
+  double wl = x[3] - y[3]; // 0 if not vec4, zero extended
 
   switch (args[0].type) {
     case E_VARTYPE_VEC2:
@@ -98,13 +105,15 @@ static inline e_var
 eb_vec_dist2(e_var* args, u32 nargs)
 {
   (void)nargs;
-  e_vec4 x = evector_zero_extend(&args[0]).val.vec4;
-  e_vec4 y = evector_zero_extend(&args[0]).val.vec4;
+  e_vec4 x;
+  e_vec4 y;
+  evector_zero_extend(&args[0], x);
+  evector_zero_extend(&args[1], y);
 
-  double xl = x.x - y.x;
-  double yl = x.y - y.y;
-  double zl = x.z - y.z; // 0 if not vec3, zero extended
-  double wl = x.w - y.w; // 0 if not vec4, zero extended
+  double xl = x[0] - y[0];
+  double yl = x[1] - y[1];
+  double zl = x[2] - y[2]; // 0 if not vec3, zero extended
+  double wl = x[3] - y[3]; // 0 if not vec4, zero extended
 
   switch (args[0].type) {
     case E_VARTYPE_VEC2:

@@ -102,7 +102,7 @@ e_var
 eb_cast_bool(e_var* args, u32 nargs)
 {
   (void)nargs;
-  return (e_var){ .type = E_VARTYPE_BOOL, .val.b = (bool)evar_to_int(args[0]) };
+  return (e_var){ .type = E_VARTYPE_BOOL, .val.b = evar_to_bool(args[0]) };
 }
 
 e_var
@@ -138,7 +138,11 @@ eb_cast_list(e_var* args, u32 nargs)
     .val.list = e_refdobj_pool_acquire(&ge_pool),
   };
 
-  e_list_init(args, nargs, E_OBJ_AS_LIST(new_list.val.list)); // acquires the elements. Stack frees them later.
+  if (!new_list.val.list || e_list_init(args, nargs, E_OBJ_AS_LIST(new_list.val.list))) // acquires the elements. Stack frees them later.
+  {
+    e_refdobj_pool_return(&ge_pool, new_list.val.list);
+    return (e_var){ .type = E_VARTYPE_NULL };
+  }
 
   return new_list;
 }

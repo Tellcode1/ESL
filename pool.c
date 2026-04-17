@@ -55,7 +55,7 @@ e_refdobj_pool_init(u32 nbranches, e_refdobj_pool* pool)
     pool->branches[i] = (e_refdobj_branch*)calloc(1, sizeof(e_refdobj_branch));
     if (!pool->branches[i]) return -1;
 
-    __branch_init(pool, pool->branches[i]);
+    if (__branch_init(pool, pool->branches[i])) return -1;
   }
 
   return 0;
@@ -111,7 +111,7 @@ e_refdobj_pool_acquire(e_refdobj_pool* pool)
       br->pool = pool;
 
       /* Reset reference counter */
-      br->leaves[i].refc.ctr = 1;
+      br->leaves[i].refc = 1;
       return &br->leaves[i];
     }
   }

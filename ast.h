@@ -33,7 +33,6 @@
 #include <stdlib.h>
 
 typedef enum e_ast_nodetype {
-  E_AST_NODE_SENTINEL,
   E_AST_NODE_NOP,
 
   E_AST_NODE_ROOT,
@@ -480,6 +479,8 @@ e_getbp(e_token_type type, int* left, int* right)
 }
 
 #define E_GET_NODE e_ast_get_node
+
+__attribute__((always_inline))
 static inline e_ast_node*
 e_ast_get_node(const e_ast* p, int idx)
 {

@@ -25,6 +25,7 @@
 #include "bfunc.io.h"
 
 #include "bvar.h"
+#include "cast.h"
 #include "pool.h"
 #include "var.h"
 
@@ -110,8 +111,8 @@ eb_io_seek(e_var* args, u32 nargs)
   FILE* f = file_from_var(&args[0]);
   if (!f) return (e_var){ .type = E_VARTYPE_NULL };
 
-  int offset      = evar_to_int(args[1]);
-  int relative_to = evar_to_int(args[2]);
+  int offset      = e_cast_to_int(&args[1]);
+  int relative_to = e_cast_to_int(&args[2]);
 
   int c_rel = 0;
   switch (relative_to) {
@@ -197,7 +198,7 @@ eb_io_putc(e_var* args, u32 nargs)
   FILE* f = file_from_var(&args[0]);
   if (!f) return (e_var){ .type = E_VARTYPE_NULL };
 
-  int ch = evar_to_int(args[1]);
+  int ch = e_cast_to_int(&args[1]);
   fputc(ch, f);
 
   return (e_var){

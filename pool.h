@@ -26,7 +26,6 @@
 #define E_POOL_H
 
 #include "mathstrucs.h"
-#include "refcount.h"
 #include "stdafx.h"
 
 /**
@@ -57,8 +56,8 @@ struct e_refdobj_pool;
  * Leaf.
  */
 typedef struct e_refdobj {
-  u8     data[E_REFLEAVE_SIZE];
-  e_refc refc; /* Reference counter */
+  u8  data[E_REFLEAVE_SIZE];
+  int refc; /* Reference counter */
 } e_refdobj;
 
 /**
@@ -67,16 +66,14 @@ typedef struct e_refdobj {
  * doesn't see any free nodes.
  */
 typedef struct e_refdobj_branch {
-  /* If a leaf is in use or not */
   e_refdobj leaves[E_REFLEAVE_COUNT];
-  u64       leaves_in_use;
+  u64       leaves_in_use; // Bitmask
 
   /* Number of free leaves on this branch */
   u32 free_leaves;
 
   /* Parent pool */
   struct e_refdobj_pool* pool;
-
 } e_refdobj_branch;
 
 /**

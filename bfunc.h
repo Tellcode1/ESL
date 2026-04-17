@@ -116,6 +116,9 @@ e_var eb_get_command_line_args(e_var* args, u32 nargs);
 e_var eb_vec2(e_var* args, u32 nargs);
 e_var eb_vec3(e_var* args, u32 nargs);
 e_var eb_vec4(e_var* args, u32 nargs);
+e_var eb_vec2_zero(e_var* args, u32 nargs);
+e_var eb_vec3_zero(e_var* args, u32 nargs);
+e_var eb_vec4_zero(e_var* args, u32 nargs);
 e_var eb_mat3(e_var* args, u32 nargs);
 e_var eb_mat4(e_var* args, u32 nargs);
 
@@ -150,11 +153,15 @@ static const e_builtin_func eb_funcs[] = {
   { "string", "Cast a variable to a string", "fn string(v) -> string", 0xFFFFFFFF, 1, 1, eb_cast_string },
 
   {"vec2", "Cast two floats in to a vec2", "fn vec2(x, y) -> vec2", E_VARTYPE_FLOAT, 2, 2, eb_vec2},
-  {"vec3", "Cast two floats in to a vec2", "fn vec3(x, y, z) -> vec3", E_VARTYPE_FLOAT, 3, 3, eb_vec3},
-  {"vec4", "Cast two floats in to a vec2", "fn vec4(x, y, z, w) -> vec4", E_VARTYPE_FLOAT, 4, 4, eb_vec4},
+  {"vec3", "Cast two floats in to a vec3", "fn vec3(x, y, z) -> vec3", E_VARTYPE_FLOAT, 3, 3, eb_vec3},
+  {"vec4", "Cast two floats in to a vec4", "fn vec4(x, y, z, w) -> vec4", E_VARTYPE_FLOAT, 4, 4, eb_vec4},
 
-  {"mat3", "Cast three vector3's into a mat3", "fn mat3(row0, row1, row2, row3) -> vec2", E_VARTYPE_VEC3, 4, 4, eb_mat3},
-  {"mat4", "Cast three vector4's into a mat3", "fn mat4(row0, row1, row2, row3) -> vec2", E_VARTYPE_VEC4, 4, 4, eb_mat4},
+  {"vec2", "Create an empty vec2 (0 initialized)", "fn vec2::zero() -> vec2", E_VARTYPE_FLOAT, 0, 0, eb_vec2_zero},
+  {"vec3", "Create an empty vec3 (0 initialized)", "fn vec3::zero() -> vec3", E_VARTYPE_FLOAT, 0, 0, eb_vec3_zero},
+  {"vec4", "Create an empty vec4 (0 initialized)", "fn vec4::zero() -> vec4", E_VARTYPE_FLOAT, 0, 0, eb_vec4_zero},
+
+  {"mat3", "Cast three vector3's into a mat3", "fn mat3(row0, row1, row2) -> mat3", E_VARTYPE_VEC3, 3, 3, eb_mat3},
+  {"mat4", "Cast three vector4's into a mat3", "fn mat4(row0, row1, row2, row3) -> mat4", E_VARTYPE_VEC4, 4, 4, eb_mat4},
 
   /* Scalar types */
   { "int", "Cast a variable to a int", "fn int(v) -> int", E_VARTYPE_INT | E_VARTYPE_CHAR | E_VARTYPE_BOOL | E_VARTYPE_FLOAT | E_VARTYPE_STRING,    1,    1, eb_cast_int },

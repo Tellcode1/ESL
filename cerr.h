@@ -25,13 +25,19 @@
 #ifndef E_CERR_H
 #define E_CERR_H
 
-#include "stdafx.h"
-
 #include <stdarg.h>
+#include <stdio.h>
 
 #if defined(__has_attribute) && __has_attribute(format)
 #  define _ATTR_FORMAT(...) __attribute__((format(__VA_ARGS__)))
 #endif
+
+#if defined(__has_attribute) && __has_attribute(warn_unused_result)
+#  define _ATTR_NODISCARD __attribute__((warn_unused_result))
+#else
+#  define _ATTR_NODISCARD
+#endif
+#define _RETURNS_ERRCODE _ATTR_NODISCARD
 
 typedef struct e_filespan {
   const char* file;

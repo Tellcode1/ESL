@@ -51,13 +51,13 @@ main(int argc, char* argv[])
   e_compilation_result compiled       = { 0 };
   FILE*                f              = NULL;
   char*                contents       = NULL;
+  e_str_interner       interner       = { 0 };
+  e_arena              arena          = { 0 };
+  int                  e              = 0;
 
-  if (e_refdobj_pool_init(16, &ge_pool)) return -1;
+  if (e_refdobj_pool_init(16, &ge_pool)) goto ret;
 
-  e_str_interner interner;
-  if (e_str_interner_init(256, &interner)) return -1;
-
-  bool executable = false;
+  if (e_str_interner_init(256, &interner)) goto ret;
 
   const char* out = NULL;
   for (int i = 0; i < argc; i++) {
@@ -75,8 +75,6 @@ main(int argc, char* argv[])
       tokenizer_only = true;
     } else if (strcmp(opt, "ast") == 0) {
       ast_only = true;
-    } else if (strcmp(opt, "executable") == 0 || strcmp(opt, "e") == 0) {
-      executable = true;
     }
   }
 
@@ -90,21 +88,20 @@ main(int argc, char* argv[])
   contents = read_file(in, nullptr);
   if (contents == nullptr) {
     fprintf(stderr, "ec: Failed to load input file: %s\n", strerror(errno));
-    goto err;
+    goto ret;
   }
 
-  e_arena arena = { 0 };
-  int     e     = e_arena_init(1, &arena);
+  e = e_arena_init(1, &arena);
   if (e) {
     /* TODO Add flag to reducce memory allocations? */
     fprintf(stderr, "ec: Failed to initialize arena\n");
-    goto err;
+    goto ret;
   }
 
   e = e_tokenize(contents, in, &interner, &tokens, &ntoks);
   if (e) {
     fprintf(stderr, "ec: Failed to tokenize input string\n");
-    goto err;
+    goto ret;
   }
 
   if (tokenizer_only) {
@@ -118,7 +115,7 @@ main(int argc, char* argv[])
   e = e_ast_init(tokens, ntoks, &interner, &ast);
   if (e) {
     fprintf(stderr, "ec: AST initialization failed\n");
-    goto err;
+    goto ret;
   }
 
   // for (u32 i = 0; i < ntoks; i++) { printf("[%s:%i:%i]\n", tokens[i].span.file, tokens[i].span.line, tokens[i].span.col); }
@@ -126,7 +123,7 @@ main(int argc, char* argv[])
   e = e_ast_parse(&ast, &root);
   if (root < 0 || e) {
     fprintf(stderr, "ec: AST parsing failed\n");
-    goto err;
+    goto ret;
   }
 
   if (ast_only) {
@@ -138,7 +135,6 @@ main(int argc, char* argv[])
     .arena              = &arena,
     .ast                = &ast,
     .root               = root,
-    .executable         = executable,
     .custom_entry_point = nullptr,
     .opt_level          = 0,
   };
@@ -146,31 +142,16 @@ main(int argc, char* argv[])
   e = e_compile(&info, &compiled);
   if (e) {
     fprintf(stderr, "ec: Compilation failed\n");
-    goto err;
+    goto ret;
   }
 
   f = fopen(out, "wb");
   if (!f) {
     perror("Failed to open out file");
-    goto err;
+    goto ret;
   }
 
   e_file_write(&compiled, f);
-
-  fclose(f);
-
-  e_compilation_result_free(&compiled);
-
-  // e_ast_node_free(&ast, root);
-  e_ast_free(&ast);
-
-  e_freetoks(tokens, ntoks);
-
-  e_str_interner_free(&interner);
-
-  e_refdobj_pool_free(&ge_pool);
-
-  free(contents);
 
   size_t        goob = 0;
   e_arena_page* next = arena.root;
@@ -180,17 +161,14 @@ main(int argc, char* argv[])
   }
   printf("%zu pages were allocated\n", goob);
 
-  e_arena_free(&arena);
-
-  return 0;
-
-err:
+ret:
   if (contents) free(contents);
   if (ntoks > 0 && tokens) e_freetoks(tokens, ntoks);
   e_ast_free(&ast);
   e_compilation_result_free(&compiled);
   e_refdobj_pool_free(&ge_pool);
   if (f) fclose(f);
-
-  return -1;
+  e_str_interner_free(&interner);
+  e_arena_free(&arena);
+  return e;
 }

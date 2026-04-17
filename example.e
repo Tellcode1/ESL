@@ -441,14 +441,14 @@ fn main() {
 
 fn file_test()
 {
-  let file = file_open("file", "rb");
+  let file = io::open("file", "r");
   if (file == null)
   {
-    println("Failed to load file: ", "file");
+    println("Failed to load file: ", "file", ": ", io::error());
     return null;
   }
-  let size = file_size(file);
-  let contents = file_read(file);
+  defer io::close(file);
+
+  let contents = io::readln(file);
   println(contents);
-  file_close(file);
 }

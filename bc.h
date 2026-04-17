@@ -96,12 +96,6 @@ typedef enum e_opcode_bck {
   E_OPCODE_CALL,
 
   /**
-   * Load the argument list provided through the command line, empty list if not
-   * executed from the command line or no arguments are present.
-   */
-  E_OPCODE_LOAD_ARG_LIST,
-
-  /**
    * Return to the caller (with a value optionally).
    * Usage(noattr): RET [has_value], has_value is 1 byte boolean.
    * If has_value, the top of the stack is returned to the caller.

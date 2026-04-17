@@ -24,7 +24,6 @@ free_if_stmt(e_ast* ast, e_if_stmt* ifs)
 void
 e_ast_node_free(e_ast* ast, int id)
 {
-  printf("%i, %i\n", id, ast->nodes[id].type);
   if (!ast || id < 0) return;
 
   e_ast_node_val* node = &ast->nodes[id];
@@ -33,7 +32,6 @@ e_ast_node_free(e_ast* ast, int id)
   // node->type = E_AST_NODE_SENTINEL;
 
   switch (node->type) {
-    case E_AST_NODE_SENTINEL:
     case E_AST_NODE_NOP:
     case E_AST_NODE_INT:
     case E_AST_NODE_CHAR:

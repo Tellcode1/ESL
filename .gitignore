@@ -33,7 +33,7 @@
 *.out
 *.app
 *.i*86
-*.x86_64
+*[0]86_64
 *.hex
 
 # Debug files

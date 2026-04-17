@@ -26,15 +26,19 @@
 #define E_MATH_STRUCTURES_H
 
 /* inline */
-typedef struct e_vec2 {
-  double x, y;
-} e_vec2;
-typedef struct e_vec3 {
-  double x, y, z;
-} e_vec3;
-typedef struct e_vec4 {
-  double x, y, z, w;
-} e_vec4;
+#if defined(__has_attribute) && __has_attribute(aligned)
+#  define _ATTR_INLINE(...) __attribute__((aligned(__VA_ARGS__)))
+#else
+#  define _ATTR_INLINE
+#endif
+
+typedef _ATTR_INLINE(16) double e_vec2[2];
+typedef _ATTR_INLINE(16) double e_vec3[3];
+typedef _ATTR_INLINE(16) double e_vec4[4];
+
+#define E_VEC2_INIT(old) { (old)[0], (old)[1] }
+#define E_VEC3_INIT(old) { (old)[0], (old)[1], (old)[2] }
+#define E_VEC4_INIT(old) { (old)[0], (old)[1], (old)[2], (old)[3] }
 
 /* Ref counted because they are bigly big */
 typedef struct e_mat3 {

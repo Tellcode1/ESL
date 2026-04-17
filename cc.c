@@ -82,59 +82,59 @@ e_binary_operator_to_opcode(e_operator op)
   return -1;
 }
 
-static inline e_opcode e_binary_operator_to_opcode(e_operator op);
-static char*           mk_name(const e_compiler* cc, const char* name);
+static inline e_opcode       e_binary_operator_to_opcode(e_operator op);
+static _ATTR_NODISCARD char* mk_name(const e_compiler* cc, const char* name);
 
-static inline ecc_defer_scope* defer_push_scope(e_compiler* cc);
-static inline void             defer_pop_scope(e_compiler* cc);
-static inline int              defer_emit_current_scope(e_compiler* cc);
-static inline int              defer_emit_all_scopes(e_compiler* cc);
-static inline u32              defer_get_current_depth(e_compiler* cc);
-static inline int              defer_emit_to_depth(e_compiler* cc, u32 target_depth);
+static inline ecc_defer_scope*     defer_push_scope(e_compiler* cc);
+static inline void                 defer_pop_scope(e_compiler* cc);
+static inline _RETURNS_ERRCODE int defer_emit_current_scope(e_compiler* cc);
+static inline _RETURNS_ERRCODE int defer_emit_all_scopes(e_compiler* cc);
+static inline _RETURNS_ERRCODE int defer_emit_to_depth(e_compiler* cc, u32 target_depth);
+static inline u32                  defer_get_current_depth(e_compiler* cc);
 
 static inline u32  label_find(u32 label_id, const ecc_label_table* table);
 static inline void emit_and_record_jmp(e_compiler* cc, e_opcode opcode, u32 label_id);
 static inline void define_and_emit_label(e_compiler* cc, u32 label_id);
 
-static inline void                   append_defer_entry(e_compiler* cc, int* exprs, u32 nexprs);
-static int                           append_function_entry(e_arena* a, ecc_function_table* funcs, const e_function* func);
-static int                           append_struct_decleration(e_arena* a, const char* name, ecc_struct_information* deposit);
+static _RETURNS_ERRCODE int          append_defer_entry(e_compiler* cc, int* exprs, u32 nexprs);
+static _RETURNS_ERRCODE int          append_function_entry(e_arena* a, ecc_function_table* funcs, const e_function* func);
+static _RETURNS_ERRCODE int          append_struct_decleration(e_arena* a, const char* name, ecc_struct_information* deposit);
 static inline ecc_label_jumps_table* append_label_entry(e_arena* a, u32 label_id, ecc_label_table* table);
 
-static int collect_struct_declerations(e_compiler* cc, int* stmts, u32 nstmts, ecc_struct_information* deposit);
+static _RETURNS_ERRCODE int collect_struct_declerations(e_compiler* cc, int* stmts, u32 nstmts, ecc_struct_information* deposit);
 
-static inline int  compiler_make_fork(const e_compiler* old_c, e_compiler* new_c);
-static inline void compiler_join_fork(const e_compiler* copy, e_compiler* cc);
+static inline _RETURNS_ERRCODE int compiler_make_fork(const e_compiler* old_c, e_compiler* new_c);
+static inline void                 compiler_join_fork(const e_compiler* copy, e_compiler* cc);
 
-static inline int emit_lvalue_assign_prologue(e_compiler* cc, e_lval lv);
-static inline int emit_lvalue_assign_epilogue(e_compiler* cc, e_lval lv);
+static inline _RETURNS_ERRCODE int emit_lvalue_assign_prologue(e_compiler* cc, e_lval lv);
+static inline _RETURNS_ERRCODE int emit_lvalue_assign_epilogue(e_compiler* cc, e_lval lv);
 
-static int compile_literal_variable(e_compiler* cc, e_var v);
-static int compile_literal(e_compiler* cc, int node);
-static int compile_list(e_compiler* cc, int node);
-static int compile_map(e_compiler* cc, int node);
-static int compile_function_definition(e_compiler* cc, int node);
-static int compile_binary_op(e_compiler* cc, int node);
-static int compile_unary_op(e_compiler* cc, int node);
-static int compile_index(e_compiler* cc, int node);
-static int compile_index_assign(e_compiler* cc, int node);
-static int compile_index_compound(e_compiler* cc, int node);
-static int compile_function_call(e_compiler* cc, int node);
-static int compile_if_statement(e_compiler* cc, int node);
-static int compile_while_statement(e_compiler* cc, int node);
-static int compile_for_statement(e_compiler* cc, int node);
-static int compile_member_access(e_compiler* cc, int node);
-static int compile_assign(e_compiler* cc, int node);
-static int compile_return(e_compiler* cc, int node);
-static int compile_struct_constructor(e_compiler* fork, e_filespan span, const ecc_struct_information* struc);
-static int compile_struct_decleration(e_compiler* cc, int node);
-static int compile_variable_decleration(e_compiler* cc, int node);
-static int compile_variable_load(e_compiler* cc, int node);
-static int compile_namespace_decleration(e_compiler* cc, int node);
-static int compile_builtin_structure(e_compiler* cc, const e_builtin_struct* b);
-static int compile_builtin_structures(e_compiler* cc);
-static int compile_root(e_compiler* cc, int node);
-static int compile(e_compiler* cc, int node);
+static _RETURNS_ERRCODE int compile_literal_variable(e_compiler* cc, e_var v);
+static _RETURNS_ERRCODE int compile_literal(e_compiler* cc, int node);
+static _RETURNS_ERRCODE int compile_list(e_compiler* cc, int node);
+static _RETURNS_ERRCODE int compile_map(e_compiler* cc, int node);
+static _RETURNS_ERRCODE int compile_function_definition(e_compiler* cc, int node);
+static _RETURNS_ERRCODE int compile_binary_op(e_compiler* cc, int node);
+static _RETURNS_ERRCODE int compile_unary_op(e_compiler* cc, int node);
+static _RETURNS_ERRCODE int compile_index(e_compiler* cc, int node);
+static _RETURNS_ERRCODE int compile_index_assign(e_compiler* cc, int node);
+static _RETURNS_ERRCODE int compile_index_compound(e_compiler* cc, int node);
+static _RETURNS_ERRCODE int compile_function_call(e_compiler* cc, int node);
+static _RETURNS_ERRCODE int compile_if_statement(e_compiler* cc, int node);
+static _RETURNS_ERRCODE int compile_while_statement(e_compiler* cc, int node);
+static _RETURNS_ERRCODE int compile_for_statement(e_compiler* cc, int node);
+static _RETURNS_ERRCODE int compile_member_access(e_compiler* cc, int node);
+static _RETURNS_ERRCODE int compile_assign(e_compiler* cc, int node);
+static _RETURNS_ERRCODE int compile_return(e_compiler* cc, int node);
+static _RETURNS_ERRCODE int compile_struct_constructor(e_compiler* fork, e_filespan span, const ecc_struct_information* struc);
+static _RETURNS_ERRCODE int compile_struct_decleration(e_compiler* cc, int node);
+static _RETURNS_ERRCODE int compile_variable_decleration(e_compiler* cc, int node);
+static _RETURNS_ERRCODE int compile_variable_load(e_compiler* cc, int node);
+static _RETURNS_ERRCODE int compile_namespace_decleration(e_compiler* cc, int node);
+static _RETURNS_ERRCODE int compile_builtin_structure(e_compiler* cc, const e_builtin_struct* b);
+static _RETURNS_ERRCODE int compile_builtin_structures(e_compiler* cc);
+static _RETURNS_ERRCODE int compile_root(e_compiler* cc, int node);
+static _RETURNS_ERRCODE int compile(e_compiler* cc, int node);
 
 static inline ecc_defer_scope*
 defer_push_scope(e_compiler* cc)
@@ -142,11 +142,13 @@ defer_push_scope(e_compiler* cc)
   const u32 init_defer_entry_capacity = 8;
 
   ecc_defer_scope* scope = calloc(1, sizeof(ecc_defer_scope));
-  scope->entries         = calloc(init_defer_entry_capacity, sizeof(ecc_defer_entry));
-  scope->count           = 0;
-  scope->capacity        = init_defer_entry_capacity;
-  scope->parent          = cc->defer_stack;
-  cc->defer_stack        = scope;
+  if (scope) {
+    scope->entries  = calloc(init_defer_entry_capacity, sizeof(ecc_defer_entry));
+    scope->count    = 0;
+    scope->capacity = init_defer_entry_capacity;
+    scope->parent   = cc->defer_stack;
+    cc->defer_stack = scope;
+  }
   return scope;
 }
 
@@ -159,22 +161,29 @@ defer_pop_scope(e_compiler* cc)
   free(scope);
 }
 
-static inline void
+static inline int
 append_defer_entry(e_compiler* cc, int* exprs, u32 nexprs)
 {
   ecc_defer_scope* scope = cc->defer_stack;
   if (scope->count >= scope->capacity) {
-    scope->capacity *= 2;
-    scope->entries = realloc(scope->entries, sizeof(ecc_defer_entry) * scope->capacity);
+    u32              new_capacity = scope->capacity = 2;
+    ecc_defer_entry* new_entries                    = realloc(scope->entries, sizeof(ecc_defer_entry) * scope->capacity);
+    if (!new_entries) return -1;
+
+    scope->entries  = new_entries;
+    scope->capacity = new_capacity;
   }
 
   for (u32 i = 0; i < nexprs; i++) {
     if (E_GET_NODE(cc->ast, exprs[i])->type == E_AST_NODE_DEFER) {
       cerror(E_GET_NODE(cc->ast, exprs[i])->common.span, "Defer statement in another defer statement\n");
+      return -1;
     }
   }
 
   scope->entries[scope->count++] = (ecc_defer_entry){ .exprs = exprs, .nexprs = nexprs };
+
+  return 0;
 }
 
 // LIFO
@@ -498,6 +507,7 @@ e_free_value(e_lval* lv)
 {
   if (lv->type == E_LVAL_VAR) { /* free(lv->val.var.name); */
   }
+  memset(lv, 0, sizeof(*lv));
 }
 
 /* Returns 0 on succcess. */
@@ -515,11 +525,13 @@ emit_lvalue_assign_prologue(e_compiler* cc, e_lval lv)
     }
 
     e_lval left = e_make_value(cc, lv.val.index.left_node);
-    emit_lvalue_assign_prologue(cc, left);
+
+    int e = emit_lvalue_assign_prologue(cc, left);
+    if (e) return e;
 
     // int e = compile(cc, lv.val.index.left_node);
     // if (e < 0) return e;
-    int e = e_emit_lvalue_load(cc, left);
+    e = e_emit_lvalue_load(cc, left);
     if (e < 0) return e;
 
     e = compile(cc, lv.val.index.index_node);
@@ -533,9 +545,10 @@ emit_lvalue_assign_prologue(e_compiler* cc, e_lval lv)
     }
 
     e_lval base = e_make_value(cc, lv.val.member.base);
-    emit_lvalue_assign_prologue(cc, base);
+    int    e    = emit_lvalue_assign_prologue(cc, base);
+    if (e) return e;
 
-    int e = e_emit_lvalue_load(cc, base);
+    e = e_emit_lvalue_load(cc, base);
     if (e) return e;
 
     return 0;
@@ -558,16 +571,17 @@ emit_lvalue_assign_epilogue(e_compiler* cc, e_lval lv)
     e_emit_instruction(cc, E_OPCODE_INDEX_ASSIGN);
 
     e_lval base = e_make_value(cc, lv.val.index.left_node);
-    emit_lvalue_assign_epilogue(cc, base);
-    return 0;
+    int    e    = emit_lvalue_assign_epilogue(cc, base);
+
+    return e;
   } else if (lv.type == E_LVAL_MEMBER) {
     e_emit_instruction(cc, E_OPCODE_MEMBER_ASSIGN);
     e_emit_u32(cc, e_hash_fnv(lv.val.member.member, strlen(lv.val.member.member)));
 
     e_lval base = e_make_value(cc, lv.val.member.base);
-    emit_lvalue_assign_epilogue(cc, base);
+    int    e    = emit_lvalue_assign_epilogue(cc, base);
 
-    return 0;
+    return e;
   }
   return -1;
 }
@@ -806,7 +820,8 @@ compile_list(e_compiler* cc, int node)
   u32 nelems = E_GET_NODE(cc->ast, node)->list.nelems;
   for (u32 i = 0; i < nelems; i++) {
     int elem_node = E_GET_NODE(cc->ast, node)->list.elems[i];
-    compile(cc, elem_node);
+    int e         = compile(cc, elem_node);
+    if (e) return e;
   }
 
   e_emit_instruction(cc, E_OPCODE_MK_LIST);
@@ -818,12 +833,17 @@ compile_list(e_compiler* cc, int node)
 static int
 compile_map(e_compiler* cc, int node)
 {
+  int e = 0;
+
   u32 nelems = E_GET_NODE(cc->ast, node)->map.npairs;
   for (u32 i = 0; i < nelems; i++) {
     int key = E_GET_NODE(cc->ast, node)->map.keys[i];
     int val = E_GET_NODE(cc->ast, node)->map.values[i];
-    compile(cc, key);
-    compile(cc, val);
+
+    e = compile(cc, key);
+    if (e) return e;
+    e = compile(cc, val);
+    if (e) return e;
   }
 
   e_emit_instruction(cc, E_OPCODE_MK_MAP);
@@ -994,7 +1014,8 @@ compile_binary_op(e_compiler* cc, int node)
     e_emit_instruction(cc, opcode);
 
     /* Emit actual assign instruction (takes value produced earlier and assigns it) */
-    emit_lvalue_assign_epilogue(cc, lv);
+    e = emit_lvalue_assign_epilogue(cc, lv);
+    if (e) goto err;
 
     e_free_value(&lv);
   } else {
@@ -1061,7 +1082,8 @@ compile_unary_op(e_compiler* cc, int node)
     e_emit_u8(cc, true); // is_compound flag
 
     /* Emit actual assign instruction (takes value produced earlier and assigns it) */
-    emit_lvalue_assign_epilogue(cc, lv);
+    e = emit_lvalue_assign_epilogue(cc, lv);
+    if (e) goto err;
 
     e_free_value(&lv);
   } else {
@@ -1490,7 +1512,7 @@ compile_for_statement(e_compiler* cc, int node)
   // JZ END_LABEL
   emit_and_record_jmp(cc, E_OPCODE_JZ, end_label);
 
-  defer_push_scope(cc);
+  if (!defer_push_scope(cc)) goto ERR;
 
   u32 old_depth = cc->loop->defer_depth;
   if (cc->loop) cc->loop->defer_depth = defer_get_current_depth(cc);
@@ -1510,7 +1532,9 @@ compile_for_statement(e_compiler* cc, int node)
    * iterator region so all iterator values are
    * correct.
    */
-  defer_emit_current_scope(cc);
+  e = defer_emit_current_scope(cc);
+  if (e) goto ERR;
+
   defer_pop_scope(cc);
 
   if (cc->loop) cc->loop->defer_depth = old_depth;
@@ -1629,14 +1653,17 @@ compile_return(e_compiler* cc, int node)
   int e = 0;
   if (E_GET_NODE(cc->ast, node)->ret.has_return_value) {
     /* Compile the return value */
-    compile(cc, E_GET_NODE(cc->ast, node)->ret.expr_id);
+    e = compile(cc, E_GET_NODE(cc->ast, node)->ret.expr_id);
+    if (e) return e;
 
     e = defer_emit_all_scopes(cc);
+    if (e) return e;
 
     e_emit_instruction(cc, E_OPCODE_RETURN);
     e_emit_u8(cc, true); // Specify that we're returning a value
   } else {
     e = defer_emit_all_scopes(cc);
+    if (e) return e;
 
     e_emit_instruction(cc, E_OPCODE_RETURN);
     e_emit_u8(cc, false); /* Returning void! */
@@ -1895,50 +1922,15 @@ compile_root(e_compiler* cc, int node)
     if (e) { return e; }
   }
 
-  // Compiling headless. Emit a halt and return.
-  if (!cc->info->executable) {
-    e_emit_instruction(cc, E_OPCODE_HALT);
-    e_emit_u32(cc, 0);
-    return 0; // Done!
-  }
-
-  const char* custom_entry_point = cc->info->custom_entry_point;
-
-  /* main if not specified. */
-  u32 entry_point_hash = e_hash_fnv("main", strlen("main"));
-  if (custom_entry_point != nullptr) { entry_point_hash = e_hash_fnv(custom_entry_point, strlen(custom_entry_point)); }
-
-  /* Find entry point and ensure it doesn't ask for any arguments. */
-  ecc_function_table* func_table = cc->function_table;
-
-  bool found             = false;
-  u32  entry_point_nargs = 0;
-  for (u32 i = 0; i < func_table->functions_count; i++) {
-    if (func_table->functions[i].name_hash == entry_point_hash) {
-      found             = true;
-      entry_point_nargs = func_table->functions[i].nargs;
-    }
-  }
-
-  if (!found) {
-    cerror(root->common.span, "Entry point undefined\n");
-    return -1;
-  }
-
-  if (entry_point_nargs > 1) {
-    cerror(root->common.span, "Entry point must either accept 1 argument (command line argument list) or no arguments at all.\n");
-    return -1;
-  }
-
-  /* Push command line argument list to the stack, right before main as an argument. */
-  if (entry_point_nargs == 1) { e_emit_instruction(cc, E_OPCODE_LOAD_ARG_LIST); }
-
-  /* CALL to main */
-  e_emit_instruction(cc, E_OPCODE_CALL);
-  e_emit_u32(cc, entry_point_hash);
-  e_emit_u16(cc, entry_point_nargs);
-
-  return 0;
+  /**
+   * Done with initialization!
+   * Now we emit a HALT and expect
+   * the VM to call main() or its desired
+   * function (say, update())
+   */
+  e_emit_instruction(cc, E_OPCODE_HALT);
+  e_emit_u32(cc, 0);
+  return 0; // Done!
 }
 
 static int
@@ -2029,8 +2021,7 @@ compile(e_compiler* cc, int node)
     case E_AST_NODE_DEFER: {
       int* stmts  = E_GET_NODE(cc->ast, node)->defer.stmts;
       u32  nstmts = E_GET_NODE(cc->ast, node)->defer.nstmts;
-      append_defer_entry(cc, stmts, nstmts);
-      return 0;
+      return append_defer_entry(cc, stmts, nstmts);
     }
 
     case E_AST_NODE_NAMESPACE_DECL: {

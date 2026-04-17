@@ -26,9 +26,11 @@
 
 #include "bc.h"
 #include "bfunc.h"
+#include "cast.h"
 #include "fn.h"
 #include "list.h"
 #include "map.h"
+#include "mathstrucs.h"
 #include "operate.h"
 #include "perr.h"
 #include "pool.h"
@@ -247,13 +249,6 @@ e_exec(const e_exec_info* info)
         break;
       }
 
-      case E_OPCODE_LOAD_ARG_LIST: {
-        e_var args = eb_get_command_line_args(NULL, 0);
-        e_stack_push(info->stack, &args);
-        e_var_release(&args); // release our copy
-        break;
-      }
-
       case E_OPCODE_LITERAL: {
         u16 id = e_read_u16(&ip);
         assert(id < info->nliterals);
@@ -359,13 +354,14 @@ e_exec(const e_exec_info* info)
 
         e_vartype type = e_stack_top(info->stack)->type;
         if (type == E_VARTYPE_VEC2 || type == E_VARTYPE_VEC3 || type == E_VARTYPE_VEC4) {
-          e_var v = evector_zero_extend(e_stack_top(info->stack));
+          e_vec4 v;
+          evector_zero_extend(e_stack_top(info->stack), v);
 
           double d = DBL_MAX;
-          if (member == e_hash_fnv("x", 1)) { d = v.val.vec4.x; }
-          if (member == e_hash_fnv("y", 1)) { d = v.val.vec4.y; }
-          if (member == e_hash_fnv("z", 1)) { d = v.val.vec4.z; }
-          if (member == e_hash_fnv("w", 1)) { d = v.val.vec4.w; }
+          if (member == e_hash_fnv("x", 1)) { d = v[0]; }
+          if (member == e_hash_fnv("y", 1)) { d = v[1]; }
+          if (member == e_hash_fnv("z", 1)) { d = v[2]; }
+          if (member == e_hash_fnv("w", 1)) { d = v[3]; }
 
           // Vectors are not ref counted. This is safe.
           push = (e_var){
@@ -409,13 +405,13 @@ e_exec(const e_exec_info* info)
           const u32 w = e_hash_fnv("w", 1);
           // printf("Vector assign\n");
           if (member == x) {
-            struc->val.vec4.x = value->val.f;
+            struc->val.vec4[0] = value->val.f;
           } else if (member == y) {
-            struc->val.vec4.y = value->val.f;
+            struc->val.vec4[1] = value->val.f;
           } else if (type != E_VARTYPE_VEC2 && member == z) {
-            struc->val.vec4.z = value->val.f;
+            struc->val.vec4[2] = value->val.f;
           } else if (type == E_VARTYPE_VEC4 && member == w) {
-            struc->val.vec4.w = value->val.f;
+            struc->val.vec4[3] = value->val.f;
           }
         } else if (struc->type == E_VARTYPE_STRUCT) {
           e_struct* st = E_VAR_AS_STRUCT(struc);
@@ -628,7 +624,7 @@ e_exec(const e_exec_info* info)
           e_list* list = stack[stack_size - 2].type == E_VARTYPE_LIST ? E_VAR_AS_LIST(&stack[stack_size - 2]) : NULL;
           if (!list) { return (e_var){ .type = E_VARTYPE_NULL }; }
 
-          int idx = evar_to_int(stack[stack_size - 1]);
+          int idx = e_cast_to_int(&stack[stack_size - 1]);
 
           if (list && idx >= 0 && (u64)idx < list->size) {
             push = list->vars[idx];
@@ -647,17 +643,17 @@ e_exec(const e_exec_info* info)
             e_var_acquire(&push);
           } // else push is null var
         } else if (left_type == E_VARTYPE_VEC2) {
-          e_vec2 v2  = stack[stack_size - 2].val.vec2;
-          int    idx = evar_to_int(stack[stack_size - 1]);
-          if (idx < 2) { push = (e_var){ .type = E_VARTYPE_FLOAT, .val.f = idx == 0 ? v2.x : v2.y }; }
+          e_vec2 v2  = E_VEC2_INIT(stack[stack_size - 2].val.vec2);
+          int    idx = e_cast_to_int(&stack[stack_size - 1]);
+          if (idx < 2) { push = (e_var){ .type = E_VARTYPE_FLOAT, .val.f = idx == 0 ? v2[0] : v2[1] }; }
         } else if (left_type == E_VARTYPE_VEC3) {
-          e_vec3 v3  = stack[stack_size - 2].val.vec3;
-          int    idx = evar_to_int(stack[stack_size - 1]);
-          if (idx < 3) { push = (e_var){ .type = E_VARTYPE_FLOAT, .val.f = idx == 0 ? v3.x : idx == 1 ? v3.y : v3.z }; }
+          e_vec3 v3  = E_VEC3_INIT(stack[stack_size - 2].val.vec3);
+          int    idx = e_cast_to_int(&stack[stack_size - 1]);
+          if (idx < 3) { push = (e_var){ .type = E_VARTYPE_FLOAT, .val.f = idx == 0 ? v3[0] : idx == 1 ? v3[1] : v3[2] }; }
         } else if (left_type == E_VARTYPE_VEC4) {
-          e_vec4 v4  = stack[stack_size - 2].val.vec4;
-          int    idx = evar_to_int(stack[stack_size - 1]);
-          if (idx < 4) { push = (e_var){ .type = E_VARTYPE_FLOAT, .val.f = idx == 0 ? v4.x : idx == 1 ? v4.y : idx == 2 ? v4.z : v4.w }; }
+          e_vec4 v4  = E_VEC4_INIT(stack[stack_size - 2].val.vec4);
+          int    idx = e_cast_to_int(&stack[stack_size - 1]);
+          if (idx < 4) { push = (e_var){ .type = E_VARTYPE_FLOAT, .val.f = idx == 0 ? v4[0] : idx == 1 ? v4[1] : idx == 2 ? v4[2] : v4[3] }; }
         }
 
         e_stack_pop(info->stack); // pop index
@@ -679,7 +675,7 @@ e_exec(const e_exec_info* info)
 
         if (base->type == E_VARTYPE_LIST) {
           e_list* list = E_VAR_AS_LIST(base);
-          int     idx  = evar_to_int(*index);
+          int     idx  = e_cast_to_int(&*index);
 
           e_var* slot = &list->vars[idx];
           e_var_release(slot);
@@ -695,17 +691,17 @@ e_exec(const e_exec_info* info)
           TRY_V(e_var_shallow_cpy(value, slot));
           e_var_acquire(slot);
         } else if (base->type == E_VARTYPE_VEC2 || base->type == E_VARTYPE_VEC3 || base->type == E_VARTYPE_VEC4) {
-          int    idx = evar_to_int(*index);
-          double f   = evar_to_float(*value);
+          int    idx = e_cast_to_int(&*index);
+          double f   = e_cast_to_float(value);
 
           if (idx == 0) {
-            base->val.vec4.x = f;
+            base->val.vec4[0] = f;
           } else if (idx == 1) {
-            base->val.vec4.y = f;
+            base->val.vec4[1] = f;
           } else if (idx == 2) {
-            base->val.vec4.z = f;
+            base->val.vec4[2] = f;
           } else if (idx == 3) {
-            base->val.vec4.w = f;
+            base->val.vec4[3] = f;
           }
         }
 
@@ -793,6 +789,11 @@ e_script_call(e_script* s, const char* func_name, e_var* args, u32 nargs)
         .extern_vars   = s->extern_vars,
         .nextern_vars  = s->nextern_vars,
       };
+
+      if (s->compiled.functions[i].nargs != nargs) {
+        fprintf(stderr, "Function expects %u arguments (%u were provided)\n", s->compiled.functions[i].nargs, nargs);
+        return (e_var){ .type = E_VARTYPE_NULL };
+      }
 
       e_stack_push_frame(info.stack);
       e_var r = e_exec(&info);

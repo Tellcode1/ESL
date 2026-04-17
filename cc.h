@@ -75,18 +75,6 @@ typedef struct ecc_info {
   const e_builtin_var* hook_vars;
   u32                  nhooked_vars;
 
-  /**
-   * If true, the compiler will emit code to
-   * jump to main on start.
-   * Otherwise, the program will HALT after global
-   * initialization is finished.
-   *
-   * If a program is compiled without this flag, and
-   * is attempted to be run using eexec, the function
-   * will simply initialize global variables and then exit.
-   */
-  bool executable;
-
   int opt_level; // 0 or 1/2/3
 } ecc_info;
 

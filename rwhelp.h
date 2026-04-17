@@ -29,7 +29,6 @@
 #include "cc.h"
 #include "fn.h"
 #include "pool.h"
-#include "refcount.h"
 #include "stdafx.h"
 #include "var.h"
 
@@ -108,7 +107,7 @@ e_file_load(FILE* f, void** root_allocation, u32* ninstructions, u8** instructio
         alloc += sizeof(e_refdobj);
 
         /* Initialize ref counter to 1. Not used for literals but VM expects it */
-        lit->val.s->refc.ctr = 1;
+        lit->val.s->refc = 1;
 
         E_VAR_AS_STRING(lit)->s = (char*)(alloc);
         alloc += len + 1;

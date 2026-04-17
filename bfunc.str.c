@@ -24,6 +24,7 @@
 
 #include "bfunc.str.h"
 
+#include "cast.h"
 #include "pool.h"
 #include "stdafx.h"
 #include "var.h"
@@ -55,8 +56,8 @@ eb_str_substr(e_var* args, u32 nargs)
   (void)nargs;
 
   const char* s     = E_VAR_AS_STRING(&args[0])->s;
-  int         start = evar_to_int(args[1]);
-  int         len   = evar_to_int(args[2]);
+  int         start = e_cast_to_int(&args[1]);
+  int         len   = e_cast_to_int(&args[2]);
 
   size_t s_len = strlen(s);
   if (start > s_len) { return (e_var){ .type = E_VARTYPE_INT, .val.i = -1 }; }
@@ -76,7 +77,7 @@ eb_str_repeat(e_var* args, u32 nargs)
   (void)nargs;
 
   const char* s     = E_VAR_AS_STRING(&args[0])->s;
-  int         times = evar_to_int(args[1]);
+  int         times = e_cast_to_int(&args[1]);
 
   int new_len = (int)strlen(s) * times;
 

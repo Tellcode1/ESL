@@ -140,9 +140,8 @@ void e_var_free(e_var* var);
 /**
  * Extend the given vector to be a vec4.
  * Fills the remaining slots with 0.
- * null is input is not a vector.
  */
-e_var evector_zero_extend(const e_var* v);
+int evector_zero_extend(const e_var* v, e_vec4 out);
 
 e_var evector_length(const e_var* v);
 
@@ -235,9 +234,9 @@ evar_to_bool(e_var v)
     case E_VARTYPE_LIST: return E_VAR_AS_LIST(&v)->size != 0;
     case E_VARTYPE_MAP: return E_VAR_AS_MAP(&v)->size != 0;
     case E_VARTYPE_STRUCT: return E_VAR_AS_STRUCT(&v)->member_count != 0;
-    case E_VARTYPE_VEC2: return (bool)(v.val.vec2.x != 0 && v.val.vec2.y != 0);
-    case E_VARTYPE_VEC3: return (bool)(v.val.vec3.x != 0 && v.val.vec3.y != 0 && v.val.vec3.z != 0);
-    case E_VARTYPE_VEC4: return (bool)(v.val.vec4.x != 0 && v.val.vec4.y != 0 && v.val.vec4.z != 0 && v.val.vec4.w != 0);
+    case E_VARTYPE_VEC2: return (bool)(v.val.vec2[0] != 0 && v.val.vec2[1] != 0);
+    case E_VARTYPE_VEC3: return (bool)(v.val.vec3[0] != 0 && v.val.vec3[1] != 0 && v.val.vec3[2] != 0);
+    case E_VARTYPE_VEC4: return (bool)(v.val.vec4[0] != 0 && v.val.vec4[1] != 0 && v.val.vec4[2] != 0 && v.val.vec4[3] != 0);
     default: return false;
   }
 }
@@ -245,27 +244,30 @@ evar_to_bool(e_var v)
 static inline e_var
 e_make_vec4(double x, double y, double z, double w)
 {
-  e_var out    = { 0 };
-  out.type     = E_VARTYPE_VEC4;
-  out.val.vec4 = (e_vec4){ .x = x, .y = y, .z = z, .w = w };
+  e_var out = {
+    .type     = E_VARTYPE_VEC4,
+    .val.vec4 = { x, y, z, w },
+  };
   return out;
 }
 
 static inline e_var
 e_make_vec3(double x, double y, double z)
 {
-  e_var out    = { 0 };
-  out.type     = E_VARTYPE_VEC3;
-  out.val.vec3 = (e_vec3){ .x = x, .y = y, .z = z };
+  e_var out = {
+    .type     = E_VARTYPE_VEC3,
+    .val.vec3 = { x, y, z },
+  };
   return out;
 }
 
 static inline e_var
 e_make_vec2(double x, double y)
 {
-  e_var out    = { 0 };
-  out.type     = E_VARTYPE_VEC2;
-  out.val.vec4 = (e_vec4){ .x = x, .y = y };
+  e_var out = {
+    .type     = E_VARTYPE_VEC2,
+    .val.vec2 = { x, y },
+  };
   return out;
 }
 

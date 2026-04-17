@@ -25,37 +25,38 @@
 #ifndef E_MATH_BUILTIN_FUNCTIONS_H
 #define E_MATH_BUILTIN_FUNCTIONS_H
 
+#include "cast.h"
 #include "var.h"
 
 #include <math.h>
 
 // clang-format off
-static inline e_var eb_sin(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = sin(evar_to_float(args[0]))}}; }
-static inline e_var eb_cos(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = cos(evar_to_float(args[0]))}}; }
-static inline e_var eb_tan(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = tan(evar_to_float(args[0]))}}; }
-static inline e_var eb_asin(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = asin(evar_to_float(args[0]))}}; }
-static inline e_var eb_acos(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = acos(evar_to_float(args[0]))}}; }
-static inline e_var eb_atan(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = atan(evar_to_float(args[0]))}}; }
-static inline e_var eb_atan2(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = atan2(evar_to_float(args[0]),evar_to_float(args[1]))}}; }
-static inline e_var eb_sinh(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = sinh(evar_to_float(args[0]))}}; }
-static inline e_var eb_cosh(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = cosh(evar_to_float(args[0]))}}; }
-static inline e_var eb_tanh(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = tanh(evar_to_float(args[0]))}}; }
-static inline e_var eb_acosh(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = acosh(evar_to_float(args[0]))}}; }
-static inline e_var eb_asinh(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = asinh(evar_to_float(args[0]))}}; }
-static inline e_var eb_atanh(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = atanh(evar_to_float(args[0]))}}; }
-static inline e_var eb_exp(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = exp(evar_to_float(args[0]))}}; }
-static inline e_var eb_log(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = log(evar_to_float(args[0]))}}; }
-static inline e_var eb_log10(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = log10(evar_to_float(args[0]))}}; }
-static inline e_var eb_pow(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = pow(evar_to_float(args[0]), evar_to_float(args[1]))}}; }
-static inline e_var eb_sqrt(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = sqrt(evar_to_float(args[0]))}}; }
-static inline e_var eb_ceil(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = ceil(evar_to_float(args[0]))}}; }
-static inline e_var eb_floor(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = floor(evar_to_float(args[0]))}}; }
-static inline e_var eb_fmod(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = fmod(evar_to_float(args[0]),evar_to_float(args[1]))}}; }
-static inline e_var eb_round(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = round(evar_to_float(args[0]))}}; }
-static inline e_var eb_trunc(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = trunc(evar_to_float(args[0]))}}; }
-static inline e_var eb_abs(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = fabs(evar_to_float(args[0]))}}; }
-static inline e_var eb_hypot(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = hypot(evar_to_float(args[0]), evar_to_float(args[1]))}}; }
-static inline e_var eb_signbit(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_INT, .val = {.i = signbit(evar_to_float(args[0]))}}; }
+static inline e_var eb_sin(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = sin(e_cast_to_float(&args[0]))}}; }
+static inline e_var eb_cos(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = cos(e_cast_to_float(&args[0]))}}; }
+static inline e_var eb_tan(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = tan(e_cast_to_float(&args[0]))}}; }
+static inline e_var eb_asin(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = asin(e_cast_to_float(&args[0]))}}; }
+static inline e_var eb_acos(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = acos(e_cast_to_float(&args[0]))}}; }
+static inline e_var eb_atan(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = atan(e_cast_to_float(&args[0]))}}; }
+static inline e_var eb_atan2(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = atan2(e_cast_to_float(&args[0]),e_cast_to_float(&args[1]))}}; }
+static inline e_var eb_sinh(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = sinh(e_cast_to_float(&args[0]))}}; }
+static inline e_var eb_cosh(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = cosh(e_cast_to_float(&args[0]))}}; }
+static inline e_var eb_tanh(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = tanh(e_cast_to_float(&args[0]))}}; }
+static inline e_var eb_acosh(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = acosh(e_cast_to_float(&args[0]))}}; }
+static inline e_var eb_asinh(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = asinh(e_cast_to_float(&args[0]))}}; }
+static inline e_var eb_atanh(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = atanh(e_cast_to_float(&args[0]))}}; }
+static inline e_var eb_exp(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = exp(e_cast_to_float(&args[0]))}}; }
+static inline e_var eb_log(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = log(e_cast_to_float(&args[0]))}}; }
+static inline e_var eb_log10(e_var* args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = log10(e_cast_to_float(&args[0]))}}; }
+static inline e_var eb_pow(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = pow(e_cast_to_float(&args[0]), e_cast_to_float(&args[1]))}}; }
+static inline e_var eb_sqrt(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = sqrt(e_cast_to_float(&args[0]))}}; }
+static inline e_var eb_ceil(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = ceil(e_cast_to_float(&args[0]))}}; }
+static inline e_var eb_floor(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = floor(e_cast_to_float(&args[0]))}}; }
+static inline e_var eb_fmod(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = fmod(e_cast_to_float(&args[0]),e_cast_to_float(&args[1]))}}; }
+static inline e_var eb_round(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = round(e_cast_to_float(&args[0]))}}; }
+static inline e_var eb_trunc(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = trunc(e_cast_to_float(&args[0]))}}; }
+static inline e_var eb_abs(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = fabs(e_cast_to_float(&args[0]))}}; }
+static inline e_var eb_hypot(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_FLOAT, .val = {.f = hypot(e_cast_to_float(&args[0]), e_cast_to_float(&args[1]))}}; }
+static inline e_var eb_signbit(e_var*args, u32 nargs) { (void)nargs; return (e_var){.type = E_VARTYPE_INT, .val = {.i = signbit(e_cast_to_float(&args[0]))}}; }
 // clang-format on
 
 #endif // E_MATH_BUILTIN_FUNCTIONS_H

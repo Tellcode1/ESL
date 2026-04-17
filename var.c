@@ -140,7 +140,7 @@ e_var_deep_cpy(const e_var* var, e_var* dst)
 i32
 e_var_acquire(e_var* v)
 {
-  e_refc* refc = nullptr;
+  int* refc = nullptr;
   switch (v->type) {
     case E_VARTYPE_MAP: refc = &v->val.map->refc; break;
     case E_VARTYPE_LIST: refc = &v->val.list->refc; break;
@@ -150,14 +150,14 @@ e_var_acquire(e_var* v)
   }
 
   if (refc == nullptr) return -1;
-  return e_refc_acquire(refc);
+  return (*refc)++;
 }
 
 void
 e_var_release(e_var* v)
 {
   if (!v) return;
-  e_refc* refc = nullptr;
+  int* refc = nullptr;
   switch (v->type) {
     case E_VARTYPE_MAP: refc = &v->val.map->refc; break;
     case E_VARTYPE_LIST: refc = &v->val.list->refc; break;
@@ -168,8 +168,8 @@ e_var_release(e_var* v)
 
   if (refc == nullptr) return;
 
-  e_refc_release(refc);
-  if (refc->ctr <= 0) e_var_free(v);
+  (*refc)--;
+  if (*refc <= 0) e_var_free(v);
 }
 
 void
@@ -261,15 +261,15 @@ e_var_print(const struct e_var* v, FILE* f)
       break;
     }
     case E_VARTYPE_VEC2: {
-      printf("<%g, %g>", v->val.vec2.x, v->val.vec2.y);
+      printf("<%g, %g>", v->val.vec2[0], v->val.vec2[1]);
       break;
     }
     case E_VARTYPE_VEC3: {
-      printf("<%g, %g, %g>", v->val.vec3.x, v->val.vec3.y, v->val.vec3.z);
+      printf("<%g, %g, %g>", v->val.vec3[0], v->val.vec3[1], v->val.vec3[2]);
       break;
     }
     case E_VARTYPE_VEC4: {
-      printf("<%g, %g, %g, %g>", v->val.vec4.x, v->val.vec4.y, v->val.vec4.z, v->val.vec4.w);
+      printf("<%g, %g, %g, %g>", v->val.vec4[0], v->val.vec4[1], v->val.vec4[2], v->val.vec4[3]);
       break;
     }
     case E_VARTYPE_MAT4: {
@@ -408,10 +408,10 @@ e_var_equal(const e_var* a, const e_var* b)
     default: assert(0);
 
     case E_VARTYPE_ERROR:
-    case E_VARTYPE_INT: return evar_to_int(*a) == evar_to_int(*b);
-    case E_VARTYPE_BOOL: return evar_to_bool(*a) == evar_to_bool(*b);
-    case E_VARTYPE_CHAR: return (char)evar_to_int(*a) == (char)evar_to_int(*b);
-    case E_VARTYPE_FLOAT: return evar_to_float(*a) == evar_to_float(*b);
+    case E_VARTYPE_INT: return a->val.i == b->val.i;
+    case E_VARTYPE_BOOL: return a->val.b == b->val.b;
+    case E_VARTYPE_CHAR: return a->val.c == b->val.c;
+    case E_VARTYPE_FLOAT: return a->val.f == b->val.f;
     case E_VARTYPE_STRING: return strcmp(E_VAR_AS_STRING(a)->s, E_VAR_AS_STRING(b)->s) == 0;
     case E_VARTYPE_LIST:
       if (b->type != E_VARTYPE_LIST) return false;
