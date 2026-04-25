@@ -30,6 +30,7 @@
 #include "var.h"
 
 #include <stdio.h>
+#include <string.h>
 
 int
 main(int argc, char** argv)
@@ -39,25 +40,32 @@ main(int argc, char** argv)
     return -1;
   }
 
-  const char* bin_file = argv[1];
+  FILE* f = NULL;
 
-  FILE* f = fopen(bin_file, "r");
-  if (!f) {
-    perror("edc: Failed to open input file");
-    return -1;
+  const char* bin_file = argv[1];
+  if (strcmp(bin_file, "-") == 0) {
+    f = stdin;
+  } else {
+    f = fopen(bin_file, "r");
+    if (!f) {
+      perror("edc: Failed to open input file");
+      return -1;
+    }
   }
 
   void*       root_allocation = nullptr;
   e_var*      lits            = nullptr;
+  u32*        lits_hashes     = nullptr;
   u8*         ins             = nullptr;
   e_function* funcs           = nullptr;
   u32         nlits           = 0;
   u32         nins            = 0;
   u32         nfuncs          = 0;
 
-  int e = 0;
-  if ((e = e_file_load(f, &root_allocation, &nins, &ins, &nlits, &lits, &nfuncs, &funcs))) {
+  int e = e_file_load(f, &root_allocation, &nins, &ins, &nlits, &lits, &lits_hashes, &nfuncs, &funcs);
+  if (e) {
     fprintf(stderr, "eexec: Failed to parse input file: %i\n", e);
+    return -1;
   }
 
   e_print_instruction_stream((const u8*)ins, nins, 0);
@@ -73,7 +81,7 @@ main(int argc, char** argv)
     fputc('\n', stdout);
   }
 
-  fclose(f);
+  if (strcmp(bin_file, "-") != 0) fclose(f);
 
   free(root_allocation);
   return 0;

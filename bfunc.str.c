@@ -150,7 +150,7 @@ eb_str_len(e_var* args, u32 nargs)
 e_var
 eb_str_split(e_var* args, u32 nargs)
 {
-  (void)(nargs);
+  (void)nargs;
 
   const char* to_split = E_VAR_AS_STRING(&args[0])->s;
   const char* split_by = E_VAR_AS_STRING(&args[1])->s;

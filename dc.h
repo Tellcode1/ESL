@@ -80,7 +80,7 @@ e_print_instruction(e_opcode o, const u8** ip)
       printf("ret [%s]\n", has_return_value ? "true" : "false");
       break;
     }
-    case E_OPCODE_LITERAL: printf("literal [%u]\n", e_read_u16(ip)); break;
+    case E_OPCODE_LITERAL: printf("literal [%u]\n", e_read_u32(ip)); break;
     case E_OPCODE_LOAD: printf("load %u\n", e_read_u32(ip)); break;
     // case E_OPCODE_LOAD_REFERENCE: printf("load_reference\n"); break;
     case E_OPCODE_ASSIGN: printf("store %u\n", e_read_u32(ip)); break;

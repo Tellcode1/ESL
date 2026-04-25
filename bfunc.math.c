@@ -129,5 +129,5 @@ evector_length(const e_var* v)
   e_vec4 x;
   evector_zero_extend(v, x);
 
-  return (e_var){ .type = E_VARTYPE_FLOAT, .val.f = sqrt(x[0] * x[0] + x[1] * x[1] + x[2] * x[2] + x[3] * x[3]) };
+  return (e_var){ .type = E_VARTYPE_FLOAT, .val.f = sqrt((x[0] * x[0]) + (x[1] * x[1]) + (x[2] * x[2]) + (x[3] * x[3])) };
 }

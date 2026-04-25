@@ -26,8 +26,6 @@
 #define E_CC_H
 
 #include "arena.h"
-#include "bc.h"
-#include "bfunc.h"
 #include "bstructs.h"
 #include "bvar.h"
 #include "cerr.h"
@@ -157,7 +155,7 @@ typedef struct ecc_struct_table {
  */
 typedef struct ecc_literal_table {
   e_var* literals;
-  u16*   literal_hashes;
+  u32*   literal_hashes;
   u32    literals_count;
   u32    literals_capacity;
 } ecc_literal_table;
@@ -270,9 +268,10 @@ typedef struct e_compilation_result {
   u32         nliterals;
   u32         nfunctions;
   u32         ninstructions;
-  e_var*      literals;
-  e_function* functions;
-  u8*         instructions;
+  e_var*      literals;        // Array allocated by struct, don't free inviduals.
+  u32*        literals_hashes; // Array allocated by struct.
+  e_function* functions;       // Array allocated by struct.
+  u8*         instructions;    // Array allocated by struct.
 } e_compilation_result;
 
 /**

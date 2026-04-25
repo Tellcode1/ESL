@@ -76,53 +76,15 @@ typedef struct e_stack {
   e_var_entry* variables;
 } e_stack;
 
-static inline void* e_aligned_malloc(size_t size, size_t alignment);
-static inline void* e_aligned_realloc(void* ptr, size_t old_size, size_t new_size, size_t alignment);
-static inline void  e_aligned_free(void* ptr);
-
-static inline void*
-e_aligned_malloc(size_t size, size_t alignment)
-{
-  if (alignment < sizeof(void*) || (alignment & (alignment - 1))) return nullptr; // must be power of 2
-
-  void* original = malloc(size + alignment - 1 + sizeof(void*));
-  if (!original) return nullptr;
-
-  uintptr_t addr    = (uintptr_t)original + sizeof(void*);
-  void*     aligned = (void*)((addr + alignment - 1) & ~(uintptr_t)(alignment - 1));
-
-  ((void**)aligned)[-1] = original;
-
-  return aligned;
-}
-
-static inline void*
-e_aligned_realloc(void* ptr, size_t old_size, size_t new_size, size_t alignment)
-{
-  if (!ptr) return e_aligned_malloc(new_size, alignment);
-
-  void* new_ptr = e_aligned_malloc(new_size, alignment);
-  if (!new_ptr) return nullptr;
-
-  memcpy(new_ptr, ptr, old_size < new_size ? old_size : new_size);
-  e_aligned_free(ptr);
-
-  return new_ptr;
-}
-
-static inline void
-e_aligned_free(void* ptr)
-{
-  if (ptr) free(((void**)ptr)[-1]);
-}
-
 static inline int
 e_stack_init(u32 capacity, u32 frame_capacity, u32 variable_capacity, e_stack* stack)
 {
+  const u32 stack_alignment = 16;
+
   capacity        = MAX(capacity, 8);
   stack->capacity = capacity;
   stack->size     = 0;
-  stack->stack    = (e_var*)e_aligned_malloc(sizeof(e_var) * capacity, 16);
+  stack->stack    = (e_var*)e_aligned_malloc(sizeof(e_var) * capacity, stack_alignment);
   if (stack->stack == nullptr) return E_EMALLOC;
 
   stack->depth          = 0;
@@ -151,9 +113,12 @@ static inline int
 e_stack_push_frame(e_stack* stack)
 {
   if (stack->depth >= stack->frame_capacity) {
-    stack->frame_capacity *= 2;
-    stack->frames = (e_stack_frame*)realloc(stack->frames, stack->frame_capacity * sizeof(e_stack_frame));
-    if (stack->frames == nullptr) return E_EMALLOC;
+    u32            frames_capacity = stack->frame_capacity * 2;
+    e_stack_frame* frames          = (e_stack_frame*)realloc(stack->frames, stack->frame_capacity * sizeof(e_stack_frame));
+    if (frames == nullptr) return E_EMALLOC;
+
+    stack->frames         = frames;
+    stack->frame_capacity = frames_capacity;
   }
 
   stack->frames[stack->depth] = (e_stack_frame){
@@ -182,9 +147,10 @@ e_stack_pop_frame(e_stack* stack)
 static inline int
 e_stack_push(e_stack* stack, const e_var* v)
 {
+  const u32 alignment = 16;
   if (stack->size >= stack->capacity) {
     u32    new_cap   = stack->capacity * 2;
-    e_var* new_stack = (e_var*)e_aligned_realloc(stack->stack, stack->capacity * sizeof(e_var), new_cap * sizeof(e_var), 16);
+    e_var* new_stack = (e_var*)e_aligned_realloc(stack->stack, stack->capacity * sizeof(e_var), new_cap * sizeof(e_var), alignment);
     if (new_stack == nullptr) return E_EMALLOC;
 
     stack->capacity = new_cap;

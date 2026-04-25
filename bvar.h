@@ -43,16 +43,16 @@ typedef struct e_builtin_var {
 } e_builtin_var;
 
 typedef enum eb_io_constants {
-  EB_IO_STDOUT,
-  EB_IO_STDIN,
-  EB_IO_STDERR,
-  EB_IO_REL_TO_START,
-  EB_IO_REL_TO_CURR,
-  EB_IO_REL_TO_END,
-  EB_IO_FILE,
-  EB_IO_LINK,
-  EB_IO_DIRECTORY,
-  EB_IO_UNKNOWN = -1,
+  EB_IO_UNKNOWN      = -1,
+  EB_IO_STDOUT       = 0,
+  EB_IO_STDIN        = 2,
+  EB_IO_STDERR       = 3,
+  EB_IO_REL_TO_START = 4,
+  EB_IO_REL_TO_CURR  = 5,
+  EB_IO_REL_TO_END   = 6,
+  EB_IO_FILE         = 7,
+  EB_IO_LINK         = 8,
+  EB_IO_DIRECTORY    = 9,
 } eb_io_constants;
 
 /**
@@ -83,6 +83,15 @@ static const e_builtin_var eb_vars[] = {
 
   { .name = "float::MAX", .type = E_VARTYPE_FLOAT, .value = { .f = DBL_MAX } },
   { .name = "float::MIN", .type = E_VARTYPE_FLOAT, .value = { .f = DBL_MIN } },
+
+  { .name = "vec2::ZERO", .type = E_VARTYPE_VEC2, .value = { .vec2 = { 0.0, 0.0 } } },
+  { .name = "vec2::ONE", .type = E_VARTYPE_VEC2, .value = { .vec2 = { 1.0, 1.0 } } },
+
+  { .name = "vec3::ZERO", .type = E_VARTYPE_VEC3, .value = { .vec3 = { 0.0, 0.0, 0.0 } } },
+  { .name = "vec3::ONE", .type = E_VARTYPE_VEC3, .value = { .vec3 = { 1.0, 1.0, 1.0 } } },
+
+  { .name = "vec4::ZERO", .type = E_VARTYPE_VEC4, .value = { .vec4 = { 0.0, 0.0, 0.0, 0.0 } } },
+  { .name = "vec4::ONE", .type = E_VARTYPE_VEC4, .value = { .vec4 = { 1.0, 1.0, 1.0, 1.0 } } },
 
   { .name = "io::STDOUT", .type = E_VARTYPE_INT, .value = { .i = EB_IO_STDOUT } },
   { .name = "io::STDIN", .type = E_VARTYPE_INT, .value = { .i = EB_IO_STDIN } },

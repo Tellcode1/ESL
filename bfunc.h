@@ -138,7 +138,7 @@ eb_len(e_var* args, u32 nargs)
   return (e_var){ .type = E_VARTYPE_INT, .val = { .i = len } };
 }
 
-#define E_ALL_TYPES E_VARTYPE_INT | E_VARTYPE_CHAR | E_VARTYPE_BOOL | E_VARTYPE_FLOAT | E_VARTYPE_LIST | E_VARTYPE_MAP | E_VARTYPE_STRING
+#define E_ALL_TYPES (E_VARTYPE_INT | E_VARTYPE_CHAR | E_VARTYPE_BOOL | E_VARTYPE_FLOAT | E_VARTYPE_LIST | E_VARTYPE_MAP | E_VARTYPE_STRING)
 
 // clang-format off
 static const e_builtin_func eb_funcs[] = {
@@ -209,6 +209,7 @@ static const e_builtin_func eb_funcs[] = {
   { "io::read", "Read given number of bytes from file. null on error.", "fn io::read( fd, nbytes:int ) -> string|null", E_VARTYPE_INT, 2, 2, eb_io_read },
   { "io::readln", "Read a line from file. null on error.", "fn io::readln( fd ) -> string|null", E_VARTYPE_INT, 1, 1, eb_io_readln },
   { "io::write", "Write string to file. null on error. number of bytes written on success.", "fn io::write( fd, data : string ) -> int|null", E_VARTYPE_INT, 2, 2, eb_io_write },
+  { "io::flush", "Flush the stream to make changes immediately visible", "fn io::flush( fd ) -> null", E_VARTYPE_INT, 1, 1, eb_io_flush },
   { "io::seek", "Seek to a random position in file.", "fn io::seek( fd, offset, relative_to ) -> null", E_VARTYPE_INT, 3, 3, eb_io_seek },
   { "io::ptell", "Get location in file. null on error.", "fn io::ptell( fd ) -> int|null", E_VARTYPE_INT, 1, 1, eb_io_ptell },
   { "io::println", "Print all given variables and a newline to file. null on error. number of bytes written on success.", "fn io::println( fd, ... ) -> int|null", E_VARTYPE_INT,    1, UINT32_MAX, eb_io_println },

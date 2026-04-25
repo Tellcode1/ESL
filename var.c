@@ -185,6 +185,9 @@ e_var_free(e_var* var)
     case E_VARTYPE_CHAR:
     case E_VARTYPE_BOOL:
     case E_VARTYPE_ERROR:
+    case E_VARTYPE_VEC2:
+    case E_VARTYPE_VEC3:
+    case E_VARTYPE_VEC4:
     case E_VARTYPE_FLOAT: break;
 
     case E_VARTYPE_STRING:
@@ -255,7 +258,17 @@ e_var_print(const struct e_var* v, FILE* f)
       fputc('}', f);
       break;
     }
-    case E_VARTYPE_MAP: break;
+    case E_VARTYPE_MAP: {
+      fputs("#{", f);
+      for (u32 i = 0; i < E_VAR_AS_MAP(v)->size; i++) {
+        e_var_print(&E_VAR_AS_MAP(v)->keys[i], f);
+        fputs(":", f);
+        e_var_print(&E_VAR_AS_MAP(v)->vals[i], f);
+        if (i < E_VAR_AS_MAP(v)->size - 1) { fputs(", ", f); }
+      }
+      fputc('}', f);
+      break;
+    }
     case E_VARTYPE_ERROR: {
       fprintf(f, "%i", v->val.errcode);
       break;
@@ -275,12 +288,12 @@ e_var_print(const struct e_var* v, FILE* f)
     case E_VARTYPE_MAT4: {
       printf("4x4[ ");
       for (u32 i = 0; i < 4; i++) {
-        printf("[");
+        printf("<");
         for (u32 j = 0; j < 4; j++) {
           printf("%g", E_VAR_AS_MAT4(v)->m[j][i]);
           if (j != 3) { printf(", "); }
         }
-        printf("]");
+        printf(">");
         if (i != 3) { printf(", "); }
       }
       printf(" ]");
@@ -289,12 +302,12 @@ e_var_print(const struct e_var* v, FILE* f)
     case E_VARTYPE_MAT3: {
       printf("3x3[ ");
       for (u32 i = 0; i < 3; i++) {
-        printf("[");
+        printf("<");
         for (u32 j = 0; j < 3; j++) {
           printf("%g", E_VAR_AS_MAT3(v)->m[j][i]);
           if (j != 2) { printf(", "); }
         }
-        printf("]");
+        printf(">");
         if (i != 2) { printf(", "); }
       }
       printf(" ]");
@@ -315,6 +328,9 @@ e_var_to_string(const struct e_var* v, char* buffer, size_t buffer_size)
     case E_VARTYPE_BOOL: snprintf(buffer, buffer_size, "%s", (int)v->val.b ? "true" : "false"); break;
     case E_VARTYPE_FLOAT: snprintf(buffer, buffer_size, "%g", v->val.f); break;
     case E_VARTYPE_STRING: snprintf(buffer, buffer_size, "%s", E_VAR_AS_STRING(v)->s); break;
+    case E_VARTYPE_VEC2: snprintf(buffer, buffer_size, "<%g, %g>", v->val.vec2[0], v->val.vec2[1]); break;
+    case E_VARTYPE_VEC3: snprintf(buffer, buffer_size, "<%g, %g, %g>", v->val.vec3[0], v->val.vec3[1], v->val.vec3[2]); break;
+    case E_VARTYPE_VEC4: snprintf(buffer, buffer_size, "<%g, %g, %g, %g>", v->val.vec4[0], v->val.vec4[1], v->val.vec4[2], v->val.vec4[3]); break;
     case E_VARTYPE_LIST: {
       strncpy(buffer, "[", buffer_size - 1);
       buffer[buffer_size] = 0;
@@ -356,6 +372,26 @@ e_var_to_string_size(const struct e_var* v)
     case E_VARTYPE_CHAR: total += snprintf(nullptr, 0, "%c", v->val.c); break;
     case E_VARTYPE_BOOL: return strlen((int)v->val.b ? "true" : "false"); break;
     case E_VARTYPE_FLOAT: total += snprintf(nullptr, 0, "%g", v->val.f); break;
+    case E_VARTYPE_VEC2:
+    case E_VARTYPE_VEC3:
+    case E_VARTYPE_VEC4: {
+      e_vec4 vooctor;
+      evector_zero_extend(v, vooctor);
+      for (u32 i = 0; i < 4; i++) {
+        total += snprintf(nullptr, 0, "%g", vooctor[i]);
+        if (i != 3) total += strlen(", ");
+      }
+      break;
+    }
+
+    case E_VARTYPE_MAT3: {
+      e_vec4 vooctor;
+      evector_zero_extend(v, vooctor);
+      for (u32 i = 0; i < 3; i++) {
+        for (u32 j = 0; j < 3; j++) { total += snprintf(nullptr, 0, "%g", E_VAR_AS_MAT3(v)->m[i][j]); }
+      }
+      break;
+    }
     case E_VARTYPE_STRING: total += strlen(E_VAR_AS_STRING(v)->s); break;
     case E_VARTYPE_LIST: {
       total += 1;
@@ -387,10 +423,17 @@ e_var_hash(const e_var* var)
     case E_VARTYPE_CHAR: return e_hash_fnv(&var->val.c, sizeof(char));
     case E_VARTYPE_FLOAT: return e_hash_fnv(&var->val.f, sizeof(var->val.f));
     case E_VARTYPE_STRING: return e_hash_fnv(E_VAR_AS_STRING(var)->s, strlen(E_VAR_AS_STRING(var)->s));
+    case E_VARTYPE_VEC2: return e_hash_fnv(var->val.vec2, sizeof(e_vec2));
+    case E_VARTYPE_VEC3: return e_hash_fnv(var->val.vec3, sizeof(e_vec3));
+    case E_VARTYPE_VEC4: return e_hash_fnv(var->val.vec4, sizeof(e_vec4));
+    case E_VARTYPE_MAT3: return e_hash_fnv(E_VAR_AS_MAT3(var)->m, sizeof(e_mat3));
+    case E_VARTYPE_MAT4: return e_hash_fnv(E_VAR_AS_MAT4(var)->m, sizeof(e_mat4));
     case E_VARTYPE_LIST: return e_combine_hash((const void**)E_VAR_AS_LIST(var)->vars, E_VAR_AS_LIST(var)->size, sizeof(e_var));
-    case E_VARTYPE_MAP:
+    case E_VARTYPE_MAP: {
+      const u32 random_prime = 61;
       return e_combine_hash((const void**)(E_VAR_AS_MAP(var)->keys), (E_VAR_AS_MAP(var)->size), sizeof(e_var))
-          + 13 * e_combine_hash((const void**)(E_VAR_AS_MAP(var)->vals), (E_VAR_AS_MAP(var)->size), sizeof(e_var));
+          + (random_prime * e_combine_hash((const void**)(E_VAR_AS_MAP(var)->vals), (E_VAR_AS_MAP(var)->size), sizeof(e_var)));
+    }
     case E_VARTYPE_STRUCT: {
       return e_combine_hash((const void**)E_VAR_AS_STRUCT(var)->members, E_VAR_AS_STRUCT(var)->member_count, sizeof(e_var));
     }
@@ -413,6 +456,33 @@ e_var_equal(const e_var* a, const e_var* b)
     case E_VARTYPE_CHAR: return a->val.c == b->val.c;
     case E_VARTYPE_FLOAT: return a->val.f == b->val.f;
     case E_VARTYPE_STRING: return strcmp(E_VAR_AS_STRING(a)->s, E_VAR_AS_STRING(b)->s) == 0;
+
+    case E_VARTYPE_VEC2: {
+      return a->val.vec2[0] == b->val.vec2[0] && a->val.vec2[1] == b->val.vec2[1];
+    }
+    case E_VARTYPE_VEC3: {
+      return a->val.vec3[0] == b->val.vec3[0] && a->val.vec3[1] == b->val.vec3[1] && a->val.vec3[2] == b->val.vec3[2];
+    }
+    case E_VARTYPE_VEC4: {
+      return a->val.vec4[0] == b->val.vec4[0] && a->val.vec4[1] == b->val.vec4[1] && a->val.vec4[2] == b->val.vec4[2]
+          && a->val.vec4[3] == b->val.vec4[3];
+    }
+
+    case E_VARTYPE_MAT3: {
+      for (int j = 0; j < 3; j++) {
+        for (int i = 0; i < 3; i++) {
+          if (E_VAR_AS_MAT3(a)->m[j][i] != E_VAR_AS_MAT3(b)->m[j][i]) { return false; }
+        }
+      }
+    }
+    case E_VARTYPE_MAT4: {
+      for (int j = 0; j < 4; j++) {
+        for (int i = 0; i < 4; i++) {
+          if (E_VAR_AS_MAT4(a)->m[j][i] != E_VAR_AS_MAT4(b)->m[j][i]) { return false; }
+        }
+      }
+    }
+
     case E_VARTYPE_LIST:
       if (b->type != E_VARTYPE_LIST) return false;
       if (E_VAR_AS_LIST(a)->size != E_VAR_AS_LIST(b)->size) return false;

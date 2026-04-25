@@ -31,7 +31,7 @@
 #include <stdlib.h>
 
 int
-e_map_init(e_var* vars, u32 npairs, e_map* map)
+e_map_init(struct e_var* vars, u32 npairs, e_map* map)
 {
   if (!map) return -1;
   memset(map, 0, sizeof(*map));

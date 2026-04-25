@@ -40,10 +40,10 @@
 #define next(parser) e_ast_next(parser)
 
 #if defined(__has_attribute) && __has_attribute(format)
-#  define _FORMAT_(...) __attribute__((format(__VA_ARGS__)))
+#  define FORMAT_(...) __attribute__((format(__VA_ARGS__)))
 #endif
 
-static inline _FORMAT_(printf, 4, 5) bool _asterror(const char* file, size_t line, e_filespan span, const char* msg, ...)
+static inline FORMAT_(printf, 4, 5) bool internal_asterror(const char* file, size_t line, e_filespan span, const char* msg, ...)
 {
   va_list ap;
   va_start(ap, msg);
@@ -56,7 +56,7 @@ static inline _FORMAT_(printf, 4, 5) bool _asterror(const char* file, size_t lin
   return true;
 }
 
-#define asterror(span, ...) _asterror(__FILE__, __LINE__, span, __VA_ARGS__)
+#define asterror(span, ...) internal_asterror(__FILE__, __LINE__, span, __VA_ARGS__)
 
 static inline e_filespan
 clonespan(e_ast* a, e_filespan s)
@@ -96,13 +96,6 @@ conv_token_type_to_operator(e_token_type t)
     case E_TOKEN_TYPE_GTE: return E_OPERATOR_GTE;
     default: return -1;
   }
-}
-
-static inline bool
-is_op_compound_assignable(e_operator op)
-{
-  return (bool)(op == E_OPERATOR_ADD || op == E_OPERATOR_SUB || op == E_OPERATOR_MUL || op == E_OPERATOR_DIV || op == E_OPERATOR_MOD
-                || op == E_OPERATOR_EXP || op == E_OPERATOR_BAND || op == E_OPERATOR_BOR || op == E_OPERATOR_XOR);
 }
 
 /**
@@ -197,7 +190,7 @@ parse_body(e_ast* p, int** outstmts, u32* outnstmts)
   }
 
   // Explicity handle zero expression lists.
-  else if (peek(p) && peek(p)->type == E_TOKEN_TYPE_SEMICOLON) {
+  if (peek(p) && peek(p)->type == E_TOKEN_TYPE_SEMICOLON) {
     if (outstmts) *outstmts = nullptr;
     if (outnstmts) *outnstmts = 0;
   }
@@ -253,7 +246,8 @@ e_ast_expr(e_ast* p, int rbp)
   while (e_ast_peek(p)) {
     e_token* op = e_ast_peek(p);
 
-    int left_bp = 0, right_bp = 0;
+    int left_bp  = 0;
+    int right_bp = 0;
     e_getbp(op->type, &left_bp, &right_bp);
 
     if (left_bp <= rbp) break;
@@ -450,7 +444,6 @@ parse_if(e_ast* p, int node)
           .body      = else_if_body,
           .nstmts    = else_if_nstmts,
         };
-        continue;
       } else {
         e_filespan else_span = peek(p)->span;
 
@@ -678,7 +671,7 @@ parse_function(e_ast* p, bool external, int node)
 
   names_capacity = 8; // NON ZERO
   arg_names_size = 0;
-  arg_names      = calloc(names_capacity, sizeof(char*));
+  arg_names      = (const char**)calloc(names_capacity, sizeof(char*));
 
   while (peek(p) && peek(p)->type != E_TOKEN_TYPE_CLOSEPAREN) {
     e_token* tk = peek(p);
@@ -690,7 +683,7 @@ parse_function(e_ast* p, bool external, int node)
 
     if (arg_names_size >= names_capacity) {
       u32          new_capacity = names_capacity * 2;
-      const char** new_names    = realloc(arg_names, sizeof(char*) * new_capacity);
+      const char** new_names    = (const char**)realloc((void*)arg_names, sizeof(char*) * new_capacity);
 
       if (!new_names) {
         asterror(peek(p)->span, "Allocation error! [function header]\n");
@@ -747,7 +740,7 @@ parse_function(e_ast* p, bool external, int node)
   return node;
 
 err:
-  free(arg_names);
+  free((void*)arg_names);
   return -1;
 }
 
@@ -981,8 +974,13 @@ parse_namespace_decleration(e_ast* p, int node)
     goto ERR;
   }
 
+  e_filespan store = peek(p)->span;
+
   e = parse_braces(p, &stmts, &nstmts);
-  if (e) { goto ERR; }
+  if (e) {
+    asterror(store, "Failed to parse namespace decleration [namespace decleration :: collection pass]\n");
+    goto ERR;
+  }
 
   for (u32 i = 0; i < nstmts; i++) {
     e_ast_node_type type = E_GET_NODE(p, stmts[i])->common.type;
@@ -1132,8 +1130,13 @@ parse_struct_decleration(e_ast* p, int node)
     goto ERR;
   }
 
+  e_filespan store = peek(p)->span;
+
   e = parse_braces(p, &stmts, &nstmts);
-  if (e) { goto ERR; }
+  if (e) {
+    asterror(store, "Failed to parse structure decleration body [structure decleration :: collection pass]\n");
+    goto ERR;
+  }
 
   for (u32 i = 0; i < nstmts; i++) {
     e_ast_node_type type = E_GET_NODE(p, stmts[i])->common.type;
@@ -1375,7 +1378,8 @@ e_ast_nud(e_ast* p, e_token* tk)
     case E_TOKEN_TYPE_MINUS:
     case E_TOKEN_TYPE_NOT:
     case E_TOKEN_TYPE_BNOT: {
-      int left_bp = 0, right_bp = 0;
+      int left_bp  = 0;
+      int right_bp = 0;
       if (!e_getbp(tk->type, &left_bp, &right_bp)) {
         asterror(tk->span, "Unexpected token: '%s'\n", e_token_type_to_string(tk->type));
 
@@ -1443,7 +1447,8 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
         E_GET_NODE(p, leftidx)->type             = E_AST_NODE_NOP;
 
         return node;
-      } else if (e_ast_get_node(p, leftidx)->type == E_AST_NODE_MEMBER_ACCESS) {
+      }
+      if (e_ast_get_node(p, leftidx)->type == E_AST_NODE_MEMBER_ACCESS) {
         int rightidx = e_ast_expr(p, rbp);
         if (rightidx < 0) {
           asterror(peek(p)->span, "Invalid RHS in member assignment\n");
@@ -1559,7 +1564,8 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
     case E_TOKEN_TYPE_LTE:
     case E_TOKEN_TYPE_GT:
     case E_TOKEN_TYPE_GTE: {
-      int left_bp = 0, right_bp = 0;
+      int left_bp  = 0;
+      int right_bp = 0;
       if (!e_getbp(tk->type, &left_bp, &right_bp)) {
         asterror(
             tk->span, "Operator %s doesn't have a binding power set in e_getbp! assuming 0 [binary operator]\n", e_token_type_to_string(tk->type));
@@ -1612,7 +1618,7 @@ e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp)
 }
 
 int
-e_ast_parse(e_ast* p, int* out_root_node)
+e_ast_parse(e_ast* p, int* root_node)
 {
   if (!p) return -1;
 
@@ -1622,10 +1628,13 @@ e_ast_parse(e_ast* p, int* out_root_node)
   int* stmts  = calloc(cap, sizeof(int));
 
   int rootnode = e_ast_make_node(p);
-  if (rootnode < 0) goto ERR;
+  if (rootnode < 0) {
+    asterror(peek(p)->span, "Failed to allocate root node. Bailing out!\n");
+    goto ERR;
+  }
 
   p->root = rootnode;
-  if (out_root_node) *out_root_node = rootnode;
+  if (root_node) *root_node = rootnode;
 
   e_ast_get_node(p, rootnode)->type = E_AST_NODE_ROOT;
 

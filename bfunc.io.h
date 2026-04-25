@@ -29,25 +29,20 @@
 
 char* e_read_full_line(FILE* f);
 
-/* read(fp, nbytes), nbytes is the amount of bytes read. */
 e_var eb_io_read(e_var* args, u32 nargs);
-/* write(fp, str) */
 e_var eb_io_write(e_var* args, u32 nargs);
-/* seek(fp, offset, io::REL_TO_START/io::REL_TO_END/io::REL_TO_CURR)) */
 e_var eb_io_seek(e_var* args, u32 nargs);
-/* ptell(fp) */
 e_var eb_io_ptell(e_var* args, u32 nargs);
-/* Get error allocated as string. */
 e_var eb_io_error(e_var* args, u32 nargs);
-
+e_var eb_io_flush(e_var* args, u32 nargs);
 e_var eb_io_readln(e_var* args, u32 nargs);
 e_var eb_io_println(e_var* args, u32 nargs);
 e_var eb_io_print(e_var* args, u32 nargs);
 e_var eb_io_type(e_var* args, u32 nargs);
 e_var eb_io_at_eof(e_var* args, u32 nargs);
-e_var eb_io_open(e_var* args, u32 nargs);  // file path, mode
-e_var eb_io_close(e_var* args, u32 nargs); // fd
-e_var eb_io_getc(e_var* args, u32 nargs);  // fd
-e_var eb_io_putc(e_var* args, u32 nargs);  // fd, char
+e_var eb_io_open(e_var* args, u32 nargs);
+e_var eb_io_close(e_var* args, u32 nargs);
+e_var eb_io_getc(e_var* args, u32 nargs);
+e_var eb_io_putc(e_var* args, u32 nargs);
 
 #endif // E_IO_BUILTIN_FUNCTIONS_H

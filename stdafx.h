@@ -49,7 +49,7 @@ extern "C" {
 #endif
 
 #ifndef E_ARRLEN
-#  define E_ARRLEN(array) (sizeof(array) / sizeof(*array))
+#  define E_ARRLEN(array) (sizeof(array) / sizeof(*(array)))
 #endif
 
 #ifndef E_ARR_ALLOC
@@ -57,11 +57,19 @@ extern "C" {
 #endif
 
 #ifndef E_ARR_REALLOC
-#  define E_ARR_REALLOC(arr, elem_type, n) ((elem_type*)realloc(arr, sizeof(*arr) * (n)))
+#  define E_ARR_REALLOC(arr, elem_type, n) ((elem_type*)realloc((void*)(arr), sizeof(*(arr)) * (n)))
 #endif
 
 #ifndef E_ARR_FREE
-#  define E_ARR_FREE(arr) (free((void*)arr))
+#  define E_ARR_FREE(arr) (free((void*)(arr)))
+#endif
+
+#if defined(__GNUC__) || defined(__clang__)
+#  define ALIGNAS(n) __attribute__((aligned(n)))
+#elif defined(_MSC_VER)
+#  define ALIGNAS(n) __declspec(align(n))
+#else
+#  define ALIGNAS(n)
 #endif
 
 typedef uint8_t  uchar;
@@ -77,12 +85,14 @@ typedef int64_t  i64;
 static inline u32
 e_hash_fnv(const void* data, size_t size)
 {
-  const uchar* current = (const uchar*)data;
+  const uchar* current    = (const uchar*)data;
+  const u32    init_prime = 2166136261U;
+  const u32    fnv_prime  = 16777619U;
 
-  u32 hash = 2166136261U;
+  u32 hash = init_prime;
   for (size_t i = 0; i < size; ++i) {
     hash ^= current[i];
-    hash *= 16777619U;
+    hash *= fnv_prime;
   }
 
   return hash;
@@ -174,6 +184,59 @@ CLEANUP:
   return nullptr;
 }
 
+static inline void* e_aligned_malloc(size_t size, size_t alignment);
+static inline void* e_aligned_realloc(void* ptr, size_t old_size, size_t new_size, size_t alignment);
+static inline void  e_aligned_free(void* ptr);
+
+static inline void*
+e_align_ptr(void* ptr, size_t alignment)
+{
+  char* s = ptr;
+  while ((uintptr_t)s % alignment != 0) { s++; }
+  return (void*)s;
+}
+
+static inline size_t
+e_align_size(size_t size, size_t alignment)
+{ return (size + alignment - 1) & ~(alignment - 1); }
+
+static inline void*
+e_aligned_malloc(size_t size, size_t alignment)
+{
+  if (alignment < sizeof(void*) || (alignment & (alignment - 1))) return NULL; // must be power of 2
+
+  size_t total    = size + alignment - 1 + sizeof(void*);
+  void*  original = malloc(total);
+  if (!original) return NULL;
+
+  void* aligned = e_align_ptr((char*)original + sizeof(void*), alignment);
+
+  ((void**)aligned)[-1] = original;
+
+  return aligned;
+}
+
+static inline void*
+e_aligned_realloc(void* ptr, size_t old_size, size_t new_size, size_t alignment)
+{
+  if (!ptr) return e_aligned_malloc(new_size, alignment);
+
+  void* new_ptr = e_aligned_malloc(new_size, alignment);
+  if (!new_ptr) return NULL;
+
+  size_t copy_size = old_size < new_size ? old_size : new_size;
+  memcpy(new_ptr, ptr, copy_size);
+
+  free(((void**)ptr)[-1]);
+
+  return new_ptr;
+}
+
+static inline void
+e_aligned_free(void* ptr)
+{
+  if (ptr) free(((void**)ptr)[-1]);
+}
 #ifdef __cplusplus
 }
 #endif

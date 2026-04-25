@@ -39,6 +39,7 @@ typedef struct e_exec_info {
   const e_var*          args;     // nullptr if nargs == 0
   const u32*            slots;    // The IDs which the arguments take
   const e_var*          literals; // must outlive the exec function.
+  const u32*            literals_hashes;
   const e_function*     funcs;
   const e_builtin_func* extern_funcs;
   const e_builtin_var*  extern_vars;

@@ -28,6 +28,7 @@
 #include "stdafx.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 typedef struct e_str_interner {
   u32*   string_hashes;
@@ -61,7 +62,7 @@ e_str_intern(const char* s, e_str_interner* table)
     u32* new_hashes = realloc(table->string_hashes, sizeof(u32) * new_capacity);
     if (!new_hashes) return nullptr;
 
-    char** new_strings = realloc(table->strings, sizeof(char*) * new_capacity);
+    char** new_strings = (char**)realloc((void*)table->strings, sizeof(char*) * new_capacity);
     if (!new_strings) {
       table->string_hashes = new_hashes;
       return nullptr;
@@ -72,9 +73,10 @@ e_str_intern(const char* s, e_str_interner* table)
     table->strings_capacity = new_capacity;
   }
 
-  u32   i    = table->strings_count;
   char* sdup = e_strdup(s);
   if (!sdup) return nullptr;
+
+  u32 i = table->strings_count;
 
   table->strings[i]       = sdup;
   table->string_hashes[i] = hash;
@@ -88,7 +90,7 @@ e_str_interner_free(e_str_interner* table)
 {
   free(table->string_hashes);
   for (u32 i = 0; i < table->strings_count; i++) { free(table->strings[i]); }
-  free(table->strings);
+  free((void*)table->strings);
 }
 
 #endif // #define E_STRING_INTERN_H

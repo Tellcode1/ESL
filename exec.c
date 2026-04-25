@@ -46,7 +46,6 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 #define PASTE(x, y) x##y
 
@@ -106,20 +105,21 @@ call(const e_exec_info* info, u32 hash, u32 nargs)
     TRY_V(e_stack_push_frame(info->stack));
 
     e_exec_info fi = {
-      .code          = info->funcs[f].code,
-      .args          = &info->stack->stack[info->stack->size - info->funcs[f].nargs],
-      .slots         = info->funcs[f].arg_slots,
-      .literals      = info->literals,
-      .funcs         = info->funcs,
-      .extern_funcs  = info->extern_funcs,
-      .code_size     = info->funcs[f].code_size,
-      .nargs         = info->funcs[f].nargs,
-      .nliterals     = info->nliterals,
-      .nfuncs        = info->nfuncs,
-      .nextern_funcs = info->nextern_funcs,
-      .extern_vars   = info->extern_vars,
-      .nextern_vars  = info->nextern_vars,
-      .stack         = info->stack,
+      .code            = info->funcs[f].code,
+      .args            = &info->stack->stack[info->stack->size - info->funcs[f].nargs],
+      .slots           = info->funcs[f].arg_slots,
+      .literals        = info->literals,
+      .literals_hashes = info->literals_hashes,
+      .funcs           = info->funcs,
+      .extern_funcs    = info->extern_funcs,
+      .code_size       = info->funcs[f].code_size,
+      .nargs           = info->funcs[f].nargs,
+      .nliterals       = info->nliterals,
+      .nfuncs          = info->nfuncs,
+      .nextern_funcs   = info->nextern_funcs,
+      .extern_vars     = info->extern_vars,
+      .nextern_vars    = info->nextern_vars,
+      .stack           = info->stack,
     };
     return_value = e_exec(&fi);
 
@@ -147,16 +147,6 @@ pop_and_ret:
   return return_value;
 }
 
-static inline u32
-get_variable_slot(e_var_entry* variables, u32 nvariables, u32 hash)
-{
-  for (u32 i = 0; i < nvariables; i++) {
-    if (variables[i].id == hash) { return i; }
-  }
-
-  return -1;
-}
-
 static inline e_var*
 get_variable_from_id(e_stack* stack, u32 hash)
 {
@@ -167,13 +157,28 @@ get_variable_from_id(e_stack* stack, u32 hash)
   return NULL;
 }
 
-static inline void
-assign(const e_exec_info* info, u32 slot, e_var value)
+static inline int
+vector_elements(const e_var* vec)
 {
-  e_var* variable_slot = &info->stack->stack[info->stack->variables[slot].offset_index];
-  e_var_release(variable_slot); // free old value in slot
+  switch (vec->type) {
+    case E_VARTYPE_VEC2: return 2;
+    case E_VARTYPE_VEC3: return 3;
+    case E_VARTYPE_VEC4: return 4;
+    default: break;
+  }
+  return 0;
+}
 
-  *variable_slot = value; // move ownership from stack top to slot
+static inline e_var
+vector_index(const e_var* vec, int index)
+{
+  e_var push = { .type = E_VARTYPE_NULL };
+
+  e_vec4 vector;
+  evector_zero_extend(vec, vector);
+  if (index < vector_elements(vec)) { push = (e_var){ .type = E_VARTYPE_FLOAT, .val.f = vector[index] }; }
+
+  return push;
 }
 
 e_var
@@ -210,10 +215,7 @@ e_exec(const e_exec_info* info)
   while (true) {
     if (ip >= end) { goto _RETURN; }
 
-    e_opcode_bck opcode = 0;
-    memcpy(&opcode, ip, sizeof(e_opcode)); // faster for some reason?
-
-    ip += sizeof(e_opcode);
+    e_opcode_bck opcode = e_read_u8(&ip);
 
     // fputs("STACK[ ", stdout);
     // for (u32 i = 0; i < info->stack->size; i++) {
@@ -241,6 +243,11 @@ e_exec(const e_exec_info* info)
         u32 hash       = e_read_u32(&ip);
         u16 func_nargs = e_read_u16(&ip);
 
+        if (info->stack->size < func_nargs) {
+          fputs("*** stack corruption ***\n", stderr);
+          return E_NULLVAR;
+        }
+
         e_var r = call(info, hash, func_nargs);
         if (r.type == E_VARTYPE_ERROR) { return r; }
 
@@ -250,16 +257,19 @@ e_exec(const e_exec_info* info)
       }
 
       case E_OPCODE_LITERAL: {
-        u16 id = e_read_u16(&ip);
-        assert(id < info->nliterals);
+        u32 id = e_read_u32(&ip);
 
-        e_var v;
-
-        int e = e_var_deep_cpy(&info->literals[id], &v); // Deep copy the literal.
-        if (e) return (e_var){ .type = E_VARTYPE_NULL };
+        e_var v = E_NULLVAR;
+        for (u32 i = 0; i < info->nliterals; i++) {
+          if (id == info->literals_hashes[i]) {
+            int e = e_var_deep_cpy(&info->literals[i], &v); // Deep copy the literal.
+            if (e) return (e_var){ .type = E_VARTYPE_NULL };
+            break;
+          }
+        }
 
         TRY_V(e_stack_push(info->stack, &v));
-        e_var_release(&v); // Hand over v to the stack.
+        e_var_release(&v); // Hand over v to the stack. Noop for nullvar.
         break;
       }
 
@@ -280,6 +290,11 @@ e_exec(const e_exec_info* info)
 
         e_var* stack      = info->stack->stack;
         size_t stack_size = info->stack->size;
+
+        if (info->stack->size < nelems) {
+          fputs("*** stack corruption ***\n", stderr);
+          return E_NULLVAR;
+        }
 
         e_var* elems = &stack[stack_size - nelems];
         TRY_V(e_list_init(elems, nelems, list)); // acquires the elements.
@@ -308,7 +323,12 @@ e_exec(const e_exec_info* info)
         };
 
         e_var* stack      = info->stack->stack;
-        size_t stack_size = info->stack->size;
+        u32    stack_size = info->stack->size;
+
+        if (info->stack->size < (npairs * 2)) {
+          fputs("*** stack corruption ***\n", stderr);
+          return E_NULLVAR;
+        }
 
         e_var* elems = &stack[stack_size - (npairs * 2)];
         TRY_V(e_map_init(elems, npairs, map)); // acquires the elements.
@@ -393,6 +413,11 @@ e_exec(const e_exec_info* info)
       case E_OPCODE_MEMBER_ASSIGN: {
         u32 member = e_read_u32(&ip);
 
+        if (info->stack->size < 2) {
+          fputs("*** stack corruption ***\n", stderr);
+          return E_NULLVAR;
+        }
+
         e_var* value = e_stack_top(info->stack);
         e_var* struc = e_stack_top(info->stack) - 1;
 
@@ -441,10 +466,14 @@ e_exec(const e_exec_info* info)
         break;
       }
 
+      case E_OPCODE_DIV:
+        if (e_cast_to_int(&info->stack->stack[info->stack->size - 1]) == 0) {
+          fputs("*** Divide by zero ***\n", stderr);
+          return (e_var){ .type = E_VARTYPE_NULL };
+        }
       case E_OPCODE_ADD:
       case E_OPCODE_SUB:
       case E_OPCODE_MUL:
-      case E_OPCODE_DIV:
       case E_OPCODE_MOD:
       case E_OPCODE_EXP:
       case E_OPCODE_AND:
@@ -458,6 +487,10 @@ e_exec(const e_exec_info* info)
       case E_OPCODE_LTE:
       case E_OPCODE_GT:
       case E_OPCODE_GTE: {
+        if (info->stack->size < 2) {
+          fputs("*** stack corruption ***\n", stderr);
+          return E_NULLVAR;
+        }
         // Since we compile left first, right next
         // right will be at the top of the stack and left will be below it
         e_var r = operate(info->stack->stack[info->stack->size - 2], info->stack->stack[info->stack->size - 1], opcode);
@@ -513,6 +546,11 @@ e_exec(const e_exec_info* info)
       case E_OPCODE_JZ: {
         u32 target = e_read_u32(&ip); // always read the operand
 
+        if (target >= info->code_size) {
+          fputs("JZ OOB\n", stderr);
+          return E_NULLVAR;
+        }
+
         const e_var* cnd  = e_stack_top(info->stack);
         bool         eval = evar_to_bool(*cnd);
         if (!eval) ip = info->code + target;
@@ -523,6 +561,10 @@ e_exec(const e_exec_info* info)
 
       case E_OPCODE_JNZ: {
         u32 target = e_read_u32(&ip); // always read the operand
+        if (target >= info->code_size) {
+          fputs("JNZ OOB\n", stderr);
+          return E_NULLVAR;
+        }
 
         const e_var* cnd  = e_stack_top(info->stack);
         bool         eval = evar_to_bool(*cnd);
@@ -554,9 +596,14 @@ e_exec(const e_exec_info* info)
         break;
       }
 
-      case E_OPCODE_JMP:
-        ip = info->code + e_read_u32(&ip);
-        break;
+      case E_OPCODE_JMP: {
+        u32 to_address = e_read_u32(&ip);
+        if (to_address >= info->code_size) {
+          fputs("JMP OOB\n", stderr);
+          return E_NULLVAR;
+        }
+        ip = info->code + to_address;
+      } break;
 
         // case E_OPCODE_JE: ip = inss + e_read_u32(&ip); break;
         // case E_OPCODE_JNE: ip = inss + e_read_u32(&ip); break;
@@ -618,10 +665,15 @@ e_exec(const e_exec_info* info)
 
         e_var* stack      = info->stack->stack;
         size_t stack_size = info->stack->size;
+        if (stack_size < 2) {
+          fputs("*** stack corruption ***\n", stderr);
+          return E_NULLVAR;
+        }
 
-        e_vartype left_type = stack[stack_size - 2].type;
-        if (left_type == E_VARTYPE_LIST) {
-          e_list* list = stack[stack_size - 2].type == E_VARTYPE_LIST ? E_VAR_AS_LIST(&stack[stack_size - 2]) : NULL;
+        e_var* left = &stack[stack_size - 2];
+
+        if (left->type == E_VARTYPE_LIST) {
+          e_list* list = left->type == E_VARTYPE_LIST ? E_VAR_AS_LIST(left) : NULL;
           if (!list) { return (e_var){ .type = E_VARTYPE_NULL }; }
 
           int idx = e_cast_to_int(&stack[stack_size - 1]);
@@ -630,10 +682,9 @@ e_exec(const e_exec_info* info)
             push = list->vars[idx];
             e_var_acquire(&push);
           }
-        } else if (left_type == E_VARTYPE_MAP) {
-          e_var* map_var = &stack[stack_size - 2];
-          e_map* map     = E_VAR_AS_MAP(map_var);
-          e_var  key     = stack[stack_size - 1];
+        } else if (left->type == E_VARTYPE_MAP) {
+          e_map* map = E_VAR_AS_MAP(left);
+          e_var  key = stack[stack_size - 1];
 
           if (!map) { return (e_var){ .type = E_VARTYPE_NULL }; }
 
@@ -642,18 +693,9 @@ e_exec(const e_exec_info* info)
             push = *find;
             e_var_acquire(&push);
           } // else push is null var
-        } else if (left_type == E_VARTYPE_VEC2) {
-          e_vec2 v2  = E_VEC2_INIT(stack[stack_size - 2].val.vec2);
-          int    idx = e_cast_to_int(&stack[stack_size - 1]);
-          if (idx < 2) { push = (e_var){ .type = E_VARTYPE_FLOAT, .val.f = idx == 0 ? v2[0] : v2[1] }; }
-        } else if (left_type == E_VARTYPE_VEC3) {
-          e_vec3 v3  = E_VEC3_INIT(stack[stack_size - 2].val.vec3);
-          int    idx = e_cast_to_int(&stack[stack_size - 1]);
-          if (idx < 3) { push = (e_var){ .type = E_VARTYPE_FLOAT, .val.f = idx == 0 ? v3[0] : idx == 1 ? v3[1] : v3[2] }; }
-        } else if (left_type == E_VARTYPE_VEC4) {
-          e_vec4 v4  = E_VEC4_INIT(stack[stack_size - 2].val.vec4);
-          int    idx = e_cast_to_int(&stack[stack_size - 1]);
-          if (idx < 4) { push = (e_var){ .type = E_VARTYPE_FLOAT, .val.f = idx == 0 ? v4[0] : idx == 1 ? v4[1] : idx == 2 ? v4[2] : v4[3] }; }
+        } else if (is_vector(left)) {
+          int idx = e_cast_to_int(&stack[stack_size - 1]);
+          push    = vector_index(left, idx);
         }
 
         e_stack_pop(info->stack); // pop index
@@ -668,6 +710,10 @@ e_exec(const e_exec_info* info)
       case E_OPCODE_INDEX_ASSIGN: {
         e_var* stack      = info->stack->stack;
         u32    stack_size = info->stack->size;
+        if (stack_size < 2) {
+          fputs("*** stack corruption ***\n", stderr);
+          return E_NULLVAR;
+        }
 
         e_var* base  = &stack[stack_size - 3];
         e_var* index = &stack[stack_size - 2];
@@ -706,6 +752,8 @@ e_exec(const e_exec_info* info)
         }
 
         e_stack_pop(info->stack);
+        // fputs("top=", stdout);
+        // eb_println(e_stack_top(info->stack), 1);
         e_stack_pop(info->stack);
         /* base remains on stack */
 
@@ -774,20 +822,21 @@ e_script_call(e_script* s, const char* func_name, e_var* args, u32 nargs)
   for (u32 i = 0; i < s->compiled.nfunctions; i++) {
     if (hash == s->compiled.functions[i].name_hash) {
       e_exec_info info = {
-        .code          = s->compiled.functions[i].code,
-        .args          = args,
-        .slots         = s->compiled.functions[i].arg_slots,
-        .literals      = s->compiled.literals,
-        .funcs         = s->compiled.functions,
-        .extern_funcs  = s->extern_funcs,
-        .stack         = &s->stack,
-        .code_size     = s->compiled.functions[i].code_size,
-        .nargs         = nargs,
-        .nliterals     = s->compiled.nliterals,
-        .nfuncs        = s->compiled.nfunctions,
-        .nextern_funcs = s->nxtern_funcs,
-        .extern_vars   = s->extern_vars,
-        .nextern_vars  = s->nextern_vars,
+        .code            = s->compiled.functions[i].code,
+        .args            = args,
+        .slots           = s->compiled.functions[i].arg_slots,
+        .literals        = s->compiled.literals,
+        .literals_hashes = s->compiled.literals_hashes,
+        .funcs           = s->compiled.functions,
+        .extern_funcs    = s->extern_funcs,
+        .stack           = &s->stack,
+        .code_size       = s->compiled.functions[i].code_size,
+        .nargs           = nargs,
+        .nliterals       = s->compiled.nliterals,
+        .nfuncs          = s->compiled.nfunctions,
+        .nextern_funcs   = s->nxtern_funcs,
+        .extern_vars     = s->extern_vars,
+        .nextern_vars    = s->nextern_vars,
       };
 
       if (s->compiled.functions[i].nargs != nargs) {

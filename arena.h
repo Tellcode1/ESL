@@ -33,7 +33,7 @@
 /**
  * Minimum size of memory block that is allocated.
  */
-#define E_PAGE_SIZE (64 * 1024)
+#define E_PAGE_SIZE (64ULL * 1024ULL)
 
 /**
  * Minimum bytes that memory allocated is aligned to.
@@ -102,7 +102,7 @@ e_arena_resize(e_arena* a)
 static inline void*
 e_arnalloc(e_arena* a, size_t size)
 {
-  size_t total = size + sizeof(size_t);
+  size_t total = size;
   total        = align_up(total, E_MEMALIGN);
 
   /* can't fit in regular page. */
@@ -114,9 +114,7 @@ e_arnalloc(e_arena* a, size_t size)
     a->root            = page;
 
     uchar* data = (uchar*)page + sizeof(*page);
-    memcpy(data, &size, sizeof(size));
-
-    void* p = (void*)align_up((uintptr_t)(data + sizeof(size)), E_MEMALIGN);
+    void*  p    = e_align_ptr(data, E_MEMALIGN);
     if ((uintptr_t)p & (E_MEMALIGN - 1)) abort();
     return p;
   }
@@ -140,11 +138,8 @@ e_arnalloc(e_arena* a, size_t size)
 
   uchar* data = ((uchar*)fits + sizeof(*fits)) + fits->head;
 
-  // Write the size to the start of the pointer
-  memcpy(data, &size, sizeof(size));
-
   // And return the pointer after it.
-  void* ptr = (void*)align_up((uintptr_t)data + sizeof(size), E_MEMALIGN);
+  void* ptr = e_align_ptr(data, E_MEMALIGN);
   if ((uintptr_t)ptr & (E_MEMALIGN - 1)) abort();
 
   fits->head += total;
@@ -161,22 +156,6 @@ e_arnalloc(e_arena* a, size_t size)
    */
 
   return ptr;
-}
-
-static inline void*
-e_arnrealloc(e_arena* a, void* ptr, size_t size)
-{
-  size_t old_size = 0;
-  memcpy(&old_size, (size_t*)ptr - 1, sizeof(size_t));
-
-  if (old_size >= size) { return ptr; }
-
-  void* new_blk = e_arnalloc(a, size);
-  if (ptr == nullptr) return new_blk;
-
-  memcpy(new_blk, ptr, MIN(old_size, size));
-
-  return new_blk;
 }
 
 static inline char*

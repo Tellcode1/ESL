@@ -32,7 +32,7 @@ e_var eb_str_from_list(e_var* args, u32 nargs);
 static inline e_var
 eb_str_equal(e_var* args, u32 nargs)
 {
-  (void)(nargs);
+  (void)nargs;
   return (e_var){ .type = E_VARTYPE_BOOL, .val = { .b = strcmp(E_VAR_AS_STRING(&args[0])->s, E_VAR_AS_STRING(&args[1])->s) == 0 } };
 }
 e_var eb_str_append(e_var* args, u32 nargs);

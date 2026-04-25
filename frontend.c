@@ -42,18 +42,19 @@
 int
 main(int argc, char* argv[])
 {
-  bool                 tokenizer_only = false;
-  bool                 ast_only       = false;
-  int                  root           = -1;
-  e_ast                ast            = { 0, .root = -1 };
-  e_token*             tokens         = nullptr;
-  u32                  ntoks          = 0;
-  e_compilation_result compiled       = { 0 };
-  FILE*                f              = NULL;
-  char*                contents       = NULL;
-  e_str_interner       interner       = { 0 };
-  e_arena              arena          = { 0 };
-  int                  e              = 0;
+  bool                 tokenizer_only     = false;
+  bool                 ast_only           = false;
+  bool                 print_memory_usage = false;
+  int                  root               = -1;
+  e_ast                ast                = { 0, .root = -1 };
+  e_token*             tokens             = nullptr;
+  u32                  ntoks              = 0;
+  e_compilation_result compiled           = { 0 };
+  FILE*                f                  = NULL;
+  char*                contents           = NULL;
+  e_str_interner       interner           = { 0 };
+  e_arena              arena              = { 0 };
+  int                  e                  = 0;
 
   if (e_refdobj_pool_init(16, &ge_pool)) goto ret;
 
@@ -70,17 +71,13 @@ main(int argc, char* argv[])
       assert(i + 1 < argc);
       out = argv[i + 1];
       i++; // consumed path!
-      continue;
     } else if (strcmp(opt, "tokens") == 0) {
       tokenizer_only = true;
     } else if (strcmp(opt, "ast") == 0) {
       ast_only = true;
+    } else if (strcmp(opt, "mem") == 0) {
+      print_memory_usage = true;
     }
-  }
-
-  if (out == NULL) {
-    fprintf(stderr, "No output file specified. Not doing anything\n");
-    return 0; // well technically its not an error... :3
   }
 
   const char* in = argv[1];
@@ -145,21 +142,26 @@ main(int argc, char* argv[])
     goto ret;
   }
 
-  f = fopen(out, "wb");
-  if (!f) {
-    perror("Failed to open out file");
-    goto ret;
+  if (out) {
+    f = fopen(out, "wb");
+    if (!f) {
+      perror("Failed to open out file");
+      goto ret;
+    }
+    e_file_write(&compiled, f);
+  } else {
+    e_file_write(&compiled, stdout);
   }
 
-  e_file_write(&compiled, f);
-
-  size_t        goob = 0;
-  e_arena_page* next = arena.root;
-  while (next) {
-    goob++;
-    next = next->next;
+  if (print_memory_usage) {
+    size_t        goob = 0;
+    e_arena_page* next = arena.root;
+    while (next) {
+      goob++;
+      next = next->next;
+    }
+    fprintf(stderr, "%zu pages were allocated (%zu bytes)\n", goob, goob * (size_t)E_PAGE_SIZE);
   }
-  printf("%zu pages were allocated\n", goob);
 
 ret:
   if (contents) free(contents);

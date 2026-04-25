@@ -437,6 +437,10 @@ fn main() {
   println(p["Goopy"]);
 
   println(outlive());
+
+  let piss = [[16]];
+  piss[0][0] = 42;
+  io::println(io::STDERR, "HELP: ", piss);
 }
 
 fn file_test()

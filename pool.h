@@ -56,7 +56,7 @@ struct e_refdobj_pool;
  * Leaf.
  */
 typedef struct e_refdobj {
-  u8  data[E_REFLEAVE_SIZE];
+  u8  data[E_REFLEAVE_SIZE] ALIGNAS(16);
   int refc; /* Reference counter */
 } e_refdobj;
 
@@ -66,7 +66,7 @@ typedef struct e_refdobj {
  * doesn't see any free nodes.
  */
 typedef struct e_refdobj_branch {
-  e_refdobj leaves[E_REFLEAVE_COUNT];
+  e_refdobj leaves[E_REFLEAVE_COUNT] ALIGNAS(16);
   u64       leaves_in_use; // Bitmask
 
   /* Number of free leaves on this branch */

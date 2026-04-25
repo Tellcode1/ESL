@@ -25,16 +25,11 @@
 #ifndef E_MATH_STRUCTURES_H
 #define E_MATH_STRUCTURES_H
 
-/* inline */
-#if defined(__has_attribute) && __has_attribute(aligned)
-#  define _ATTR_INLINE(...) __attribute__((aligned(__VA_ARGS__)))
-#else
-#  define _ATTR_INLINE
-#endif
+#include "stdafx.h"
 
-typedef _ATTR_INLINE(16) double e_vec2[2];
-typedef _ATTR_INLINE(16) double e_vec3[3];
-typedef _ATTR_INLINE(16) double e_vec4[4];
+typedef double e_vec2[2] ALIGNAS(16);
+typedef double e_vec3[3] ALIGNAS(16);
+typedef double e_vec4[4] ALIGNAS(16);
 
 #define E_VEC2_INIT(old) { (old)[0], (old)[1] }
 #define E_VEC3_INIT(old) { (old)[0], (old)[1], (old)[2] }

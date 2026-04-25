@@ -296,7 +296,7 @@ typedef enum e_opcode_bck {
 } e_opcode_bck;
 typedef u8 e_opcode;
 
-static const u8 __e_opcode_must_have_less_than_256_entries__[E_OPCODE_COUNT <= 256 ? 1 : -1] = { 0 };
+static const u8 static_assert__e_opcode_must_have_less_than_256_entries__[E_OPCODE_COUNT <= 256 ? 1 : -1] = { 0 };
 
 typedef struct e_ins_packed {
   u8 opcode;
@@ -309,7 +309,7 @@ typedef struct e_ins_packed {
     u32  mk_list, mk_map;
     u32  index_assign;
     u32  label;
-    u16  literal;
+    u32  literal;
     bool has_return_value;
     struct {
       u16 nargs;

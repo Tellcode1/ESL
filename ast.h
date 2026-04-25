@@ -359,7 +359,7 @@ void e_ast_free(e_ast* prsr);
 /**
  * Recursively free a node in the tree.
  */
-void e_ast_node_free(e_ast* p, int node);
+void e_ast_node_free(e_ast* p, int id);
 
 static inline e_token*
 e_ast_next(struct e_ast* prsr)
@@ -380,6 +380,7 @@ e_ast_prev(const struct e_ast* prsr)
   return &prsr->toks[prsr->head - 1];
 }
 
+// NOLINTBEGIN(readability-magic-numbers)
 static inline bool
 e_getbp(e_token_type type, int* left, int* right)
 {
@@ -477,16 +478,13 @@ e_getbp(e_token_type type, int* left, int* right)
   }
   return true;
 }
+// NOLINTEND(readability-magic-numbers)
 
 #define E_GET_NODE e_ast_get_node
 
-__attribute__((always_inline))
 static inline e_ast_node*
 e_ast_get_node(const e_ast* p, int idx)
-{
-  if (idx < 0) return NULL;
-  return &p->nodes[idx];
-}
+{ return idx >= 0 ? &p->nodes[idx] : NULL; }
 
 static inline int
 e_ast_make_node(e_ast* p)
@@ -517,10 +515,10 @@ e_ast_is_limiter_exempt(e_ast_node_type t)
                 || t == E_AST_NODE_NOP);
 }
 
-int e_ast_parse(e_ast* p, int* root_nodeID);
-int e_ast_nud(e_ast* p, e_token* token);
+int e_ast_parse(e_ast* p, int* root);
+int e_ast_nud(e_ast* p, e_token* tk);
 int e_ast_expr(e_ast* p, int rbp);
-int e_ast_led(e_ast* p, e_token* token, int leftidx, int rbp);
+int e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp);
 
 /**
  * Expect that peek() is pointing to a token

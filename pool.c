@@ -31,7 +31,7 @@
 e_refdobj_pool ge_pool = { 0 };
 
 static int
-__branch_init(e_refdobj_pool* pool, e_refdobj_branch* b)
+branch_init(e_refdobj_pool* pool, e_refdobj_branch* b)
 {
   memset(b, 0, sizeof(*b));
   b->free_leaves = E_REFLEAVE_COUNT; // All leaves are free
@@ -52,10 +52,10 @@ e_refdobj_pool_init(u32 nbranches, e_refdobj_pool* pool)
   if (!pool->branches) return -1;
 
   for (u32 i = 0; i < nbranches; i++) {
-    pool->branches[i] = (e_refdobj_branch*)calloc(1, sizeof(e_refdobj_branch));
+    pool->branches[i] = (e_refdobj_branch*)e_aligned_malloc(sizeof(e_refdobj_branch), 16);
     if (!pool->branches[i]) return -1;
 
-    if (__branch_init(pool, pool->branches[i])) return -1;
+    if (branch_init(pool, pool->branches[i])) return -1;
   }
 
   return 0;
@@ -64,7 +64,7 @@ e_refdobj_pool_init(u32 nbranches, e_refdobj_pool* pool)
 void
 e_refdobj_pool_free(e_refdobj_pool* pool)
 {
-  for (u32 i = 0; i < pool->nbranches; i++) free(pool->branches[i]);
+  for (u32 i = 0; i < pool->nbranches; i++) e_aligned_free(pool->branches[i]);
   E_ARR_FREE(pool->branches);
 }
 
@@ -93,10 +93,10 @@ e_refdobj_pool_acquire(e_refdobj_pool* pool)
 
     /* Setup all new branches. Running from old branch count to new branch count. */
     for (u32 i = old_branch_count; i < pool->nbranches; i++) {
-      pool->branches[i] = (e_refdobj_branch*)calloc(1, sizeof(e_refdobj_branch));
+      pool->branches[i] = (e_refdobj_branch*)e_aligned_malloc(sizeof(e_refdobj_branch), 16);
       if (!pool->branches[i]) return nullptr;
 
-      __branch_init(pool, pool->branches[i]);
+      branch_init(pool, pool->branches[i]);
     }
 
     /* Recurse */
@@ -105,8 +105,8 @@ e_refdobj_pool_acquire(e_refdobj_pool* pool)
 
   /* br is free */
   for (u32 i = 0; i < E_REFLEAVE_COUNT; i++) {
-    if (!(br->leaves_in_use & (1 << i))) {
-      br->leaves_in_use |= 1 << i;
+    if (!(br->leaves_in_use & (1ULL << i))) {
+      br->leaves_in_use |= 1ULL << i;
       br->free_leaves--;
       br->pool = pool;
 
@@ -149,10 +149,10 @@ e_refdobj_pool_return(e_refdobj_pool* pool, e_refdobj* obj)
   if (!br || leaf_index == UINT32_MAX) return;
 
   /* Explicit double free check. */
-  if (!(br->leaves_in_use & (1 << leaf_index))) return;
+  if (!(br->leaves_in_use & (1ULL << leaf_index))) return;
 
   br->free_leaves++;
-  br->leaves_in_use &= ~(1 << leaf_index);
+  br->leaves_in_use &= ~(1ULL << leaf_index); // Unset in_use bit
 }
 
 void
@@ -165,7 +165,7 @@ e_refdobj_pool_trim(e_refdobj_pool* pool)
 
     // Every leaf is free
     if (br->free_leaves == E_REFLEAVE_COUNT) {
-      free(br);
+      e_aligned_free(br);
       pool->branches[i] = nullptr;
     }
   }

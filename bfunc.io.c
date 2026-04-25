@@ -78,7 +78,7 @@ eb_io_read(e_var* args, u32 nargs)
   char* s      = calloc(1, nbytes + 1);
 
   size_t nread = fread(s, 1, nbytes, f);
-  s[nread]     = 0;
+  if (nread < nbytes) s[nread] = 0;
 
   e_var v = {
     .type  = E_VARTYPE_STRING,
@@ -227,6 +227,17 @@ eb_io_open(e_var* args, u32 nargs)
   if (!f) { return (e_var){ .type = E_VARTYPE_NULL }; }
 
   return var_from_file(f);
+}
+
+e_var
+eb_io_flush(e_var* args, u32 nargs)
+{
+  (void)nargs;
+  FILE* f = file_from_var(&args[0]);
+  if (!f) return (e_var){ .type = E_VARTYPE_NULL };
+
+  fflush(f);
+  return (e_var){ .type = E_VARTYPE_NULL };
 }
 
 e_var

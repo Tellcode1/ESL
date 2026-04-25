@@ -33,11 +33,11 @@
 #endif
 
 #if defined(__has_attribute) && __has_attribute(warn_unused_result)
-#  define _ATTR_NODISCARD __attribute__((warn_unused_result))
+#  define ATTR_NODISCARD __attribute__((warn_unused_result))
 #else
-#  define _ATTR_NODISCARD
+#  define ATTR_NODISCARD
 #endif
-#define _RETURNS_ERRCODE _ATTR_NODISCARD
+#define _RETURNS_ERRCODE ATTR_NODISCARD
 
 typedef struct e_filespan {
   const char* file;
@@ -45,7 +45,7 @@ typedef struct e_filespan {
   int         col;
 } e_filespan;
 
-static inline _ATTR_FORMAT(printf, 4, 5) int _cerror(const char* file, size_t line, e_filespan span, const char* msg, ...)
+static inline _ATTR_FORMAT(printf, 4, 5) int e_internal_cerror(const char* file, size_t line, e_filespan span, const char* msg, ...)
 {
   va_list ap;
   va_start(ap, msg);
@@ -60,7 +60,7 @@ static inline _ATTR_FORMAT(printf, 4, 5) int _cerror(const char* file, size_t li
 
 #define cerror(span, ...)                                                                                                                            \
   do {                                                                                                                                               \
-    _cerror(__FILE__, __LINE__, span, __VA_ARGS__);                                                                                                  \
+    e_internal_cerror(__FILE__, __LINE__, span, __VA_ARGS__);                                                                                        \
   } while (0)
 
 #endif // E_CERR_H

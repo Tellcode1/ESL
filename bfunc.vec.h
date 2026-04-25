@@ -69,9 +69,9 @@ eb_vec_len2(e_var* args, u32 nargs)
   evector_zero_extend(&args[0], zx);
 
   switch (args[0].type) {
-    case E_VARTYPE_VEC2: return e_var_from_float(zx[0] * zx[0] + zx[1] * zx[1]);
-    case E_VARTYPE_VEC3: return e_var_from_float(zx[0] * zx[0] + zx[1] * zx[1] + zx[2] * zx[2]);
-    case E_VARTYPE_VEC4: return e_var_from_float(zx[0] * zx[0] + zx[1] * zx[1] + zx[2] * zx[2] + zx[3] * zx[3]);
+    case E_VARTYPE_VEC2: return e_var_from_float((zx[0] * zx[0]) + (zx[1] * zx[1]));
+    case E_VARTYPE_VEC3: return e_var_from_float((zx[0] * zx[0]) + (zx[1] * zx[1]) + (zx[2] * zx[2]));
+    case E_VARTYPE_VEC4: return e_var_from_float((zx[0] * zx[0]) + (zx[1] * zx[1]) + (zx[2] * zx[2]) + (zx[3] * zx[3]));
     default: break;
   }
   return (e_var){ .type = E_VARTYPE_NULL };

@@ -25,6 +25,7 @@
 #include "bfunc.h"
 
 #include "pool.h"
+#include "stdafx.h"
 #include "var.h"
 
 #include <stdlib.h>
@@ -54,7 +55,7 @@ e_read_full_line(FILE* fp)
       line = new_line;
     }
 
-    strcat(line, tmp);
+    e_strlcat(line, tmp, size);
 
     if (tmp[tmp_len - 1] == '\n') {
       tmp[tmp_len - 1] = 0;

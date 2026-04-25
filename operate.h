@@ -30,38 +30,46 @@
 #include "var.h"
 
 #define BINOP(l, r, op)                                                                                                                              \
-  (l.type == E_VARTYPE_FLOAT || r.type == E_VARTYPE_FLOAT) ? (e_var){ .type = E_VARTYPE_FLOAT, .val.f = (double)l.val.f op(double) r.val.f }         \
-                                                           : (e_var)                                                                                 \
-  { .type = E_VARTYPE_INT, .val.i = l.val.i op r.val.i }
+  (l).type == E_VARTYPE_NULL || (r).type == E_VARTYPE_NULL ? E_NULLVAR                                                                               \
+      : (l.type == E_VARTYPE_FLOAT || r.type == E_VARTYPE_FLOAT)                                                                                     \
+      ? (e_var){ .type = E_VARTYPE_FLOAT, .val.f = (double)(l).val.f op(double)(r).val.f }                                                           \
+      : (e_var)                                                                                                                                      \
+  { .type = E_VARTYPE_INT, .val.i = (l).val.i op(r).val.i }
 #define BOOLEAN_BINOP(l, r, op)                                                                                                                      \
-  (l.type == E_VARTYPE_FLOAT || r.type == E_VARTYPE_FLOAT) ? (e_var){ .type = E_VARTYPE_BOOL, .val.b = (double)l.val.f op(double) r.val.f }          \
-                                                           : (e_var)                                                                                 \
-  { .type = E_VARTYPE_BOOL, .val.b = l.val.i op r.val.i }
+  (l).type == E_VARTYPE_NULL || (r).type == E_VARTYPE_NULL ? E_NULLVAR                                                                               \
+      : ((l).type == E_VARTYPE_FLOAT || (r).type == E_VARTYPE_FLOAT)                                                                                 \
+      ? (e_var){ .type = E_VARTYPE_BOOL, .val.b = (double)(l).val.f op(double)(r).val.f }                                                            \
+      : (e_var)                                                                                                                                      \
+  { .type = E_VARTYPE_BOOL, .val.b = (l).val.i op(r).val.i }
 
 static inline bool
 is_float(e_var v)
 { return v.type == E_VARTYPE_FLOAT; }
 
 #define COERCE_BINOP(l, r, op)                                                                                                                       \
-  (is_float(l) || is_float(r)) ? (e_var){ .type = E_VARTYPE_FLOAT, .val.f = e_cast_to_float(&l) op e_cast_to_float(&r) } : (e_var)                   \
+  (l).type == E_VARTYPE_NULL || (r).type == E_VARTYPE_NULL ? E_NULLVAR                                                                               \
+      : (is_float(l) || is_float(r)) ? (e_var){ .type = E_VARTYPE_FLOAT, .val.f = e_cast_to_float(&(l)) op e_cast_to_float(&(r)) }                   \
+                                     : (e_var)                                                                                                       \
   { .type = E_VARTYPE_INT, .val.i = e_cast_to_int(&(l)) op e_cast_to_int(&(r)) }
 
 #define COERCE_BOOLEAN_BINOP(l, r, op)                                                                                                               \
-  (is_float(l) || is_float(r)) ? (e_var){ .type = E_VARTYPE_BOOL, .val.b = e_cast_to_float(&l) op e_cast_to_float(&r) } : (e_var)                    \
+  (l).type == E_VARTYPE_NULL || (r).type == E_VARTYPE_NULL ? E_NULLVAR                                                                               \
+      : (is_float(l) || is_float(r)) ? (e_var){ .type = E_VARTYPE_BOOL, .val.b = e_cast_to_float(&(l)) op e_cast_to_float(&(r)) }                    \
+                                     : (e_var)                                                                                                       \
   { .type = E_VARTYPE_BOOL, .val.b = e_cast_to_int(&(l)) op e_cast_to_int(&(r)) }
 
 static inline bool
-is_vector(e_var v)
-{ return (bool)(v.type == E_VARTYPE_VEC2 || v.type == E_VARTYPE_VEC3 || v.type == E_VARTYPE_VEC4); }
+is_vector(const e_var* v)
+{ return (bool)(v->type == E_VARTYPE_VEC2 || v->type == E_VARTYPE_VEC3 || v->type == E_VARTYPE_VEC4); }
 
 static inline bool
-is_scalar(e_var v)
-{ return (bool)(v.type == E_VARTYPE_INT || v.type == E_VARTYPE_FLOAT || v.type == E_VARTYPE_CHAR || v.type == E_VARTYPE_BOOL); }
+is_scalar(const e_var* v)
+{ return (bool)(v->type == E_VARTYPE_INT || v->type == E_VARTYPE_FLOAT || v->type == E_VARTYPE_CHAR || v->type == E_VARTYPE_BOOL); }
 
 static inline e_var
 v4_operate(e_var l, e_var r, e_opcode op)
 {
-  if (l.type != E_VARTYPE_VEC4 && r.type != E_VARTYPE_VEC4) return (e_var){ 0 };
+  if (l.type != E_VARTYPE_VEC4 && r.type != E_VARTYPE_VEC4) return (e_var){ .type = E_VARTYPE_NULL };
 
   e_vec4 lv = { 0 };
   e_vec4 rv = { 0 };
@@ -82,18 +90,18 @@ v4_operate(e_var l, e_var r, e_opcode op)
       break;
 
     case E_OPCODE_MUL:
-      if (lvec && is_scalar(r)) {
+      if (lvec && is_scalar(&r)) {
         double s = e_cast_to_float(&r);
         return e_make_vec4(lv[0] * s, lv[1] * s, lv[2] * s, lv[3] * s);
       }
-      if (rvec && is_scalar(l)) {
+      if (rvec && is_scalar(&l)) {
         double s = e_cast_to_float(&l);
         return e_make_vec4(rv[0] * s, rv[1] * s, rv[2] * s, rv[3] * s);
       }
       break;
 
     case E_OPCODE_DIV:
-      if (lvec && is_scalar(r)) {
+      if (lvec && is_scalar(&r)) {
         double s = e_cast_to_float(&r);
         return e_make_vec4(lv[0] / s, lv[1] / s, lv[2] / s, lv[3] / s);
       }
@@ -106,7 +114,7 @@ v4_operate(e_var l, e_var r, e_opcode op)
     default: break;
   }
 
-  return (e_var){ 0 };
+  return E_NULLVAR;
 }
 
 static inline e_var
@@ -133,18 +141,18 @@ v3_operate(e_var l, e_var r, e_opcode op)
       break;
 
     case E_OPCODE_MUL:
-      if (lvec && is_scalar(r)) {
+      if (lvec && is_scalar(&r)) {
         double s = e_cast_to_float(&r);
         return e_make_vec3(lv[0] * s, lv[1] * s, lv[2] * s);
       }
-      if (rvec && is_scalar(l)) {
+      if (rvec && is_scalar(&l)) {
         double s = e_cast_to_float(&l);
         return e_make_vec3(rv[0] * s, rv[1] * s, rv[2] * s);
       }
       break;
 
     case E_OPCODE_DIV:
-      if (lvec && is_scalar(r)) {
+      if (lvec && is_scalar(&r)) {
         double s = e_cast_to_float(&r);
         return e_make_vec3(lv[0] / s, lv[1] / s, lv[2] / s);
       }
@@ -184,18 +192,18 @@ v2_operate(e_var l, e_var r, e_opcode op)
       break;
 
     case E_OPCODE_MUL:
-      if (lhs_is_vec && is_scalar(r)) {
+      if (lhs_is_vec && is_scalar(&r)) {
         double s = e_cast_to_float(&r);
         return e_make_vec2(lv[0] * s, lv[1] * s);
       }
-      if (rhs_is_vec && is_scalar(l)) {
+      if (rhs_is_vec && is_scalar(&l)) {
         double s = e_cast_to_float(&l);
         return e_make_vec2(rv[0] * s, rv[1] * s);
       }
       break;
 
     case E_OPCODE_DIV:
-      if (lhs_is_vec && is_scalar(r)) {
+      if (lhs_is_vec && is_scalar(&r)) {
         double s = e_cast_to_float(&r);
         return e_make_vec2(lv[0] / s, lv[1] / s);
       }
@@ -223,7 +231,7 @@ vector_operate(e_var l, e_var r, e_opcode op)
 static inline e_var
 operate(e_var l, e_var r, e_opcode op)
 {
-  if (is_vector(l) || is_vector(r)) { return vector_operate(l, r, op); }
+  if (is_vector(&l) || is_vector(&r)) { return vector_operate(l, r, op); }
 
   if (op == E_OPCODE_NOT) return (e_var){ .type = E_VARTYPE_BOOL, .val.b = (bool)!evar_to_bool(r) };
 
@@ -254,7 +262,7 @@ operate(e_var l, e_var r, e_opcode op)
     case E_OPCODE_XOR: return (e_var){ .type = E_VARTYPE_INT, .val.i = e_cast_to_int(&l) ^ e_cast_to_int(&r) };
     default: break;
   }
-  return (e_var){ 0 };
+  return E_NULLVAR;
 }
 
 #endif // E_OPERATE_H

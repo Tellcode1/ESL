@@ -41,9 +41,13 @@
 #endif
 
 static inline void
-__advance(const char** s, int* line, int* col)
+internal_advance(const char** s, int* line, int* col)
 {
   if (**s == '\n') {
+    (*line)++;
+    (*col) = 1;
+  } else if (strcmp(*s, "\r\n") == 0) {
+    (*line)++;
     (*line)++;
     (*col) = 1;
   } else {
@@ -91,7 +95,7 @@ parse_backslash_sequences(const char* s, size_t max)
   return news;
 }
 
-#define advance(s, line, col) __advance((&s), &(line), &(col))
+#define advance(s, line, col) internal_advance((&(s)), &(line), &(col))
 
 struct tklist {
   e_token* toks;
@@ -141,7 +145,7 @@ tklist_append(struct tklist* toks, const e_token* tk)
   (struct e_filespan) { .file = advertised_file, .line = line, .col = col }
 
 static inline void
-_lexerror(const char* scriptfile, int script_line, int script_col, const char* this_file, int this_line, const char* fmt, ...)
+internal_lexerror(const char* scriptfile, int script_line, int script_col, const char* this_file, int this_line, const char* fmt, ...)
 {
   va_list ap;
   va_start(ap, fmt);
@@ -152,13 +156,13 @@ _lexerror(const char* scriptfile, int script_line, int script_col, const char* t
 
   va_end(ap);
 }
-#define lexerror(line, col, ...) _lexerror(advertised_file, line, col, __FILE__, __LINE__, __VA_ARGS__)
+#define lexerror(line, col, ...) internal_lexerror(advertised_file, line, col, __FILE__, __LINE__, __VA_ARGS__)
 
 /**
  * strndup is POSIX extension.
  */
 static inline char*
-_strndup(const char* s, size_t n)
+internal_strndup(const char* s, size_t n)
 {
   size_t l  = strlen(s);
   size_t cp = MIN(l, n);
@@ -186,14 +190,15 @@ e_tokenize(const char* input, const char* advertised_file, e_str_interner* inter
   const char* interned_filename = e_str_intern(advertised_file, interner);
 
   while (*s) {
-    while (isspace(*s) || *s == '\n') { advance(s, line, col); }
+    while (isspace(*s) || *s == '\n' || *s == '\r') { advance(s, line, col); }
 
     if (s[0] && s[0] == '/' && s[1] == '/') {
       advance(s, line, col); // skip over comment start
       advance(s, line, col);
-      while (*s && *s != '\n') { advance(s, line, col); }
+      while (*s && *s != '\n' && *s != '\r') { advance(s, line, col); }
       continue;
-    } else if (s[0] == '/' && s[1] == '*') {
+    }
+    if (s[0] == '/' && s[1] == '*') {
       advance(s, line, col); // /*
       advance(s, line, col);
 
@@ -285,7 +290,7 @@ e_tokenize(const char* input, const char* advertised_file, e_str_interner* inter
       } else if (len == strlen("struct") && strncmp(snap, "struct", len) == 0) {
         tk = (e_token){ .type = E_TOKEN_TYPE_STRUCT, .span = SPAN };
       } else {
-        tk = (e_token){ .type = E_TOKEN_TYPE_IDENT, .val.ident = _strndup(snap, len), .span = SPAN };
+        tk = (e_token){ .type = E_TOKEN_TYPE_IDENT, .val.ident = internal_strndup(snap, len), .span = SPAN };
       }
       tklist_append(&toks, &tk);
     } else if (*s == '"') {
@@ -328,12 +333,13 @@ e_tokenize(const char* input, const char* advertised_file, e_str_interner* inter
           case 'r': ch = '\r'; break;
           case 'b': ch = '\b'; break;
           case '0': ch = '\0'; break;
+          default: lexerror(line, col, "Expected one of [n,r,b,t,0]. Invalid backslash escaped sequence\n"); goto err;
         }
         advance(s, line, col);
       }
 
       if (*s != '\'') {
-        fprintf(stderr, "Expected closing quote after character literal\n");
+        lexerror(line, col, "Expected closing quote after character literal\n");
         goto err;
       }
 

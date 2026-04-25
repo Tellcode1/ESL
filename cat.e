@@ -1,7 +1,6 @@
 fn main()
 {
   let args = sys::get_command_line_args();
-  println(args);
   if (list::len(args) == 0) return;
 
   for (let i = 0; i < list::len(args); i++)
@@ -21,5 +20,8 @@ fn main()
     {
       print(s);
     }
+
+    // Flush stdout after each file.
+    io::flush(io::STDOUT);
   }
 }

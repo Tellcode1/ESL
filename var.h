@@ -33,8 +33,6 @@
 #include "string.h"
 #include "struct.h"
 
-#include <string.h>
-
 #define E_OBJ_AS_STRING(obj) ((e_string*)((obj)->data))
 #define E_OBJ_AS_LIST(obj) ((e_list*)((obj)->data))
 #define E_OBJ_AS_MAP(obj) ((e_map*)((obj)->data))
@@ -119,6 +117,8 @@ typedef struct e_var {
   e_varval  val;
 } e_var;
 #pragma pack(pop)
+#define E_NULLVAR                                                                                                                                    \
+  (e_var) { .type = E_VARTYPE_NULL }
 
 e_var e_make_var_from_string(char* s);
 
@@ -148,10 +148,11 @@ e_var evector_length(const e_var* v);
 static inline u32
 e_combine_hash(const void** list, size_t size, size_t var_size)
 {
-  u32 combined_hash = 0;
+  const u32 magic_prime   = 31;
+  u32       combined_hash = 0;
   for (size_t i = 0; i < size; i++) {
     u32 element_hash = e_hash_fnv(list[i], var_size);
-    combined_hash    = combined_hash * 31 + element_hash;
+    combined_hash    = (combined_hash * magic_prime) + element_hash;
   }
   return combined_hash;
 }
@@ -199,7 +200,14 @@ evar_to_int(e_var v)
     case E_VARTYPE_FLOAT: return (int)v.val.f;
     case E_VARTYPE_CHAR: return (int)v.val.c;
     case E_VARTYPE_BOOL: return (int)v.val.b;
-    case E_VARTYPE_STRING: return atoi(E_VAR_AS_STRING(&v)->s);
+    case E_VARTYPE_STRING: {
+      const int base = 10;
+
+      char* end = NULL;
+      int   x   = (int)strtol(E_VAR_AS_STRING(&v)->s, &end, base);
+      if (E_VAR_AS_STRING(&v)->s == end) return -1;
+      return x;
+    }
     case E_VARTYPE_LIST: return E_VAR_AS_LIST(&v)->size;
     case E_VARTYPE_MAP: return E_VAR_AS_MAP(&v)->size;
     case E_VARTYPE_STRUCT: return E_VAR_AS_STRUCT(&v)->member_count;
@@ -216,7 +224,12 @@ evar_to_float(e_var v)
     case E_VARTYPE_INT: return (double)v.val.i;
     case E_VARTYPE_CHAR: return (double)v.val.c;
     case E_VARTYPE_BOOL: return (double)v.val.b;
-    case E_VARTYPE_STRING: return atof(E_VAR_AS_STRING(&v)->s);
+    case E_VARTYPE_STRING: {
+      char*  end = NULL;
+      double d   = strtod(E_VAR_AS_STRING(&v)->s, &end);
+      if (end == E_VAR_AS_STRING(&v)->s) { return 0.0; }
+      return d;
+    }
     default: return (double)evar_to_int(v);
   }
 }
@@ -229,7 +242,7 @@ evar_to_bool(e_var v)
     case E_VARTYPE_INT: return (bool)v.val.i;
     case E_VARTYPE_FLOAT: return (bool)v.val.f;
     case E_VARTYPE_CHAR: return (bool)v.val.c;
-    case E_VARTYPE_BOOL: return (bool)v.val.b;
+    case E_VARTYPE_BOOL: return v.val.b;
     case E_VARTYPE_STRING: return strlen(E_VAR_AS_STRING(&v)->s) != 0;
     case E_VARTYPE_LIST: return E_VAR_AS_LIST(&v)->size != 0;
     case E_VARTYPE_MAP: return E_VAR_AS_MAP(&v)->size != 0;
