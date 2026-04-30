@@ -1,4 +1,5 @@
 #include "ast.h"
+#include <string.h>
 
 static void
 free_if_stmt(e_ast* ast, e_if_stmt* ifs)
@@ -162,4 +163,7 @@ e_ast_node_free(e_ast* p, int id)
     case E_AST_NODE_BREAK:
     case E_AST_NODE_CONTINUE: break;
   }
+
+  memset(node, 0, sizeof *node);
+  node->type = E_AST_NODE_NOP;
 }

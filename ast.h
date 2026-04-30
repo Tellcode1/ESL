@@ -353,7 +353,7 @@ typedef struct e_ast {
   int root;
 } e_ast;
 
-int  e_ast_init(e_token* toks, u32 ntoks, e_str_interner* interner, e_ast* prsr);
+int  e_ast_init(e_token* toks, u32 ntoks, e_str_interner* interner, e_ast* prsr) ATTR_NODISCARD;
 void e_ast_free(e_ast* prsr);
 
 /**
@@ -486,7 +486,7 @@ static inline e_ast_node*
 e_ast_get_node(const e_ast* p, int idx)
 { return idx >= 0 ? &p->nodes[idx] : NULL; }
 
-static inline int
+static inline ATTR_NODISCARD int
 e_ast_make_node(e_ast* p)
 {
   if (p->nnodes >= p->capacity) {
@@ -515,10 +515,10 @@ e_ast_is_limiter_exempt(e_ast_node_type t)
                 || t == E_AST_NODE_NOP);
 }
 
-int e_ast_parse(e_ast* p, int* root);
-int e_ast_nud(e_ast* p, e_token* tk);
-int e_ast_expr(e_ast* p, int rbp);
-int e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp);
+int e_ast_parse(e_ast* p, int* root) ATTR_NODISCARD;
+int e_ast_nud(e_ast* p, e_token* tk) ATTR_NODISCARD;
+int e_ast_expr(e_ast* p, int rbp) ATTR_NODISCARD;
+int e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp) ATTR_NODISCARD;
 
 /**
  * Expect that peek() is pointing to a token

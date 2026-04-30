@@ -74,9 +74,9 @@ main(int argc, char** argv)
     e_print_instruction_stream((const u8*)funcs[i].code, funcs[i].code_size, 4);
   }
 
-  printf(".literals:\n");
+  printf("literals:\n");
   for (u32 i = 0; i < nlits; i++) {
-    printf("[%u] = ", i);
+    printf("[%u | %u] = ", i, e_var_hash(&lits[i]));
     e_var_print(&lits[i], stdout);
     fputc('\n', stdout);
   }

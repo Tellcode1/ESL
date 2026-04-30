@@ -35,7 +35,7 @@ eb_str_equal(e_var* args, u32 nargs)
   (void)nargs;
   return (e_var){ .type = E_VARTYPE_BOOL, .val = { .b = strcmp(E_VAR_AS_STRING(&args[0])->s, E_VAR_AS_STRING(&args[1])->s) == 0 } };
 }
-e_var eb_str_append(e_var* args, u32 nargs);
+e_var eb_str_cat(e_var* args, u32 nargs);
 e_var eb_str_substr(e_var* args, u32 nargs); // substring: string, int start, int length
 e_var eb_str_repeat(e_var* args, u32 nargs); // repeat: string, int times
 e_var eb_str_ltrim(e_var* args, u32 nargs);

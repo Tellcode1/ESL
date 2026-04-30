@@ -28,10 +28,10 @@
 #include "bc.h"
 #include "cc.h"
 #include "fn.h"
-#include "pool.h"
 #include "stdafx.h"
 #include "var.h"
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -79,24 +79,34 @@ typedef enum e_file_read_error {
 static inline void
 e_emit_instruction(e_compiler* cc, e_opcode opcode)
 {
-  // u32 align = cc->info->min_instruction_alignment;
+  if (opcode == E_OPCODE_PUSH_FRAME) {
+    if (cc->frame_sp_top > cc->frame_sp_capacity) {
+      u32  new_capacity  = cc->frame_sp_capacity * 2;
+      u32* new_sp_frames = realloc(cc->frame_sp_stack, sizeof(u32) * new_capacity);
+      if (!new_sp_frames) return;
 
-  // if (align != 0) {
-  //   while (((uintptr_t)(cc->emit + cc->emitted) % align) != 0) { e_emit_u8(cc, E_OPCODE_NOOP); }
-  // }
+      cc->frame_sp_stack    = new_sp_frames;
+      cc->frame_sp_capacity = new_capacity;
+    }
+
+    cc->frame_sp_stack[cc->frame_sp_top++] = cc->stack_top;
+  } else if (opcode == E_OPCODE_POP_FRAME) {
+    if (cc->frame_sp_top == 0) {
+      fprintf(stderr, "*** stack top underflow ***\n");
+      return;
+    }
+    cc->stack_top = cc->frame_sp_stack[--cc->frame_sp_top];
+  } else {
+    cc->stack_top += e_get_instruction_stack_usage(opcode);
+  }
+  // fprintf(stderr, "STKDIF (%s): %i\n", e_opcode_to_str(opcode), e_get_instruction_stack_usage(opcode));
 
   e_emit_u8(cc, opcode);
 }
 
-static inline void
-e_emit_label(e_compiler* cc, u32 labelid)
-{
-  e_emit_u8(cc, E_OPCODE_LABEL);
-  e_emit_u32(cc, labelid);
-}
+e_ins e_read_ins(const u8** ip);
 
-static inline e_file_read_error
-e_file_load(
+e_file_read_error e_file_load(
     FILE*        f,
     void**       root_allocation,
     u32*         ninstructions,
@@ -105,215 +115,9 @@ e_file_load(
     e_var**      lits,
     u32**        lits_hashes,
     u32*         nfunctions,
-    e_function** functions)
-{
-  *root_allocation = NULL;
-  *lits            = NULL;
-  *nlits           = 0;
-  *ninstructions   = 0;
-  *instructions    = NULL;
-  *nfunctions      = 0;
-  *functions       = NULL;
+    e_function** functions);
 
-  u32 magic = 0;
-  if (fread(&magic, sizeof(magic), 1, f) != 1) goto ERR;
-
-  if (magic != E_FILE_MAGIC) return E_FILE_READ_ERR_INVALID_MAGIC;
-
-  u32 bytes_req = 0;
-  if (fread(&bytes_req, sizeof(bytes_req), 1, f) != 1) goto ERR;
-
-  *root_allocation = calloc(bytes_req, 1);
-  if (*root_allocation == nullptr) return E_FILE_READ_ERR_ROOT_ALLOCATION_FAILED;
-
-  uchar* alloc = (uchar*)*root_allocation;
-
-  if (fread(nlits, sizeof(*nlits), 1, f) != 1) goto ERR;
-
-  *lits = (e_var*)alloc;
-  alloc += sizeof(e_var) * (*nlits);
-
-  *lits_hashes = (u32*)alloc;
-  alloc += sizeof(u32) * (*nlits);
-
-  for (u32 i = 0; i < *nlits; i++) {
-    if (fread(&(*lits)[i].type, sizeof(e_vartype), 1, f) != 1) goto ERR;
-
-    e_var* lit = &(*lits)[i];
-    switch (lit->type) {
-      case E_VARTYPE_STRING: {
-        u32 len = 0;
-        if (fread(&len, sizeof(len), 1, f) != 1) goto ERR;
-
-        alloc      = e_align_ptr(alloc, 16);
-        lit->val.s = (e_refdobj*)(alloc);
-        alloc += sizeof(e_refdobj);
-
-        /* Initialize ref counter to 1. Not used for literals but VM expects it */
-        lit->val.s->refc = 1;
-
-        E_VAR_AS_STRING(lit)->s = (char*)(alloc);
-        alloc += len + 1;
-
-        if (fread(E_VAR_AS_STRING(lit)->s, sizeof(char), len, f) != len) goto ERR;
-
-        E_VAR_AS_STRING(lit)->s[len] = 0;
-        break;
-      }
-
-        // clang-format off
-      case E_VARTYPE_NULL:
-      case E_VARTYPE_VOID:
-      case E_VARTYPE_STRUCT: *lit = (e_var){ .type = E_VARTYPE_NULL }; break;
-      case E_VARTYPE_INT: if (fread(&lit->val.i, sizeof(lit->val.i), 1, f) != 1) goto ERR; break;
-      case E_VARTYPE_BOOL: if (fread(&lit->val.b, sizeof(lit->val.b), 1, f) != 1) goto ERR; break;
-      case E_VARTYPE_CHAR: if (fread(&lit->val.c, sizeof(lit->val.c), 1, f) != 1) goto ERR; break;
-      case E_VARTYPE_FLOAT: if (fread(&lit->val.f, sizeof(lit->val.f), 1, f) != 1) goto ERR; break;
-      case E_VARTYPE_VEC2: if (fread(&lit->val.vec2, sizeof(lit->val.vec2), 1, f) != 1) goto ERR; break;
-      case E_VARTYPE_VEC3: if (fread(&lit->val.vec3, sizeof(lit->val.vec3), 1, f) != 1) goto ERR; break;
-      case E_VARTYPE_VEC4: if (fread(&lit->val.vec4, sizeof(lit->val.vec4), 1, f) != 1) goto ERR; break;
-      default: break;
-        // clang-format on
-    }
-    (*lits_hashes)[i] = e_var_hash(lit);
-  }
-
-  if (fread(nfunctions, sizeof(*nfunctions), 1, f) != 1) goto ERR;
-
-  alloc      = e_align_ptr(alloc, 8);
-  *functions = (e_function*)(alloc);
-  alloc += sizeof(e_function) * (*nfunctions);
-
-  for (u32 i = 0; i < *nfunctions; i++) {
-    e_function func = { 0 };
-    if (fread(&func.code_size, sizeof(func.code_size), 1, f) != 1) goto ERR;
-    if (fread(&func.nargs, sizeof(func.nargs), 1, f) != 1) goto ERR;
-    if (fread(&func.name_hash, sizeof(func.name_hash), 1, f) != 1) goto ERR;
-
-    alloc = e_align_ptr(alloc, 4);
-
-    func.arg_slots = (u32*)alloc;
-    alloc += sizeof(u32) * func.nargs;
-    if (fread(func.arg_slots, sizeof(*func.arg_slots), func.nargs, f) != func.nargs) goto ERR;
-
-    alloc = e_align_ptr(alloc, 8);
-
-    func.code = (u8*)alloc;
-    alloc += func.code_size;
-    if (func.code == nullptr) return -1;
-
-    if (fread(func.code, 1, func.code_size, f) != func.code_size) goto ERR;
-    (*functions)[i] = func;
-  }
-
-  if (fread(ninstructions, sizeof(*ninstructions), 1, f) != 1) goto ERR;
-
-  alloc         = e_align_ptr(alloc, 8);
-  *instructions = (u8*)alloc;
-  if (fread(*instructions, sizeof(u8), *ninstructions, f) != *ninstructions) goto ERR;
-
-  return E_FILE_READ_SUCCESS;
-
-ERR:
-  free(*root_allocation);
-  return E_FILE_READ_ERR_INVALID_FILE;
-}
-
-static inline u32
-e_file_bytes_required(const e_compilation_result* r)
-{
-  u32 size = 0;
-
-  // literals array
-  size += sizeof(e_var) * r->nliterals;
-  // literal hashes array (we don't write this tho)
-  size += sizeof(u32) * r->nliterals;
-
-  for (u32 i = 0; i < r->nliterals; i++) {
-    const e_var* lit = &r->literals[i];
-
-    if (lit->type == E_VARTYPE_STRING) {
-      u32 len = strlen(E_VAR_AS_STRING(lit)->s);
-
-      size = (size + 15) & ~15;
-      size += sizeof(e_refdobj);
-      size += len + 1; // nnull
-    }
-  }
-
-  // functions array
-  size = (size + 7) & ~7;
-  size += sizeof(e_function) * r->nfunctions;
-
-  for (u32 i = 0; i < r->nfunctions; i++) {
-    const e_function* fn = &r->functions[i];
-
-    size = (size + 3) & ~3;
-    size += sizeof(u32) * fn->nargs; // arg_slots
-
-    size += (size + 7) & ~7;
-    size += fn->code_size; // code
-  }
-
-  size += (size + 7) & ~7;
-  size += r->ninstructions;
-
-  return size;
-}
-
-static inline void
-e_file_write(const e_compilation_result* r, FILE* f)
-{
-  u32 magic = E_FILE_MAGIC;
-  fwrite(&magic, sizeof(magic), 1, f);
-
-  u32 bytes_req = e_file_bytes_required(r);
-  fwrite(&bytes_req, sizeof(bytes_req), 1, f);
-
-  fwrite(&r->nliterals, sizeof(r->nliterals), 1, f);
-  for (u32 i = 0; i < r->nliterals; i++) {
-    const e_var* lit = &r->literals[i];
-    fwrite(&lit->type, sizeof(lit->type), 1, f);
-
-    if (lit->type == E_VARTYPE_STRING) {
-      u32 len = strlen(E_VAR_AS_STRING(lit)->s);
-      fwrite(&len, sizeof(len), 1, f);
-      fwrite(E_VAR_AS_STRING(lit)->s, sizeof(char), len, f);
-    } else {
-      switch (lit->type) {
-        case E_VARTYPE_INT: fwrite(&lit->val.i, sizeof(lit->val.i), 1, f); break;
-        case E_VARTYPE_BOOL: fwrite(&lit->val.b, sizeof(lit->val.b), 1, f); break;
-        case E_VARTYPE_CHAR: fwrite(&lit->val.c, sizeof(lit->val.c), 1, f); break;
-        case E_VARTYPE_FLOAT: fwrite(&lit->val.f, sizeof(lit->val.f), 1, f); break;
-        case E_VARTYPE_VEC2: fwrite(&lit->val.vec2, sizeof(lit->val.vec2), 1, f); break;
-        case E_VARTYPE_VEC3: fwrite(&lit->val.vec3, sizeof(lit->val.vec3), 1, f); break;
-        case E_VARTYPE_VEC4: fwrite(&lit->val.vec4, sizeof(lit->val.vec4), 1, f); break;
-        default: break;
-      }
-    }
-  }
-  fwrite(&r->nfunctions, sizeof(r->nfunctions), 1, f);
-  for (u32 i = 0; i < r->nfunctions; i++) {
-    const e_function* fn = &r->functions[i];
-    fwrite(&fn->code_size, sizeof(fn->code_size), 1, f);
-    fwrite(&fn->nargs, sizeof(fn->nargs), 1, f);
-    fwrite(&fn->name_hash, sizeof(fn->name_hash), 1, f);
-    fwrite(fn->arg_slots, sizeof(*fn->arg_slots), fn->nargs, f);
-    fwrite(fn->code, 1, fn->code_size, f);
-  }
-
-  fwrite(&r->ninstructions, sizeof(r->ninstructions), 1, f);
-  fwrite(r->instructions, sizeof(u8), r->ninstructions, f);
-}
-
-static inline void
-e_compilation_result_free(e_compilation_result* r)
-{
-  for (u32 i = 0; i < r->nfunctions; i++) { free(r->functions[i].code); }
-  free(r->literals);
-  free(r->literals_hashes);
-  free(r->functions);
-  free(r->instructions);
-}
+u32  e_file_bytes_required(const e_compilation_result* r);
+void e_file_write(const e_compilation_result* r, FILE* f);
 
 #endif // E_BYTECODE_STREAM_READ_WRITE_HELP_H

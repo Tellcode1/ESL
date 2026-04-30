@@ -37,7 +37,11 @@
 #else
 #  define ATTR_NODISCARD
 #endif
-#define _RETURNS_ERRCODE ATTR_NODISCARD
+
+/**
+  * Returns an error code that should be checked.
+  */
+#define RETURNS_ERRCODE ATTR_NODISCARD
 
 typedef struct e_filespan {
   const char* file;

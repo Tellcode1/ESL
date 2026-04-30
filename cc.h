@@ -118,6 +118,7 @@ typedef struct ecc_namespace_stack {
 typedef struct ecc_variable_information {
   e_filespan span; // Span at where the variable (name) is.
   u32        name_hash;
+  u32        stack_offset;  // The offset in the stack where this variable is.
   u32        stack_depth;   // The stack frame depth it was created in
   int        initializer;   // initializer provided during creation.
   int        current_value; // <0 if no value currently (void)
@@ -160,29 +161,46 @@ typedef struct ecc_literal_table {
   u32    literals_capacity;
 } ecc_literal_table;
 
+/**
+ * A constant list (upfront, before compilation starts) of
+ * all the builtin variables, provided by the e_compile caller.
+ * Shared across all forks of a compiler.
+ */
 typedef struct ecc_builtin_variables_table {
   const e_builtin_var* builtin_vars;
   const u32*           builtin_var_hashes;
   u32                  builtin_vars_count;
 } ecc_builtin_variables_table;
 
+/**
+ * All functions in the resulting binary
+ * Shared across all forks of a compiler.
+ */
 typedef struct ecc_function_table {
   e_function* functions;
   u32         functions_count;
   u32         functions_capacity;
 } ecc_function_table;
 
+/**
+ * A defer statement.
+ * eg. defer io::close(fd); io::close(fd) is our expression
+ */
 typedef struct ecc_defer_entry {
-  u32  nexprs;
+  u32  nexprs; // Can be 0!
   u32  capacity;
   int* exprs;
 } ecc_defer_entry;
 
+/**
+ * All the defer statements in a scope.
+ * Instantiated on function return / scope break.
+ */
 typedef struct ecc_defer_scope {
+  struct ecc_defer_scope* parent;
   ecc_defer_entry*        entries;
   u32                     count;
   u32                     capacity;
-  struct ecc_defer_scope* parent;
 } ecc_defer_scope;
 
 /**
@@ -235,7 +253,7 @@ typedef struct ecc_label_jumps_table {
  */
 typedef struct ecc_label_table {
   u32                    labels_count;
-  u32                    labels_capacity;
+  u32                    labels_capacity; // Can NOT be 0
   ecc_label_jumps_table* labels;
 } ecc_label_table;
 
@@ -257,11 +275,27 @@ typedef struct e_compiler {
   /* Stack for storing information about variables during compilation. */
   e_stack* stack;
 
+  /**
+   * Tracks the top of the stack
+   * Synchronized across forks (since we use a single stack).
+   */
+  i64 stack_top;
+
+  /**
+   * The stack top (to which the parent compiler will have) to return to after
+   * a function or scope exits.
+   */
+  u32 stack_base;
+
   u8* emit;
   u32 num_bytes_emitted;
   u32 emit_capacity;
 
   u32 next_label;
+
+  u32* frame_sp_stack;
+  u32  frame_sp_capacity;
+  u32  frame_sp_top;
 } e_compiler;
 
 typedef struct e_compilation_result {
@@ -269,9 +303,9 @@ typedef struct e_compilation_result {
   u32         nfunctions;
   u32         ninstructions;
   e_var*      literals;        // Array allocated by struct, don't free inviduals.
-  u32*        literals_hashes; // Array allocated by struct.
-  e_function* functions;       // Array allocated by struct.
-  u8*         instructions;    // Array allocated by struct.
+  u32*        literals_hashes; // Array allocated by struct. Free after use.
+  e_function* functions;       // Array allocated by struct. Free after use.
+  u8*         instructions;    // Array allocated by struct. Free after use.
 } e_compilation_result;
 
 /**
@@ -290,6 +324,16 @@ ecc_stream_resize(e_compiler* cc, int new_cap)
 
   cc->emit          = newcode;
   cc->emit_capacity = new_cap;
+}
+
+static inline void
+e_compilation_result_free(e_compilation_result* r)
+{
+  for (u32 i = 0; i < r->nfunctions; i++) { free(r->functions[i].code); }
+  free(r->literals);
+  free(r->literals_hashes);
+  free(r->functions);
+  free(r->instructions);
 }
 
 #endif // E_CC_H

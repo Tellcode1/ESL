@@ -105,7 +105,7 @@ conv_token_type_to_operator(e_token_type t)
  *
  * Returns 0 on succcess.
  */
-static inline int
+static inline RETURNS_ERRCODE int
 parse_braces(e_ast* p, int** outstmts, u32* outnstmts)
 {
   u32  capacity = 16;
@@ -177,7 +177,7 @@ err:
  *
  * Returns 0 on succcess.
  */
-static inline int
+static inline RETURNS_ERRCODE int
 parse_body(e_ast* p, int** outstmts, u32* outnstmts)
 {
   int  nstmts = 0;
@@ -261,7 +261,7 @@ e_ast_expr(e_ast* p, int rbp)
 /**
  * Returns node on success, a negative integer on error.
  */
-static int
+static RETURNS_ERRCODE int
 parse_variable_decleration(e_ast* ast, bool is_const, int node)
 {
   if (node < 0) return node;
@@ -353,7 +353,7 @@ err:
   return -1;
 }
 
-static int
+static RETURNS_ERRCODE int
 parse_if(e_ast* p, int node)
 {
   if (node < 0) return node;
@@ -479,7 +479,7 @@ err:
   return -1;
 }
 
-static int
+static RETURNS_ERRCODE int
 parse_while(e_ast* p, int node)
 {
   if (node < 0) return node;
@@ -526,7 +526,7 @@ err:
   return -1;
 }
 
-static int
+static RETURNS_ERRCODE int
 parse_for(e_ast* p, int node)
 {
   int init = -1;
@@ -642,7 +642,7 @@ err:
   return -1;
 }
 
-static int
+static RETURNS_ERRCODE int
 parse_function(e_ast* p, bool external, int node)
 {
   if (node < 0) return node;
@@ -744,7 +744,7 @@ err:
   return -1;
 }
 
-static int
+static RETURNS_ERRCODE int
 parse_function_call(e_ast* p, e_token* tk, int node)
 {
   u32  capacity = 16;
@@ -806,7 +806,7 @@ err:
 /**
  * On success, returns the node id.
  */
-static inline int
+static inline RETURNS_ERRCODE int
 make_literal_node(e_ast* p, int node, const e_token* tk)
 {
   if (node < 0) return node;
@@ -832,7 +832,7 @@ make_literal_node(e_ast* p, int node, const e_token* tk)
   return node;
 }
 
-static int
+static RETURNS_ERRCODE int
 parse_list(e_ast* p, int node)
 {
   u32  capelems = 16;
@@ -877,7 +877,7 @@ err:
   return -1;
 }
 
-static int
+static RETURNS_ERRCODE int
 parse_map(e_ast* p, int node)
 {
   // if (e_ast_expect(p, E_TOKEN_TYPE_OPEN_BRACE)) {
@@ -955,7 +955,7 @@ ERR:
   return e ? e : -1;
 }
 
-static int
+static RETURNS_ERRCODE int
 parse_namespace_decleration(e_ast* p, int node)
 {
   int  e      = 0;
@@ -1022,7 +1022,7 @@ ERR:
   return e ? e : -1;
 }
 
-static int
+static RETURNS_ERRCODE int
 parse_namespace_call(e_ast* p, char* name, int node)
 {
   u32  capacity = 16;
@@ -1065,7 +1065,7 @@ ERR:
   return -1;
 }
 
-static int
+static RETURNS_ERRCODE int
 parse_namespace_access(e_ast* p, int leftidx, int node)
 {
   if (!peek(p) || peek(p)->type != E_TOKEN_TYPE_IDENT) {
@@ -1110,7 +1110,7 @@ parse_namespace_access(e_ast* p, int leftidx, int node)
   return node;
 }
 
-static int
+static RETURNS_ERRCODE int
 parse_struct_decleration(e_ast* p, int node)
 {
   int e = 0;
@@ -1715,4 +1715,5 @@ e_ast_free(e_ast* prsr)
 {
   if (prsr->root >= 0) e_ast_node_free(prsr, prsr->root);
   free(prsr->nodes);
+  memset(prsr, 0, sizeof *prsr);
 }

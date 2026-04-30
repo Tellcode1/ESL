@@ -31,11 +31,18 @@
 
 #include <stdio.h>
 
+static u32 stack_top;
+
 static inline void
-e_print_instruction(e_opcode o, const u8** ip)
+e_print_instruction(e_ins i)
 {
-  switch ((e_opcode_bck)o) {
+  i32 stack_usage = e_get_ins_stack_usage(i);
+  printf("[%u, %u] (%i)", stack_top, stack_top + stack_usage, stack_usage);
+  stack_top += stack_usage;
+
+  switch ((e_opcode_bck)i.opcode) {
     case E_OPCODE_NOOP: printf("noop\n"); break;
+    case E_OPCODE_MOV: printf("mov [%u] [%u]\n", i.v.mov.dst, i.v.mov.src); break;
 
     case E_OPCODE_ADD: printf("add\n"); break;
     case E_OPCODE_SUB: printf("sub\n"); break;
@@ -55,69 +62,60 @@ e_print_instruction(e_opcode o, const u8** ip)
     case E_OPCODE_GT: printf("gt\n"); break;
     case E_OPCODE_GTE: printf("gte\n"); break;
 
-    case E_OPCODE_NOT: printf("not %s\n", e_read_u8(ip) ? "true" : "false"); break;
-    case E_OPCODE_BNOT: printf("bnot %s\n", e_read_u8(ip) ? "true" : "false"); break;
-    case E_OPCODE_NEG: printf("neg %s\n", e_read_u8(ip) ? "true" : "false"); break;
+    case E_OPCODE_NOT: printf("not\n"); break;
+    case E_OPCODE_BNOT: printf("bnot\n"); break;
+    case E_OPCODE_NEG: printf("neg\n"); break;
 
     case E_OPCODE_INC: {
-      (void)e_read_u8(ip); // always compound!
       printf("inc\n");
       break;
     }
     case E_OPCODE_DEC: {
-      (void)e_read_u8(ip); // always compound!
       printf("dec\n");
       break;
     }
     case E_OPCODE_CALL: {
-      u32 id    = e_read_u32(ip);
-      u16 nargs = e_read_u16(ip);
-      printf("call [%u] [%u]\n", id, nargs);
+      printf("call [%u] [%u]\n", i.v.call.hash, i.v.call.nargs);
       break;
     }
     case E_OPCODE_RETURN: {
-      u8 has_return_value = e_read_u8(ip);
-      printf("ret [%s]\n", has_return_value ? "true" : "false");
+      printf("ret [%s]\n", i.v.has_return_value ? "true" : "false");
       break;
     }
-    case E_OPCODE_LITERAL: printf("literal [%u]\n", e_read_u32(ip)); break;
-    case E_OPCODE_LOAD: printf("load %u\n", e_read_u32(ip)); break;
+    case E_OPCODE_LITERAL: printf("literal [%u]\n", i.v.literal); break;
+    case E_OPCODE_LOAD: printf("load %u\n", i.v.load); break;
     // case E_OPCODE_LOAD_REFERENCE: printf("load_reference\n"); break;
-    case E_OPCODE_ASSIGN: printf("store %u\n", e_read_u32(ip)); break;
-    case E_OPCODE_INIT: printf("init %u %s\n", e_read_u32(ip), e_read_u8(ip) ? "true" : "false"); break;
-    case E_OPCODE_LABEL: printf("label %u\n", e_read_u32(ip)); break;
-    case E_OPCODE_JMP: printf("jmp [%u]\n", e_read_u32(ip)); break;
-    case E_OPCODE_JE: printf("je [%u]\n", e_read_u32(ip)); break;
-    case E_OPCODE_JNE: printf("jne [%u]\n", e_read_u32(ip)); break;
-    case E_OPCODE_JZ: printf("jz [%u]\n", e_read_u32(ip)); break;
-    case E_OPCODE_JNZ: printf("jnz [%u]\n", e_read_u32(ip)); break;
-    case E_OPCODE_PUSH_VARIABLES: printf("save vars\n"); break;
-    case E_OPCODE_POP_VARIABLES: printf("restore vars\n"); break;
-    case E_OPCODE_HALT: printf("halt [%u]\n", e_read_u32(ip)); break;
+    case E_OPCODE_ASSIGN: printf("store %u\n", i.v.assign); break;
+    case E_OPCODE_INIT: printf("init %u\n", i.v.init); break;
+    case E_OPCODE_LABEL: printf("label %u\n", i.v.label); break;
+    case E_OPCODE_JMP: printf("jmp [%u]\n", i.v.jmp); break;
+    case E_OPCODE_JE: printf("je [%u]\n", i.v.jmp); break;
+    case E_OPCODE_JNE: printf("jne [%u]\n", i.v.jmp); break;
+    case E_OPCODE_JZ: printf("jz [%u]\n", i.v.jmp); break;
+    case E_OPCODE_JNZ: printf("jnz [%u]\n", i.v.jmp); break;
+    case E_OPCODE_PUSH_FRAME: printf("save vars\n"); break;
+    case E_OPCODE_POP_FRAME: printf("restore vars\n"); break;
+    case E_OPCODE_HALT: printf("halt [%u]\n", i.v.halt); break;
     case E_OPCODE_COUNT: printf("invalid\n"); break;
     case E_OPCODE_MK_LIST: {
-      u32 nelems = e_read_u32(ip);
-      printf("mklist [%u]\n", nelems);
+      printf("mklist [%u]\n", i.v.mk_list);
       break;
     }
     case E_OPCODE_MK_MAP: {
-      u32 nelems = e_read_u32(ip);
-      printf("mkmap [%u]\n", nelems);
+      printf("mkmap [%u]\n", i.v.mk_map);
       break;
     }
     case E_OPCODE_INDEX: printf("index\n"); break;
     case E_OPCODE_POP: printf("pop\n"); break;
     case E_OPCODE_INDEX_ASSIGN: printf("idx_assign\n"); break;
-    case E_OPCODE_MEMBER_ACCESS: printf("member_access [%u]\n", e_read_u32(ip)); break;
+    case E_OPCODE_MEMBER_ACCESS: printf("member_access [%u]\n", i.v.member); break;
     case E_OPCODE_MK_STRUCT: {
-      u32 nmembers = e_read_u32(ip);
-      printf("mk_struct [%u]\n", nmembers);
-      for (u32 i = 0; i < nmembers; i++) { printf("\t[%u] = null\n", e_read_u32(ip)); }
+      printf("mk_struct [%u]\n", i.v.mk_struct.nmembers);
+      for (u32 j = 0; j < i.v.mk_struct.nmembers; j++) { printf("\t\t[%u] = null\n", i.v.mk_struct.members[j]); }
       break;
     }
     case E_OPCODE_MEMBER_ASSIGN: {
-      u32 member = e_read_u32(ip);
-      printf("member_assign [%u]\n", member);
+      printf("member_assign [%u]\n", i.v.member);
       break;
     }
     case E_OPCODE_DUP: printf("dup\n"); break;
@@ -127,18 +125,19 @@ e_print_instruction(e_opcode o, const u8** ip)
 static inline void
 e_print_instruction_stream(const u8* stm, u32 stm_size, int indent)
 {
+  stack_top = 0;
+
   const u8* ip  = stm;
   const u8* end = stm + stm_size;
   while (ip < end) {
     u32 instruction_offset = ip - stm;
 
-    e_opcode e = *(e_opcode*)ip;
-    ip += sizeof(e_opcode);
+    e_ins i = e_read_ins(&ip);
 
     for (int i = 0; i < indent; i++) fputc(' ', stdout);
 
-    printf("%u: ", instruction_offset); // Print offset of instruction
-    e_print_instruction(e, &ip);
+    printf("%-4u: ", instruction_offset); // Print offset of instruction
+    e_print_instruction(i);
   }
 }
 

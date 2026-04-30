@@ -98,6 +98,14 @@ e_hash_fnv(const void* data, size_t size)
   return hash;
 }
 
+static inline void e_xfree(void **pptr)
+{
+  if (!pptr || !*pptr) return;
+  free(*pptr);
+  // If we get a SIGSEGV, we won't return, will we?
+  *pptr = NULL;
+}
+
 // static inline void*
 // allocator_callback(const char* file, size_t line, size_t size)
 // {

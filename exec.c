@@ -77,11 +77,22 @@ call(const e_exec_info* info, u32 hash, u32 nargs)
 {
   e_var return_value = { .type = E_VARTYPE_NULL };
 
+  e_var* args_copy = nargs > 0 ? calloc(nargs, sizeof(e_var)) : NULL;
+  if (nargs > 0) memcpy(args_copy, &info->stack->stack[info->stack->size - nargs], nargs * sizeof(e_var));
+
+  for (u32 i = 0; i < nargs; i++) e_var_acquire(&args_copy[i]);
+  for (u32 i = 0; i < nargs; i++) e_stack_pop(info->stack);
+
+  /**
+   * The depth that we'll need to
+   * restore to when the function returns.
+   */
+  u32 depth_restore = info->stack->depth;
+
   // builtins
   const e_builtin_func* builtin = get_builtin_func_hashed(hash);
   if (builtin != nullptr) {
-    e_var* args  = &info->stack->stack[info->stack->size - nargs];
-    return_value = builtin->func(args, nargs);
+    return_value = builtin->func(args_copy, nargs);
     goto pop_and_ret;
   }
 
@@ -89,7 +100,7 @@ call(const e_exec_info* info, u32 hash, u32 nargs)
   for (u32 i = 0; i < info->nextern_funcs; i++) {
     const char* name = info->extern_funcs[i].name;
     if (e_hash_fnv(name, strlen(name)) != hash) continue;
-    if (info->extern_funcs[i].func) { return_value = info->extern_funcs[i].func(&info->stack->stack[info->stack->size - nargs], nargs); }
+    if (info->extern_funcs[i].func) { return_value = info->extern_funcs[i].func(args_copy, nargs); }
     goto pop_and_ret;
   }
 
@@ -97,17 +108,13 @@ call(const e_exec_info* info, u32 hash, u32 nargs)
   for (u32 f = 0; f < info->nfuncs; f++) {
     if (info->funcs[f].name_hash != hash) continue;
 
-    /**
-     * The depth that we'll need to
-     * restore to when the function returns.
-     */
-    u32 depth_restore = info->stack->depth;
-    TRY_V(e_stack_push_frame(info->stack));
+    e_stack stack = { 0 };
+    e_stack_init(32, 4, 8, &stack);
 
     e_exec_info fi = {
       .code            = info->funcs[f].code,
-      .args            = &info->stack->stack[info->stack->size - info->funcs[f].nargs],
-      .slots           = info->funcs[f].arg_slots,
+      .args            = args_copy,
+      .arg_slots       = info->funcs[f].arg_slots,
       .literals        = info->literals,
       .literals_hashes = info->literals_hashes,
       .funcs           = info->funcs,
@@ -119,15 +126,11 @@ call(const e_exec_info* info, u32 hash, u32 nargs)
       .nextern_funcs   = info->nextern_funcs,
       .extern_vars     = info->extern_vars,
       .nextern_vars    = info->nextern_vars,
-      .stack           = info->stack,
+      .stack           = &stack,
     };
     return_value = e_exec(&fi);
 
-    /**
-     * Restore to the depth that we
-     * were in
-     */
-    while (info->stack->depth > depth_restore) e_stack_pop_frame(info->stack);
+    e_stack_free(&stack);
 
     goto pop_and_ret;
   }
@@ -143,7 +146,17 @@ pop_and_ret:
   // eb_println(&return_value, 1);
   // #endif
 
-  for (u32 i = 0; i < nargs; i++) e_stack_pop(info->stack);
+  if (args_copy) {
+    for (u32 i = 0; i < nargs; i++) e_var_release(&args_copy[i]);
+    free(args_copy);
+  }
+
+  /**
+   * Restore to the depth that we
+   * were in
+   */
+  while (info->stack->depth > depth_restore) e_stack_pop_frame(info->stack);
+
   return return_value;
 }
 
@@ -185,26 +198,22 @@ e_var
 e_exec(const e_exec_info* info)
 {
   /* Initial state check. */
-  const e_var nullvar = { .type = E_VARTYPE_NULL };
-  if (!info->stack) { return nullvar; }
-  if (info->nargs > 0 && (info->nargs == nullptr || info->slots == nullptr)) { return nullvar; }
-  if (info->code == nullptr && info->code_size != 0) { return nullvar; }
-  if (info->extern_funcs == nullptr && info->nextern_funcs > 0) { return nullvar; }
-  if (info->extern_vars == nullptr && info->nextern_vars > 0) { return nullvar; }
-  if (info->funcs == nullptr && info->nfuncs > 0) { return nullvar; }
-  if (info->literals == nullptr && info->nliterals > 0) { return nullvar; }
+  if (!info->stack || (info->nargs > 0 && (info->args == nullptr || info->arg_slots == nullptr)) || (info->code == nullptr && info->code_size != 0)
+      || (info->extern_funcs == nullptr && info->nextern_funcs > 0) || (info->extern_vars == nullptr && info->nextern_vars > 0)
+      || (info->funcs == nullptr && info->nfuncs > 0) || (info->literals == nullptr && info->nliterals > 0)) {
+    fputs("Corrupted info during execution (broken fork?)\n", stderr);
+    return E_NULLVAR;
+  }
 
   for (u32 i = 0; i < info->nargs; i++) {
-    e_var v = { 0 };
-
-    int e = e_var_deep_cpy(&info->args[i], &v);
-    if (e) return nullvar;
-
-    e_var* slot = e_stack_push_variable(info->slots[i], info->stack);
+    e_var* slot = e_stack_push_variable(info->arg_slots[i], info->stack);
     if (!slot) return (e_var){ .type = E_VARTYPE_ERROR, .val.errcode = E_EUNKNOWN };
+
+    // Nothing should be on the stack but still...
     e_var_release(slot);
 
-    *slot = v;
+    e_var_shallow_cpy(&info->args[i], slot);
+    e_var_acquire(slot);
   }
 
   e_var retval = { .type = E_VARTYPE_NULL };
@@ -212,10 +221,8 @@ e_exec(const e_exec_info* info)
   const u8* ip  = info->code;
   const u8* end = info->code + info->code_size;
 
-  while (true) {
-    if (ip >= end) { goto _RETURN; }
-
-    e_opcode_bck opcode = e_read_u8(&ip);
+  while (ip < end) {
+    e_ins ins = e_read_ins(&ip);
 
     // fputs("STACK[ ", stdout);
     // for (u32 i = 0; i < info->stack->size; i++) {
@@ -224,11 +231,28 @@ e_exec(const e_exec_info* info)
     // }
     // fputs(" ]\n\n", stdout);
 
-    switch (opcode) {
+    switch ((e_opcode_bck)ins.opcode) {
       /* NOOPs */
-      case E_OPCODE_LABEL: ip += 4; break; // move over Label ID
+      case E_OPCODE_LABEL:
       case E_OPCODE_COUNT:
       case E_OPCODE_NOOP: break;
+
+      case E_OPCODE_MOV: {
+        const u32 dst = ins.v.mov.dst;
+        const u32 src = ins.v.mov.src;
+        if (dst >= info->stack->size || src >= info->stack->size) {
+          fprintf(stderr, "OOB mov\n");
+          return E_NULLVAR;
+        }
+
+        e_var* stack = info->stack->stack;
+
+        e_var_release(&stack[dst]);
+        stack[dst] = stack[src];
+        e_var_acquire(&stack[dst]);
+
+        break;
+      }
 
       case E_OPCODE_POP: e_stack_pop(info->stack); break;
       case E_OPCODE_DUP: {
@@ -240,8 +264,8 @@ e_exec(const e_exec_info* info)
       }
 
       case E_OPCODE_CALL: {
-        u32 hash       = e_read_u32(&ip);
-        u16 func_nargs = e_read_u16(&ip);
+        const u32 func_nargs = ins.v.call.nargs;
+        const u32 hash       = ins.v.call.hash;
 
         if (info->stack->size < func_nargs) {
           fputs("*** stack corruption ***\n", stderr);
@@ -257,7 +281,7 @@ e_exec(const e_exec_info* info)
       }
 
       case E_OPCODE_LITERAL: {
-        u32 id = e_read_u32(&ip);
+        const u32 id = ins.v.literal;
 
         e_var v = E_NULLVAR;
         for (u32 i = 0; i < info->nliterals; i++) {
@@ -269,15 +293,15 @@ e_exec(const e_exec_info* info)
         }
 
         TRY_V(e_stack_push(info->stack, &v));
-        e_var_release(&v); // Hand over v to the stack. Noop for nullvar.
+        e_var_release(&v); // Hand over v to the stack. Noop for E_NULLVAR.
         break;
       }
 
       case E_OPCODE_MK_LIST: {
-        u32 nelems = e_read_u32(&ip);
+        const u32 nelems = ins.v.mk_list;
 
         e_refdobj* obj = e_refdobj_pool_acquire(&ge_pool);
-        if (!obj) return nullvar;
+        if (!obj) return E_NULLVAR;
 
         // Convert the object
         e_list* list = E_OBJ_AS_LIST(obj);
@@ -309,10 +333,10 @@ e_exec(const e_exec_info* info)
       }
 
       case E_OPCODE_MK_MAP: {
-        u32 npairs = e_read_u32(&ip);
+        const u32 npairs = ins.v.mk_map;
 
         e_refdobj* obj = e_refdobj_pool_acquire(&ge_pool);
-        if (!obj) return nullvar;
+        if (!obj) return E_NULLVAR;
 
         // Convert the object
         e_map* map = E_OBJ_AS_MAP(obj);
@@ -343,15 +367,16 @@ e_exec(const e_exec_info* info)
       }
 
       case E_OPCODE_MK_STRUCT: {
-        u32  member_count = e_read_u32(&ip);
-        u32* fields       = calloc(member_count, sizeof(u32));
-        for (u32 i = 0; i < member_count; i++) { fields[i] = e_read_u32(&ip); }
+        const u32 member_count = ins.v.mk_struct.nmembers;
+
+        u32* fields = calloc(member_count, sizeof(u32));
+        for (u32 i = 0; i < member_count; i++) { fields[i] = ins.v.mk_struct.members[i]; }
 
         e_var st = {
           .type      = E_VARTYPE_STRUCT,
           .val.struc = e_refdobj_pool_acquire(&ge_pool),
         };
-        if (!st.val.struc) return nullvar;
+        if (!st.val.struc) return E_NULLVAR;
 
         E_VAR_AS_STRUCT(&st)->member_hashes = fields;
         E_VAR_AS_STRUCT(&st)->members       = (e_var*)calloc(member_count, sizeof(e_var));
@@ -366,9 +391,9 @@ e_exec(const e_exec_info* info)
       }
 
       case E_OPCODE_MEMBER_ACCESS: {
-        u32 member = e_read_u32(&ip);
+        if (!info->stack) return E_NULLVAR;
 
-        if (!info->stack) return nullvar;
+        const u32 member = ins.v.member;
 
         e_var push = { .type = E_VARTYPE_NULL };
 
@@ -398,7 +423,7 @@ e_exec(const e_exec_info* info)
             }
           }
         } else {
-          push = nullvar;
+          push = E_NULLVAR;
         }
 
         // pop off struct
@@ -411,7 +436,7 @@ e_exec(const e_exec_info* info)
       }
 
       case E_OPCODE_MEMBER_ASSIGN: {
-        u32 member = e_read_u32(&ip);
+        const u32 member = ins.v.member;
 
         if (info->stack->size < 2) {
           fputs("*** stack corruption ***\n", stderr);
@@ -428,7 +453,7 @@ e_exec(const e_exec_info* info)
           const u32 y = e_hash_fnv("y", 1);
           const u32 z = e_hash_fnv("z", 1);
           const u32 w = e_hash_fnv("w", 1);
-          // printf("Vector assign\n");
+
           if (member == x) {
             struc->val.vec4[0] = value->val.f;
           } else if (member == y) {
@@ -493,7 +518,7 @@ e_exec(const e_exec_info* info)
         }
         // Since we compile left first, right next
         // right will be at the top of the stack and left will be below it
-        e_var r = operate(info->stack->stack[info->stack->size - 2], info->stack->stack[info->stack->size - 1], opcode);
+        e_var r = operate(info->stack->stack[info->stack->size - 2], info->stack->stack[info->stack->size - 1], ins.opcode);
 
         e_stack_pop(info->stack); // remove L & R
         e_stack_pop(info->stack);
@@ -507,13 +532,10 @@ e_exec(const e_exec_info* info)
       case E_OPCODE_DEC: {
         e_var* top = e_stack_top(info->stack);
 
-        /* These two are always compound, but still emit the is_compound flag */
-        (void)e_read_u8(&ip);
-
         if (top->type == E_VARTYPE_INT) {
-          top->val.i += (opcode == E_OPCODE_INC) ? 1 : -1;
+          top->val.i += (ins.opcode == E_OPCODE_INC) ? 1 : -1;
         } else {
-          top->val.f += (opcode == E_OPCODE_INC) ? 1.F : -1.F;
+          top->val.f += (ins.opcode == E_OPCODE_INC) ? 1.F : -1.F;
         }
 
         break;
@@ -522,30 +544,17 @@ e_exec(const e_exec_info* info)
       case E_OPCODE_NEG:
       case E_OPCODE_NOT:
       case E_OPCODE_BNOT: {
-        bool is_compound = (bool)e_read_u8(&ip);
-
         // Provide an empty variable for the LHS
-        e_var r = operate((e_var){ 0 }, *e_stack_top(info->stack), opcode);
+        e_var r = operate((e_var){ 0 }, *e_stack_top(info->stack), ins.opcode);
 
-        // printf("in goes ");
-        // eb_print(e_stack_top(info->stack), 1);
-        // printf(", and out comes ");
-        // eb_println(&r, 1);
-
-        if (is_compound) {
-          e_var_release(e_stack_top(info->stack));
-          *e_stack_top(info->stack) = r;
-        } else {
-          e_stack_pop(info->stack); // remove RHS
-          TRY_V(e_stack_push(info->stack, &r));
-        }
+        e_stack_pop(info->stack); // remove RHS
+        TRY_V(e_stack_push(info->stack, &r));
 
         break;
       }
 
       case E_OPCODE_JZ: {
-        u32 target = e_read_u32(&ip); // always read the operand
-
+        const u32 target = ins.v.jmp;
         if (target >= info->code_size) {
           fputs("JZ OOB\n", stderr);
           return E_NULLVAR;
@@ -560,7 +569,7 @@ e_exec(const e_exec_info* info)
       }
 
       case E_OPCODE_JNZ: {
-        u32 target = e_read_u32(&ip); // always read the operand
+        const u32 target = ins.v.jmp;
         if (target >= info->code_size) {
           fputs("JNZ OOB\n", stderr);
           return E_NULLVAR;
@@ -575,9 +584,8 @@ e_exec(const e_exec_info* info)
       }
 
       case E_OPCODE_JE: {
-        u32 target = e_read_u32(&ip); // always read the operand
-
-        e_var* top = e_stack_top(info->stack);
+        const u32 target = ins.v.jmp;
+        e_var*    top    = e_stack_top(info->stack);
         if (e_var_equal(top, top - 1)) ip = info->code + target;
 
         e_stack_pop(info->stack); // remove conditions
@@ -586,9 +594,8 @@ e_exec(const e_exec_info* info)
       }
 
       case E_OPCODE_JNE: {
-        u32 target = e_read_u32(&ip); // always read the operand
-
-        e_var* top = e_stack_top(info->stack);
+        const u32 target = ins.v.jmp;
+        e_var*    top    = e_stack_top(info->stack);
         if (!e_var_equal(top, top - 1)) ip = info->code + target;
 
         e_stack_pop(info->stack); // remove conditions
@@ -597,40 +604,22 @@ e_exec(const e_exec_info* info)
       }
 
       case E_OPCODE_JMP: {
-        u32 to_address = e_read_u32(&ip);
-        if (to_address >= info->code_size) {
+        const u32 target = ins.v.jmp;
+        if (target >= info->code_size) {
           fputs("JMP OOB\n", stderr);
           return E_NULLVAR;
         }
-        ip = info->code + to_address;
+        ip = info->code + target;
       } break;
 
-        // case E_OPCODE_JE: ip = inss + e_read_u32(&ip); break;
-        // case E_OPCODE_JNE: ip = inss + e_read_u32(&ip); break;
-
       case E_OPCODE_INIT: {
-        u32  hash        = e_read_u32(&ip);
-        bool is_compound = (bool)e_read_u8(&ip);
-
-        if (is_compound) {
-          e_var  top_take;
-          e_var* top = e_stack_top(info->stack);
-
-          e_var_acquire(top);
-          TRY_V(e_var_shallow_cpy(top, &top_take));
-
-          e_stack_pop(info->stack);
-
-          e_var* v = e_stack_push_variable(hash, info->stack);
-          TRY_V(e_var_shallow_cpy(&top_take, v));
-        } else {
-          e_stack_push_variable(hash, info->stack);
-        }
+        const u32 hash = ins.v.init;
+        e_stack_push_variable(hash, info->stack);
         break;
       }
 
       case E_OPCODE_LOAD: {
-        u32 id = e_read_u32(&ip);
+        const u32 id = ins.v.load;
 
         bool was_external = false;
         for (u32 i = 0; i < info->nextern_vars; i++) {
@@ -651,7 +640,10 @@ e_exec(const e_exec_info* info)
         if (was_external) break;
 
         e_var* slot = get_variable_from_id(info->stack, id);
-        if (!slot) return nullvar;
+        if (!slot) {
+          fprintf(stderr, "*** undeclared variable (id=%u) LOAD'd ***\n", id);
+          return E_NULLVAR;
+        }
 
         e_var v;
         TRY_V(e_var_shallow_cpy(slot, &v));
@@ -710,7 +702,7 @@ e_exec(const e_exec_info* info)
       case E_OPCODE_INDEX_ASSIGN: {
         e_var* stack      = info->stack->stack;
         u32    stack_size = info->stack->size;
-        if (stack_size < 2) {
+        if (stack_size < 3) {
           fputs("*** stack corruption ***\n", stderr);
           return E_NULLVAR;
         }
@@ -761,7 +753,8 @@ e_exec(const e_exec_info* info)
       }
 
       case E_OPCODE_ASSIGN: {
-        u32    id   = e_read_u32(&ip);
+        const u32 id = ins.v.assign;
+
         e_var* slot = get_variable_from_id(info->stack, id);
 
         if (!slot) { return (e_var){ .type = E_VARTYPE_NULL }; }
@@ -777,7 +770,7 @@ e_exec(const e_exec_info* info)
          * x = y = z = 68;
          *             ^ value needs to be on the stack!
          */
-        TRY_V(e_var_shallow_cpy(e_stack_top(info->stack), slot));
+        TRY_V(e_var_shallow_cpy(e_stack_top(info->stack), slot)); // CPY from stack to slot
 
         e_var_acquire(slot);
 
@@ -785,8 +778,7 @@ e_exec(const e_exec_info* info)
       }
 
       case E_OPCODE_RETURN: {
-        u8 has_return_value = e_read_u8(&ip);
-
+        const bool has_return_value = ins.v.has_return_value;
         if (has_return_value) {
           TRY_V(e_var_shallow_cpy(e_stack_top(info->stack), &retval));
           e_var_acquire(&retval);
@@ -795,16 +787,15 @@ e_exec(const e_exec_info* info)
         goto _RETURN;
       }
 
-      case E_OPCODE_PUSH_VARIABLES: TRY_V(e_stack_push_frame(info->stack)); break;
-      case E_OPCODE_POP_VARIABLES: e_stack_pop_frame(info->stack); break;
+      case E_OPCODE_PUSH_FRAME: TRY_V(e_stack_push_frame(info->stack)); break;
+      case E_OPCODE_POP_FRAME: e_stack_pop_frame(info->stack); break;
 
       // Non fatal return
       case E_OPCODE_HALT: goto _RETURN;
     }
   }
 
-  printf("Illegal instruction\n");
-  exit(-1);
+  fprintf(stderr, "Illegal instruction\n");
 
 _RETURN: {
   /**
@@ -824,7 +815,7 @@ e_script_call(e_script* s, const char* func_name, e_var* args, u32 nargs)
       e_exec_info info = {
         .code            = s->compiled.functions[i].code,
         .args            = args,
-        .slots           = s->compiled.functions[i].arg_slots,
+        .arg_slots       = s->compiled.functions[i].arg_slots,
         .literals        = s->compiled.literals,
         .literals_hashes = s->compiled.literals_hashes,
         .funcs           = s->compiled.functions,

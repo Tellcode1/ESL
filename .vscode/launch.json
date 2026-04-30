@@ -6,35 +6,20 @@
   "configurations": [
     {
       "name": "(gdb) Launch",
-      "type": "cppdbg",
+      "type": "lldb",
       "request": "launch",
-      // "program": "${workspaceFolder}/build/eexec",
-      // "args": [
-      //   "test",
-      // ],
-      "program": "${workspaceRoot}/build/ec",
+      "program": "${workspaceFolder}/build/eexec",
       "args": [
-        "scripts/biggest.e",
-        "-o",
-        "test"
+        "build/test",
       ],
-      "stopAtEntry": false,
+      // "program": "${workspaceRoot}/build/ec",
+      // "args": [
+      //   "example.e",
+      //   "-o",
+      //   "build/test"
+      // ],
+      "stopOnEntry": false,
       "cwd": "${workspaceFolder}",
-      "environment": [],
-      "externalConsole": false,
-      "MIMode": "gdb",
-      "setupCommands": [
-        {
-          "description": "Enable pretty-printing for gdb",
-          "text": "-enable-pretty-printing",
-          "ignoreFailures": true
-        },
-        {
-          "description": "Set Disassembly Flavor to Intel",
-          "text": "-gdb-set disassembly-flavor intel",
-          "ignoreFailures": true
-        }
-      ]
     }
   ]
 }

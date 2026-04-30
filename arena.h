@@ -29,6 +29,7 @@
 
 #include <stddef.h>
 #include <stdlib.h>
+#include <string.h>
 
 /**
  * Minimum size of memory block that is allocated.
@@ -180,6 +181,7 @@ e_arena_free(e_arena* arena)
     free(next);
     next = new_next;
   }
+  memset(arena, 0, sizeof *arena);
 }
 
 #endif // E_ARENA_H

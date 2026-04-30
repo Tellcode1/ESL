@@ -118,6 +118,7 @@ e_map_find_or_insert(e_map* map, struct e_var* key)
   e_var_shallow_cpy(key, &map->keys[j]);
   e_var_shallow_cpy(&v, &map->vals[j]);
   e_var_acquire(&map->keys[j]);
+  e_var_acquire(&map->vals[j]);
 
   map->hashes[j] = e_var_hash(key);
 

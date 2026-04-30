@@ -16,6 +16,11 @@ fn main()
 {
   for (let i = 0; i < 1000; i++)
   {
+    /**
+      * Defers in a loop are instantiated each time
+      * the loop runs, and will be executed after the loop
+      * body but before the iterator updates.
+      */
     let fd = open();
     defer close(fd);
 
@@ -26,5 +31,7 @@ fn main()
     };
   }
   println(ratio, " Files were leaked");
-  println("If the number above is greater than 0, it indicates a major issue during compilation! Please report it to my github.");
+  if (ratio != 0) {
+    println("Some files were leaked! There's a bug in defer instantiation (report!)");
+  }
 }

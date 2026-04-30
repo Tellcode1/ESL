@@ -41,8 +41,8 @@ eb_vec_norm(e_var* args, u32 nargs)
   (void)nargs;
   switch (args[0].type) {
     case E_VARTYPE_VEC2: return e_make_vec2(zx[0] / len, zx[1] / len);
-    case E_VARTYPE_VEC3: return e_make_vec3(zx[0] / len, zx[1] / len, zx[0] / len);
-    case E_VARTYPE_VEC4: return e_make_vec4(zx[0] / len, zx[1] / len, zx[0] / len, zx[3] / len);
+    case E_VARTYPE_VEC3: return e_make_vec3(zx[0] / len, zx[1] / len, zx[2] / len);
+    case E_VARTYPE_VEC4: return e_make_vec4(zx[0] / len, zx[1] / len, zx[2] / len, zx[3] / len);
     default: break;
   }
   return (e_var){ .type = E_VARTYPE_NULL };

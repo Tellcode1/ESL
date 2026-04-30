@@ -221,7 +221,7 @@ static const e_builtin_func eb_funcs[] = {
 
   { "str::dup", "Duplicate a string. Alias to generic::dup", "fn str::dup(s : string) -> string", E_VARTYPE_STRING, 1, 1, eb_var_dup },
   { "str::equal", "Compare two strings. Boolean result.", "fn str::equal(s1 : string, s2 : string) -> bool", E_VARTYPE_STRING, 2, 2, eb_str_equal },
-  { "str::append", "Catenate all given strings. null on error.", "fn str::append(...) -> string", E_VARTYPE_STRING, 1, UINT32_MAX, eb_str_append },
+  { "str::cat", "Catenate all given strings. null on error.", "fn str::cat(...) -> string", E_VARTYPE_STRING, 1, UINT32_MAX, eb_str_cat },
   { "str::substr", "Make a substring of given string, starting from 'start' with the length 'len'", "fn str::substr(s : string, start : int, len : int) -> string", E_VARTYPE_STRING, 3, 3, eb_str_substr },
   { "str::repeat", "Repeat a string n times", "fn str::repeat(s : string, n : int) -> string", E_VARTYPE_STRING, 2, 2, eb_str_repeat },
   { "str::ltrim", "Trim all spaces from the left in the string and return a copy", "fn str::ltrim(s : string) -> string", E_VARTYPE_STRING,    1,    1, eb_str_ltrim },

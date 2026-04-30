@@ -1,0 +1,302 @@
+#include "rwhelp.h"
+
+e_file_read_error
+e_file_load(
+    FILE*        f,
+    void**       root_allocation,
+    u32*         ninstructions,
+    u8**         instructions,
+    u32*         nlits,
+    e_var**      lits,
+    u32**        lits_hashes,
+    u32*         nfunctions,
+    e_function** functions)
+{
+  *root_allocation = NULL;
+  *lits            = NULL;
+  *nlits           = 0;
+  *ninstructions   = 0;
+  *instructions    = NULL;
+  *nfunctions      = 0;
+  *functions       = NULL;
+
+  u32 magic = 0;
+  if (fread(&magic, sizeof(magic), 1, f) != 1) goto ERR;
+
+  if (magic != E_FILE_MAGIC) return E_FILE_READ_ERR_INVALID_MAGIC;
+
+  u32 bytes_req = 0;
+  if (fread(&bytes_req, sizeof(bytes_req), 1, f) != 1) goto ERR;
+
+  if (bytes_req > INT32_MAX) {
+    fprintf(stderr, "[%s:%i] Warning: Loading a file with requested size > INT32_MAX. Possible file corruption. Continuing.\n", __FILE__, __LINE__);
+  }
+
+  *root_allocation = calloc(bytes_req, 1);
+  if (*root_allocation == nullptr) return E_FILE_READ_ERR_ROOT_ALLOCATION_FAILED;
+
+  uchar* alloc = (uchar*)*root_allocation;
+
+  if (fread(nlits, sizeof(*nlits), 1, f) != 1) goto ERR;
+
+  alloc = e_align_ptr(alloc, 8);
+  *lits = (e_var*)alloc;
+  alloc += sizeof(e_var) * (*nlits);
+
+  alloc        = e_align_ptr(alloc, 8);
+  *lits_hashes = (u32*)alloc;
+  alloc += sizeof(u32) * (*nlits);
+
+  for (u32 i = 0; i < *nlits; i++) {
+    if (fread(&(*lits)[i].type, sizeof(e_vartype), 1, f) != 1) goto ERR;
+
+    e_var* lit = &(*lits)[i];
+    switch (lit->type) {
+      case E_VARTYPE_STRING: {
+        u32 len = 0;
+        if (fread(&len, sizeof(len), 1, f) != 1) goto ERR;
+
+        alloc      = e_align_ptr(alloc, 16);
+        lit->val.s = (e_refdobj*)(alloc);
+        alloc += sizeof(e_refdobj);
+
+        /* Initialize ref counter to 1. Not used for literals but VM expects it */
+        lit->val.s->refc = 1;
+
+        E_VAR_AS_STRING(lit)->s = (char*)(alloc);
+        alloc += len + 1;
+
+        if (fread(E_VAR_AS_STRING(lit)->s, sizeof(char), len, f) != len) goto ERR;
+
+        E_VAR_AS_STRING(lit)->s[len] = 0;
+        break;
+      }
+
+        // clang-format off
+      case E_VARTYPE_NULL:
+      case E_VARTYPE_VOID:
+      case E_VARTYPE_STRUCT: *lit = (e_var){ .type = E_VARTYPE_NULL }; break;
+      case E_VARTYPE_INT: if (fread(&lit->val.i, sizeof(lit->val.i), 1, f) != 1) goto ERR; break;
+      case E_VARTYPE_BOOL: if (fread(&lit->val.b, sizeof(lit->val.b), 1, f) != 1) goto ERR; break;
+      case E_VARTYPE_CHAR: if (fread(&lit->val.c, sizeof(lit->val.c), 1, f) != 1) goto ERR; break;
+      case E_VARTYPE_FLOAT: if (fread(&lit->val.f, sizeof(lit->val.f), 1, f) != 1) goto ERR; break;
+      case E_VARTYPE_VEC2: if (fread(&lit->val.vec2, sizeof(lit->val.vec2), 1, f) != 1) goto ERR; break;
+      case E_VARTYPE_VEC3: if (fread(&lit->val.vec3, sizeof(lit->val.vec3), 1, f) != 1) goto ERR; break;
+      case E_VARTYPE_VEC4: if (fread(&lit->val.vec4, sizeof(lit->val.vec4), 1, f) != 1) goto ERR; break;
+      default: break;
+        // clang-format on
+    }
+    (*lits_hashes)[i] = e_var_hash(lit);
+  }
+
+  if (fread(nfunctions, sizeof(*nfunctions), 1, f) != 1) goto ERR;
+
+  alloc      = e_align_ptr(alloc, 8);
+  *functions = (e_function*)(alloc);
+  alloc += sizeof(e_function) * (*nfunctions);
+
+  for (u32 i = 0; i < *nfunctions; i++) {
+    e_function func = { 0 };
+    if (fread(&func.code_size, sizeof(func.code_size), 1, f) != 1) goto ERR;
+    if (fread(&func.nargs, sizeof(func.nargs), 1, f) != 1) goto ERR;
+    if (fread(&func.name_hash, sizeof(func.name_hash), 1, f) != 1) goto ERR;
+
+    alloc = e_align_ptr(alloc, 8);
+
+    func.arg_slots = (u32*)alloc;
+    alloc += sizeof(u32) * func.nargs;
+    if (fread(func.arg_slots, sizeof(*func.arg_slots), func.nargs, f) != func.nargs) goto ERR;
+
+    alloc = e_align_ptr(alloc, 8);
+
+    func.code = (u8*)alloc;
+    alloc += func.code_size;
+    if (func.code == nullptr) return -1;
+
+    if (fread(func.code, 1, func.code_size, f) != func.code_size) goto ERR;
+    (*functions)[i] = func;
+  }
+
+  if (fread(ninstructions, sizeof(*ninstructions), 1, f) != 1) goto ERR;
+
+  alloc         = e_align_ptr(alloc, 8);
+  *instructions = (u8*)alloc;
+  if (fread(*instructions, sizeof(u8), *ninstructions, f) != *ninstructions) goto ERR;
+
+  return E_FILE_READ_SUCCESS;
+
+ERR:
+  free(*root_allocation);
+  return E_FILE_READ_ERR_INVALID_FILE;
+}
+
+u32
+e_file_bytes_required(const e_compilation_result* r)
+{
+  u32 size = 0;
+
+  size = e_align_size(size, 8);
+  // literals array
+  size += sizeof(e_var) * r->nliterals;
+
+  size = e_align_size(size, 8);
+  // literal hashes array (we don't write this tho)
+  size += sizeof(u32) * r->nliterals;
+
+  for (u32 i = 0; i < r->nliterals; i++) {
+    const e_var* lit = &r->literals[i];
+
+    if (lit->type == E_VARTYPE_STRING) {
+      u32 len = strlen(E_VAR_AS_STRING(lit)->s);
+
+      size = e_align_size(size, 16);
+      size += sizeof(e_refdobj);
+      size += len + 1; // null terminator
+    }
+  }
+
+  // functions array
+  size = e_align_size(size, 8);
+  size += sizeof(e_function) * r->nfunctions;
+
+  for (u32 i = 0; i < r->nfunctions; i++) {
+    const e_function* fn = &r->functions[i];
+
+    if (fn->nargs > 0) {
+      size = e_align_size(size, 8);
+      size += sizeof(u32) * fn->nargs; // arg_slots
+    }
+
+    size = e_align_size(size, 8);
+    size += fn->code_size; // code
+  }
+
+  size = e_align_size(size, 8);
+  size += r->ninstructions;
+
+  return size;
+}
+
+void
+e_file_write(const e_compilation_result* r, FILE* f)
+{
+  u32 magic = E_FILE_MAGIC;
+  fwrite(&magic, sizeof(magic), 1, f);
+
+  u32 bytes_req = e_file_bytes_required(r);
+  fwrite(&bytes_req, sizeof(bytes_req), 1, f);
+
+  fwrite(&r->nliterals, sizeof(r->nliterals), 1, f);
+  for (u32 i = 0; i < r->nliterals; i++) {
+    const e_var* lit = &r->literals[i];
+    fwrite(&lit->type, sizeof(lit->type), 1, f);
+
+    if (lit->type == E_VARTYPE_STRING) {
+      u32 len = strlen(E_VAR_AS_STRING(lit)->s);
+      fwrite(&len, sizeof(len), 1, f);
+      fwrite(E_VAR_AS_STRING(lit)->s, sizeof(char), len, f);
+    } else {
+      switch (lit->type) {
+        case E_VARTYPE_INT: fwrite(&lit->val.i, sizeof(lit->val.i), 1, f); break;
+        case E_VARTYPE_BOOL: fwrite(&lit->val.b, sizeof(lit->val.b), 1, f); break;
+        case E_VARTYPE_CHAR: fwrite(&lit->val.c, sizeof(lit->val.c), 1, f); break;
+        case E_VARTYPE_FLOAT: fwrite(&lit->val.f, sizeof(lit->val.f), 1, f); break;
+        case E_VARTYPE_VEC2: fwrite(&lit->val.vec2, sizeof(lit->val.vec2), 1, f); break;
+        case E_VARTYPE_VEC3: fwrite(&lit->val.vec3, sizeof(lit->val.vec3), 1, f); break;
+        case E_VARTYPE_VEC4: fwrite(&lit->val.vec4, sizeof(lit->val.vec4), 1, f); break;
+        default: break;
+      }
+    }
+  }
+
+  fwrite(&r->nfunctions, sizeof(r->nfunctions), 1, f);
+  for (u32 i = 0; i < r->nfunctions; i++) {
+    const e_function* fn = &r->functions[i];
+    fwrite(&fn->code_size, sizeof(fn->code_size), 1, f);
+    fwrite(&fn->nargs, sizeof(fn->nargs), 1, f);
+    fwrite(&fn->name_hash, sizeof(fn->name_hash), 1, f);
+    if (fn->arg_slots && fn->nargs > 0) fwrite(fn->arg_slots, sizeof(*fn->arg_slots), fn->nargs, f);
+    fwrite(fn->code, 1, fn->code_size, f);
+  }
+
+  fwrite(&r->ninstructions, sizeof(r->ninstructions), 1, f);
+  fwrite(r->instructions, sizeof(u8), r->ninstructions, f);
+}
+
+e_ins
+e_read_ins(const u8** ip)
+{
+  e_ins i  = { 0 };
+  i.opcode = e_read_u8(ip);
+  switch ((e_opcode_bck)i.opcode) {
+    case E_OPCODE_NOOP:
+    case E_OPCODE_ADD:
+    case E_OPCODE_SUB:
+    case E_OPCODE_MUL:
+    case E_OPCODE_DIV:
+    case E_OPCODE_MOD:
+    case E_OPCODE_EXP:
+    case E_OPCODE_AND:
+    case E_OPCODE_OR:
+    case E_OPCODE_NOT:
+    case E_OPCODE_BAND:
+    case E_OPCODE_BOR:
+    case E_OPCODE_XOR:
+    case E_OPCODE_BNOT:
+    case E_OPCODE_EQL:
+    case E_OPCODE_NEQ:
+    case E_OPCODE_LT:
+    case E_OPCODE_LTE:
+    case E_OPCODE_GT:
+    case E_OPCODE_GTE:
+    case E_OPCODE_NEG:
+    case E_OPCODE_INC:
+    case E_OPCODE_POP:
+    case E_OPCODE_DUP:
+    case E_OPCODE_INDEX_ASSIGN:
+    case E_OPCODE_PUSH_FRAME:
+    case E_OPCODE_POP_FRAME:
+    case E_OPCODE_INDEX:
+    case E_OPCODE_DEC: break;
+
+    case E_OPCODE_CALL:
+      i.v.call.hash  = e_read_u32(ip);
+      i.v.call.nargs = e_read_u16(ip);
+      break;
+
+    case E_OPCODE_RETURN: i.v.has_return_value = e_read_u8(ip); break;
+
+    case E_OPCODE_LITERAL: i.v.literal = e_read_u32(ip); break;
+    case E_OPCODE_LOAD: i.v.load = e_read_u32(ip); break;
+    case E_OPCODE_ASSIGN: i.v.assign = e_read_u32(ip); break;
+    case E_OPCODE_INIT: i.v.init = e_read_u32(ip); break;
+
+    case E_OPCODE_MK_LIST: i.v.mk_list = e_read_u32(ip); break;
+    case E_OPCODE_MK_MAP: i.v.mk_map = e_read_u32(ip); break;
+    case E_OPCODE_LABEL: i.v.label = e_read_u32(ip); break;
+
+    case E_OPCODE_JMP:
+    case E_OPCODE_JE:
+    case E_OPCODE_JNE:
+    case E_OPCODE_JZ:
+    case E_OPCODE_JNZ: i.v.jmp = e_read_u32(ip); break;
+
+    case E_OPCODE_MK_STRUCT:
+      i.v.mk_struct.nmembers = e_read_u32(ip);
+      assert(i.v.mk_struct.nmembers <= 32);
+      for (u32 j = 0; j < i.v.mk_struct.nmembers; j++) { i.v.mk_struct.members[j] = e_read_u32(ip); }
+      break;
+
+    case E_OPCODE_MOV: {
+      i.v.mov.dst = e_read_u32(ip);
+      i.v.mov.src = e_read_u32(ip);
+      break;
+    }
+
+    case E_OPCODE_MEMBER_ACCESS:
+    case E_OPCODE_MEMBER_ASSIGN: i.v.member = e_read_u32(ip); break;
+    case E_OPCODE_HALT:
+    case E_OPCODE_COUNT: break;
+  }
+  return i;
+}

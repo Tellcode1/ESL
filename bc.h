@@ -32,8 +32,6 @@
 
 #include "stdafx.h"
 
-typedef u16 e_ins;
-
 typedef enum e_opcode_bck {
   /**
    * NOOP. Does nothing. Used for alignment sometimes.
@@ -152,6 +150,12 @@ typedef enum e_opcode_bck {
   E_OPCODE_ASSIGN,
 
   /**
+   * Move (Copy!) data in stack.
+   * MOV [dst_offset] [src_offset]
+   */
+  E_OPCODE_MOV,
+
+  /**
    * Assign to a member of a struct/container.
    * The base struct/container and index will be popped.
    * assigned value is kept.
@@ -264,8 +268,8 @@ typedef enum e_opcode_bck {
    * No operands are used.
    * Usage(noattr): PUSH_VARIABLES/POP_VARIABLES
    */
-  E_OPCODE_PUSH_VARIABLES,
-  E_OPCODE_POP_VARIABLES,
+  E_OPCODE_PUSH_FRAME,
+  E_OPCODE_POP_FRAME,
 
   /**
    * Make a struct with a set number of members
@@ -298,13 +302,13 @@ typedef u8 e_opcode;
 
 static const u8 static_assert__e_opcode_must_have_less_than_256_entries__[E_OPCODE_COUNT <= 256 ? 1 : -1] = { 0 };
 
-typedef struct e_ins_packed {
+typedef struct e_ins {
   u8 opcode;
   union {
     u32  init;
     u32  load;
     u32  halt;
-    u32  jmp, jz, jnz, je, jne;
+    u32  jmp; // , jz, jnz, je, jne
     u32  assign;
     u32  mk_list, mk_map;
     u32  index_assign;
@@ -313,9 +317,164 @@ typedef struct e_ins_packed {
     bool has_return_value;
     struct {
       u16 nargs;
-      u32 function_id;
+      u32 hash;
     } call;
+    struct {
+      u32 nmembers;
+      u32 members[32];
+    } mk_struct;
+    u32 member;
+    struct {
+      u32 dst;
+      u32 src;
+    } mov;
   } v;
-} e_ins_packed;
+} e_ins;
+
+static inline i32
+e_get_instruction_stack_usage(e_opcode_bck opc)
+{
+  switch (opc) {
+    case E_OPCODE_DUP:
+    case E_OPCODE_LOAD:
+    case E_OPCODE_LITERAL: return 1;
+
+    case E_OPCODE_ADD:
+    case E_OPCODE_SUB:
+    case E_OPCODE_MUL:
+    case E_OPCODE_DIV:
+    case E_OPCODE_MOD:
+    case E_OPCODE_EXP:
+    case E_OPCODE_AND:
+    case E_OPCODE_OR:
+    case E_OPCODE_BAND:
+    case E_OPCODE_BOR:
+    case E_OPCODE_XOR:
+    case E_OPCODE_EQL:
+    case E_OPCODE_NEQ:
+    case E_OPCODE_LT:
+    case E_OPCODE_LTE:
+    case E_OPCODE_GT:
+    case E_OPCODE_GTE: return 1 - 2; // 1 Pushed, 2 Popped
+
+    case E_OPCODE_NEG:
+    case E_OPCODE_NOT:
+    case E_OPCODE_BNOT:
+    case E_OPCODE_INC:
+    case E_OPCODE_DEC: return 1 - 1; // 1 Pushed, 1 Popped
+
+    case E_OPCODE_JZ: // Single condition
+    case E_OPCODE_JNZ: return -1;
+
+    case E_OPCODE_JE: // Both conditions
+    case E_OPCODE_JNE: return -2;
+
+    case E_OPCODE_MEMBER_ACCESS: return 1 - 1; // pops base, pushes member
+    case E_OPCODE_MEMBER_ASSIGN: return -1;    // pops value, pushes (preserves) base
+
+    case E_OPCODE_INDEX: return 1 - 2;     // pops base & index, pushes value
+    case E_OPCODE_INDEX_ASSIGN: return -2; // pops base & index
+
+    case E_OPCODE_PUSH_FRAME:
+    case E_OPCODE_POP_FRAME:
+
+    case E_OPCODE_MOV:
+    case E_OPCODE_JMP:
+    case E_OPCODE_LABEL:
+    case E_OPCODE_HALT:
+    case E_OPCODE_RETURN:
+    case E_OPCODE_ASSIGN: return 0; // Don't pop or push anything.
+
+    case E_OPCODE_INIT: return 1; // Pushes a variable to the stack and tracks its slot.
+    case E_OPCODE_POP: return -1;
+
+    case E_OPCODE_MK_STRUCT: return 1; // Just sets up (pushes) the structure and initializes all members to NULL.
+
+    case E_OPCODE_NOOP:
+    case E_OPCODE_CALL:
+    case E_OPCODE_MK_LIST:
+    case E_OPCODE_MK_MAP:
+    case E_OPCODE_COUNT: return 0;
+  }
+}
+
+static inline i32
+e_get_instruction_stack_usage_with_operand(e_opcode opc, u32 operand)
+{
+  switch (opc) {
+    case E_OPCODE_CALL: return -(i32)operand + 1;         // Pop all arguments off + Push return value
+    case E_OPCODE_MK_MAP: return -(i32)(operand * 2) + 1; // Pop all pairs off, push map
+    case E_OPCODE_MK_LIST: return -(i32)operand + 1;      // Pop all elemens, push list
+    default: return e_get_instruction_stack_usage(opc);
+  }
+}
+
+static inline i32
+e_get_ins_stack_usage(e_ins i)
+{
+  switch (i.opcode) {
+    case E_OPCODE_CALL: return -(i32)i.v.call.nargs + 1;     // Pop all arguments off + Push return value
+    case E_OPCODE_MK_MAP: return -(i32)(i.v.mk_map * 2) + 1; // Pop all pairs off, push map
+    case E_OPCODE_MK_LIST: return -(i32)i.v.mk_list + 1;     // Pop all elemens, push list
+    default: return e_get_instruction_stack_usage(i.opcode);
+  }
+}
+
+static inline const char*
+e_opcode_to_str(e_opcode_bck op)
+{
+  switch (op) {
+    case E_OPCODE_MOV: return "MOV";
+    case E_OPCODE_NOOP: return "NOOP";
+    case E_OPCODE_ADD: return "ADD";
+    case E_OPCODE_SUB: return "SUB";
+    case E_OPCODE_MUL: return "MUL";
+    case E_OPCODE_DIV: return "DIV";
+    case E_OPCODE_MOD: return "MOD";
+    case E_OPCODE_EXP: return "EXP";
+    case E_OPCODE_AND: return "AND";
+    case E_OPCODE_OR: return "OR";
+    case E_OPCODE_NOT: return "NOT";
+    case E_OPCODE_BAND: return "BAND";
+    case E_OPCODE_BOR: return "BOR";
+    case E_OPCODE_XOR: return "XOR";
+    case E_OPCODE_BNOT: return "BNOT";
+    case E_OPCODE_EQL: return "EQL";
+    case E_OPCODE_NEQ: return "NEQ";
+    case E_OPCODE_LT: return "LT";
+    case E_OPCODE_LTE: return "LTE";
+    case E_OPCODE_GT: return "GT";
+    case E_OPCODE_GTE: return "GTE";
+    case E_OPCODE_NEG: return "NEG";
+    case E_OPCODE_INC: return "INC";
+    case E_OPCODE_DEC: return "DEC";
+    case E_OPCODE_CALL: return "CALL";
+    case E_OPCODE_RETURN: return "RETURN";
+    case E_OPCODE_LITERAL: return "LITERAL";
+    case E_OPCODE_LOAD: return "LOAD";
+    case E_OPCODE_POP: return "POP";
+    case E_OPCODE_DUP: return "DUP";
+    case E_OPCODE_ASSIGN: return "ASSIGN";
+    case E_OPCODE_INDEX_ASSIGN: return "INDEX_ASSIGN";
+    case E_OPCODE_INIT: return "INIT";
+    case E_OPCODE_MK_LIST: return "MK_LIST";
+    case E_OPCODE_MK_MAP: return "MK_MAP";
+    case E_OPCODE_INDEX: return "INDEX";
+    case E_OPCODE_LABEL: return "LABEL";
+    case E_OPCODE_JMP: return "JMP";
+    case E_OPCODE_JE: return "JE";
+    case E_OPCODE_JNE: return "JNE";
+    case E_OPCODE_JZ: return "JZ";
+    case E_OPCODE_JNZ: return "JNZ";
+    case E_OPCODE_PUSH_FRAME: return "PUSH_FRAME";
+    case E_OPCODE_POP_FRAME: return "POP_FRAME";
+    case E_OPCODE_MK_STRUCT: return "MK_STRUCT";
+    case E_OPCODE_MEMBER_ACCESS: return "MEMBER_ACCESS";
+    case E_OPCODE_MEMBER_ASSIGN: return "MEMBER_ASSIGN";
+    case E_OPCODE_HALT: return "HALT";
+    case E_OPCODE_COUNT: return "COUNT";
+  }
+  return "UNKNOWN";
+}
 
 #endif // E_IR_H

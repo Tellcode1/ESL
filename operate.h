@@ -253,6 +253,7 @@ operate(e_var l, e_var r, e_opcode op)
       switch (r.type) {
         case E_VARTYPE_INT: return (e_var){ .type = E_VARTYPE_INT, .val.i = -r.val.i };
         case E_VARTYPE_CHAR: return (e_var){ .type = E_VARTYPE_CHAR, .val.c = (char)-(int)r.val.c };
+        case E_VARTYPE_BOOL: return (e_var){ .type = E_VARTYPE_BOOL, .val.b = (bool)-(int)r.val.b };
         case E_VARTYPE_FLOAT: return (e_var){ .type = E_VARTYPE_FLOAT, .val.f = -r.val.f };
         default: break;
       }

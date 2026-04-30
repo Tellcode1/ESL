@@ -27,7 +27,7 @@ fn different_return_types(flag)
 
 fn never_return_because_im_evil()
 {
-  while (true) {}
+  while (true);
 }
 
 // struct vec2 {
@@ -294,9 +294,7 @@ fn main() {
   }
   println("Sum of all elements in the list is: ", sum);
 
-  let INT32_MIN = -2147483648;
-  let INT32_MAX = ~INT32_MIN & ~0;
-  println("INT32_MIN = ", INT32_MIN, ", " , "INT32_MAX = ", INT32_MAX);
+  println("INT32_MIN = ", int::MIN, ", " , "INT32_MAX = ", int::MAX);
 
   let i = (-500);
   while (i < 500)
@@ -440,7 +438,7 @@ fn main() {
 
   let piss = [[16]];
   piss[0][0] = 42;
-  io::println(io::STDERR, "HELP: ", piss);
+  io::println(io::STDOUT, "HELP: ", piss);
 }
 
 fn file_test()

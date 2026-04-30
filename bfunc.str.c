@@ -34,18 +34,18 @@
 #include <string.h>
 
 e_var
-eb_str_append(e_var* args, u32 nargs)
+eb_str_cat(e_var* args, u32 nargs)
 {
   (void)nargs;
 
   u32 total_len = 0;
-  for (u32 i = 0; i < nargs; i++) { total_len += strlen(E_VAR_AS_STRING(&args[0])->s); }
+  for (u32 i = 0; i < nargs; i++) { total_len += strlen(E_VAR_AS_STRING(&args[i])->s); }
 
   char* big_s = calloc(1, total_len + 1);
 
   char* p = big_s;
   p[0]    = 0;
-  for (u32 i = 0; i < nargs; i++) { p = e_strlpcat(p, E_VAR_AS_STRING(&args[0])->s, big_s, total_len + 1); }
+  for (u32 i = 0; i < nargs; i++) { p = e_strlpcat(p, E_VAR_AS_STRING(&args[i])->s, big_s, total_len + 1); }
 
   return e_make_var_from_string(big_s);
 }

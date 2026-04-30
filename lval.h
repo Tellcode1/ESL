@@ -49,10 +49,6 @@ typedef union e_lval_value {
   struct {
     int left_node;  // Compile to get LHS of index. For vec[16], it will push vec to stack.
     int index_node; // Compile to get index. For vec[16], it will push 16 to stack.
-
-    bool left_is_var; // Is left a variable?
-    u32  left_var_id;
-
   } index;
 } e_lval_value;
 
@@ -60,6 +56,8 @@ typedef struct e_lval {
   e_filespan*  span;
   e_lval_type  type;
   e_lval_value val;
+  bool         is_compound;
+  e_operator   compound_operator;
 } e_lval;
 
 static inline bool
@@ -68,22 +66,16 @@ e_can_make_value(const e_ast* ast, int node)
   if (ast == nullptr || node < 0) return false;
   return E_GET_NODE(ast, node)->type == E_AST_NODE_VARIABLE || E_GET_NODE(ast, node)->type == E_AST_NODE_INDEX
       || E_GET_NODE(ast, node)->type == E_AST_NODE_INDEX_ASSIGN || E_GET_NODE(ast, node)->type == E_AST_NODE_INDEX_COMPOUND_OP
-      || E_GET_NODE(ast, node)->type == E_AST_NODE_MEMBER_ACCESS || E_GET_NODE(ast, node)->type == E_AST_NODE_MEMBER_ASSIGN;
+      || E_GET_NODE(ast, node)->type == E_AST_NODE_MEMBER_ACCESS || E_GET_NODE(ast, node)->type == E_AST_NODE_MEMBER_ASSIGN
+      || E_GET_NODE(ast, node)->type == E_AST_NODE_VARIABLE_DECL;
 }
 
-e_lval e_make_value(e_compiler* cc, int node);
+e_lval e_make_value(e_compiler* cc, int node) RETURNS_ERRCODE;
 void   e_free_value(e_lval* lv);
 
-int e_emit_lvalue_load(e_compiler* cc, e_lval lv);
+int e_emit_lvalue_load(e_compiler* cc, e_lval lv) RETURNS_ERRCODE;
 
 // cc.c
-int e_emit_lvalue_assign(e_compiler* cc, int value, e_lval lv);
-
-// static inline void
-// e_emit_lvalue_load_address(e_compiler* cc, e_lval lv)
-// {
-//   // e_emit_instruction(cc, E_OPCODE_LOAD_REFERENCE, E_ATTR_NONE);
-//   e_emit_u16(cc, lv.val.var_id);
-// }
+int e_emit_lvalue_assign(e_compiler* cc, int value, e_lval lv) RETURNS_ERRCODE;
 
 #endif // E_CC_LVALUE_H

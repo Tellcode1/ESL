@@ -39,11 +39,11 @@
  */
 typedef struct e_script {
   e_compilation_result  compiled;
-  const e_builtin_func* extern_funcs;
-  u32                   nxtern_funcs;
-  const e_builtin_var*  extern_vars;
-  u32                   nextern_vars;
   e_stack               stack;
+  const e_builtin_func* extern_funcs;
+  const e_builtin_var*  extern_vars;
+  u32                   nxtern_funcs;
+  u32                   nextern_vars;
 } e_script;
 
 /**

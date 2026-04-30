@@ -26,6 +26,7 @@
 #define E_LEX_H
 
 #include "cerr.h"
+#include "stdafx.h"
 #include "strint.h"
 
 typedef enum e_token_type {
@@ -119,7 +120,7 @@ typedef struct e_token {
  * outtoks will be set to a an array of tokens, allocated on the heap. Free using e_freetoks.
  * advertised_file is a string that should contain the file name that is shown to the user on errors/warnings by the compiler.
  */
-int e_tokenize(const char* input, const char* advertised_file, e_str_interner* interner, e_token** outtoks, u32* ntoks);
+int e_tokenize(const char* input, const char* advertised_file, e_str_interner* interner, e_token** outtoks, u32* ntoks) RETURNS_ERRCODE;
 
 void e_freetoks(e_token* toks, u32 ntoks);
 

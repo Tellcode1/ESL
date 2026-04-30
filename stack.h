@@ -25,6 +25,8 @@
 #ifndef E_STACK_H
 #define E_STACK_H
 
+#include <stdio.h>
+#include <string.h>
 #define DEBUG_PRINT_STACK 1
 
 #include "perr.h"
@@ -104,9 +106,10 @@ static inline void
 e_stack_free(e_stack* stack)
 {
   for (u32 i = 0; i < stack->size; i++) e_var_release(&stack->stack[i]);
-  free(stack->frames);
-  free(stack->variables);
+  e_xfree((void**)&stack->frames);
+  e_xfree((void**)&stack->variables);
   e_aligned_free(stack->stack);
+  memset(stack, 0, sizeof *stack);
 }
 
 static inline int
@@ -114,7 +117,7 @@ e_stack_push_frame(e_stack* stack)
 {
   if (stack->depth >= stack->frame_capacity) {
     u32            frames_capacity = stack->frame_capacity * 2;
-    e_stack_frame* frames          = (e_stack_frame*)realloc(stack->frames, stack->frame_capacity * sizeof(e_stack_frame));
+    e_stack_frame* frames          = (e_stack_frame*)realloc(stack->frames, frames_capacity * sizeof(e_stack_frame));
     if (frames == nullptr) return E_EMALLOC;
 
     stack->frames         = frames;
@@ -176,6 +179,8 @@ e_stack_pop(e_stack* stack)
   // printf("Popped: ");
   // eb_println((e_var*)top, 1);
   e_var_release(top);
+
+  *top = E_NULLVAR;
   stack->size--;
 }
 
@@ -202,6 +207,8 @@ e_stack_push_variable(u32 id, e_stack* stack)
     stack->variables         = new_variables;
     stack->variable_capacity = new_c;
   }
+
+  // fprintf(stderr, "Variable with ID %u pushed to stack top %u\n", id, stack->size);
 
   /* Push entry in variables table */
   e_var_entry* var  = &stack->variables[stack->nvariables];
