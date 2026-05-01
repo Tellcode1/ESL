@@ -113,7 +113,6 @@ e_stack_free(e_stack* stack)
   e_xfree((void**)&stack->frames);
   e_xfree((void**)&stack->variables);
   e_aligned_free(stack->stack);
-  fprintf(stderr, "Maximum usage of stack was: %u\n", stack->max_usage);
   memset(stack, 0, sizeof *stack);
 }
 
