@@ -49,16 +49,16 @@ typedef struct e_stackemu {
   u32  frame_capacity;
 } e_stackemu;
 
-int  e_stackemu_init(e_stackemu* emu);
+int  e_stackemu_init(e_stackemu* emu) RETURNS_ERRCODE;
 void e_stackemu_free(e_stackemu* emu);
 
 u32 e_stackemu_top(const e_stackemu* emu);
 u32 e_stackemu_fp(const e_stackemu* emu); // frame pointer
 
-void e_stackemu_push(e_stackemu* emu);
+int  e_stackemu_push(e_stackemu* emu) RETURNS_ERRCODE;
 void e_stackemu_pop(e_stackemu* emu);
 
-void e_stackemu_push_frame(e_stackemu* emu);
+int  e_stackemu_push_frame(e_stackemu* emu) RETURNS_ERRCODE;
 void e_stackemu_pop_frame(e_stackemu* emu);
 
 int                              e_stackemu_push_var(e_stackemu* emu, const struct ecc_variable_information* info);

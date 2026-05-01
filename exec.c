@@ -77,6 +77,9 @@ call(const e_exec_info* info, u32 hash, u32 nargs)
 {
   e_var return_value = { .type = E_VARTYPE_NULL };
 
+  /**
+   * Copy argumenst into a temporary array and remove them from the stack.
+   */
   e_var* args_copy = nargs > 0 ? calloc(nargs, sizeof(e_var)) : NULL;
   if (nargs > 0) memcpy(args_copy, &info->stack->stack[info->stack->size - nargs], nargs * sizeof(e_var));
 

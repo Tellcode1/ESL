@@ -72,6 +72,21 @@ extern "C" {
 #  define ALIGNAS(n)
 #endif
 
+#if defined(__has_attribute) && __has_attribute(format)
+#  define ATTR_FORMAT(...) __attribute__((format(__VA_ARGS__)))
+#endif
+
+#if defined(__has_attribute) && __has_attribute(warn_unused_result)
+#  define ATTR_NODISCARD __attribute__((warn_unused_result))
+#else
+#  define ATTR_NODISCARD
+#endif
+
+/**
+ * Returns an error code that should be checked.
+ */
+#define RETURNS_ERRCODE ATTR_NODISCARD
+
 typedef uint8_t  uchar;
 typedef uint8_t  u8;
 typedef uint16_t u16;
@@ -98,7 +113,8 @@ e_hash_fnv(const void* data, size_t size)
   return hash;
 }
 
-static inline void e_xfree(void **pptr)
+static inline void
+e_xfree(void** pptr)
 {
   if (!pptr || !*pptr) return;
   free(*pptr);

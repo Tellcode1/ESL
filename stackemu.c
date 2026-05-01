@@ -44,28 +44,41 @@ e_stackemu_free(e_stackemu* emu)
   memset(emu, 0, sizeof *emu);
 }
 
-void
+int
 e_stackemu_push(e_stackemu* emu)
 {
   if (emu->frame_top >= emu->frame_capacity) {
     u32  new_capacity = emu->frame_capacity * 2;
     u32* new_frames   = (u32*)realloc(emu->frames, sizeof(u32) * new_capacity);
-    if (!new_frames) return;
+    if (!new_frames) return -1;
 
     emu->frame_capacity = new_capacity;
     emu->frames         = new_frames;
   }
 
   emu->frames[emu->frame_top - 1]++;
+  return 0;
 }
 
 void
 e_stackemu_pop(e_stackemu* emu)
 { emu->frames[emu->frame_top - 1]--; }
 
-void
+int
 e_stackemu_push_frame(e_stackemu* emu)
-{ emu->frame_top++; }
+{
+  if (emu->frame_top >= emu->frame_capacity) {
+    u32  new_capacity = emu->frame_capacity * 2;
+    u32* new_frames   = realloc(emu->frames, sizeof(u32) * new_capacity);
+    if (!new_frames) return -1;
+
+    emu->frames         = new_frames;
+    emu->frame_capacity = new_capacity;
+  }
+
+  emu->frame_top++;
+  return 0;
+}
 
 void
 e_stackemu_pop_frame(e_stackemu* emu)

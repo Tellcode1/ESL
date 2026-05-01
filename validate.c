@@ -110,8 +110,45 @@ validate_stream(
       // stack_top--;
     }
 
+    else if (ins.opcode == E_OPCODE_CALL) {
+      const u32 id    = ins.v.call.hash;
+      const u32 nargs = ins.v.call.nargs;
+
+      bool found             = false;
+      bool invalid_arg_count = false;
+      for (u32 i = 0; i < info->nfuncs; i++) {
+        if (info->funcs[i].name_hash == id) {
+          found = true;
+          if (info->funcs[i].nargs != nargs) { invalid_arg_count = true; }
+          break;
+        }
+      }
+
+      for (u32 i = 0; i < E_ARRLEN(eb_funcs); i++) {
+        if (e_hash_fnv(eb_funcs[i].name, strlen(eb_funcs[i].name)) == id) {
+          found = true;
+          if (nargs < eb_funcs[i].min_args || nargs > eb_funcs[i].max_args) { invalid_arg_count = true; }
+          break;
+        }
+      }
+
+      for (u32 i = 0; i < info->nextern_vars; i++) {
+        if (e_hash_fnv(info->extern_funcs[i].name, strlen(info->extern_funcs[i].name)) == id) {
+          found = true;
+          if (nargs < info->extern_funcs[i].min_args || nargs > info->extern_funcs[i].max_args) { invalid_arg_count = true; }
+          break;
+        }
+      }
+
+      if (!found) { fprintf(f, "CALL %s: Undefined function\n", find_name(id, info)); }
+      if (invalid_arg_count) { fprintf(f, "CALL %s:%u: Invalid argument count\n", find_name(id, info), nargs); }
+
+      if (!found || invalid_arg_count) return -1;
+    }
+
     else if (ins.opcode == E_OPCODE_PUSH_FRAME) {
-      e_stackemu_push_frame(emu);
+      e = e_stackemu_push_frame(emu);
+      if (e) return e;
     } else if (ins.opcode == E_OPCODE_POP_FRAME) {
       e_stackemu_pop_frame(emu);
     }

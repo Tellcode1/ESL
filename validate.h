@@ -1,7 +1,7 @@
 #ifndef E_PROGRAM_VALIDATOR_H
 #define E_PROGRAM_VALIDATOR_H
 
-#include "cerr.h"
+#include "stdafx.h"
 
 #include <stdio.h>
 

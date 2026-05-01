@@ -25,23 +25,10 @@
 #ifndef E_CERR_H
 #define E_CERR_H
 
+#include "stdafx.h"
+
 #include <stdarg.h>
 #include <stdio.h>
-
-#if defined(__has_attribute) && __has_attribute(format)
-#  define _ATTR_FORMAT(...) __attribute__((format(__VA_ARGS__)))
-#endif
-
-#if defined(__has_attribute) && __has_attribute(warn_unused_result)
-#  define ATTR_NODISCARD __attribute__((warn_unused_result))
-#else
-#  define ATTR_NODISCARD
-#endif
-
-/**
-  * Returns an error code that should be checked.
-  */
-#define RETURNS_ERRCODE ATTR_NODISCARD
 
 typedef struct e_filespan {
   const char* file;
@@ -49,7 +36,7 @@ typedef struct e_filespan {
   int         col;
 } e_filespan;
 
-static inline _ATTR_FORMAT(printf, 4, 5) int e_internal_cerror(const char* file, size_t line, e_filespan span, const char* msg, ...)
+static inline ATTR_FORMAT(printf, 4, 5) int e_internal_cerror(const char* file, size_t line, e_filespan span, const char* msg, ...)
 {
   va_list ap;
   va_start(ap, msg);
