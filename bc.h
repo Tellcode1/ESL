@@ -396,6 +396,7 @@ e_get_instruction_stack_usage(e_opcode_bck opc)
     case E_OPCODE_MK_MAP:
     case E_OPCODE_COUNT: return 0;
   }
+  return 0;
 }
 
 static inline i32

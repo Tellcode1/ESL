@@ -61,7 +61,7 @@ main(int argc, char* argv[])
   if (e_str_interner_init(256, &interner)) goto ret;
 
   const char* out = NULL;
-  for (int i = 0; i < argc; i++) {
+  for (int i = 1; i < argc; i++) {
     const char* opt = argv[i];
 
     if (*opt == '-') { opt++; }

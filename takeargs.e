@@ -1,7 +1,0 @@
-fn main(args)
-{
-  for (let i = 0; i < len(args); i++)
-  {
-    println(args[i]);
-  }
-}

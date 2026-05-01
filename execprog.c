@@ -73,7 +73,7 @@ main(int argc, char* argv[])
   bool run_from_stdin                  = false;
   bool no_validate                     = false;
 
-  FILE* f = nullptr;
+  FILE* f = NULL;
 
   void*                root_allocation = nullptr;
   e_compilation_result r               = { 0 };
@@ -84,7 +84,7 @@ main(int argc, char* argv[])
   e_argc = argc;
 
   const char* file = nullptr;
-  for (int i = 0; i < argc; i++) {
+  for (int i = 1; i < argc; i++) {
     const char* opt = argv[i];
     if (strcmp(opt, "-") == 0) {
       run_from_stdin = true;
@@ -113,19 +113,18 @@ main(int argc, char* argv[])
 
   if (run_from_stdin) {
     f = stdin;
-  } else {
-    if (!file) {
-      printf("- switch was not used, and no file to execute was specified\n");
-      e = -1;
-      goto RET;
-    }
-
+  } else if (file != NULL) {
     f = fopen(file, "rb");
     if (!f) {
       perror("eexec: Failed to open file");
       e = -1;
       goto RET;
     }
+  }
+  if (!f) {
+    fprintf(stderr, "eexec: Nothing given to execute\n");
+    e = -1;
+    goto RET;
   }
 
   e = e_file_load(&r, &root_allocation, f);
@@ -139,8 +138,14 @@ main(int argc, char* argv[])
   e_function entry_point_func;
   e = find_func(entry_point, r.nfunctions, r.functions, &entry_point_func);
   if (e) {
-    fprintf(stderr, "eexec: File does not have the entry point specified: '%s'\n", entry_point);
+    fprintf(stderr, "eexec: File does not have the entry point '%s'\n", entry_point);
     goto RET;
+  }
+
+  /* Maybe add a way to pass integers / strings from the command line as arguments? */
+  if (entry_point_func.nargs != 0) {
+    fputs("Entry point takes non zero arguments, can not give any\n", stderr);
+    return -1;
   }
 
   const u32 init_stack_capacity    = 256;
@@ -191,6 +196,8 @@ main(int argc, char* argv[])
 
   info.code      = entry_point_func.code;
   info.code_size = entry_point_func.code_size;
+  info.nargs     = 0;
+  info.arg_slots = NULL;
   /* Execute main function. */
   v = e_exec(&info);
 

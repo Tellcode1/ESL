@@ -100,6 +100,18 @@ eb_list_find(e_var* args, u32 nargs)
 }
 
 e_var
+eb_list_rfind(e_var* args, u32 nargs)
+{
+  (void)nargs;
+  e_list* l      = E_VAR_AS_LIST(&args[0]);
+  e_var*  search = &args[1];
+  for (i64 i = l->size - 1; i >= 0; i++) {
+    if (e_var_equal(search, &l->vars[i])) { return (e_var){ .type = E_VARTYPE_INT, .val.i = (int)i }; }
+  }
+  return (e_var){ .type = E_VARTYPE_INT, .val.i = -1 };
+}
+
+e_var
 eb_list_len(e_var* args, u32 nargs)
 {
   (void)nargs;

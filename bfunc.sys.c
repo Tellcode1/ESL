@@ -26,9 +26,11 @@
 
 #include "list.h"
 #include "pool.h"
+#include "stdafx.h"
 #include "sysexpose.h"
 #include "var.h"
 
+#include <stdio.h>
 #include <string.h>
 
 char** e_argv = nullptr;
@@ -53,4 +55,35 @@ eb_get_command_line_args(e_var* args, u32 nargs)
   }
 
   return l;
+}
+
+#ifdef _WIN32
+#  include <direct.h>
+#  define getcwd _getcwd
+#elif defined(__unix__) || defined(__posix__)
+#  include <unistd.h>
+#else
+#  define NO_CWD_SUPPORT
+#endif
+
+e_var
+eb_get_cwd(e_var* args, u32 nargs)
+{
+#ifdef NO_CWD_SUPPORT
+  return E_NULLVAR;
+#endif
+
+  char buffer[FILENAME_MAX];
+  if (!getcwd(buffer, sizeof(buffer))) {
+    perror("Failed to get current working directory");
+    return E_NULLVAR;
+  }
+
+  e_var cwd = {
+    .type  = E_VARTYPE_STRING,
+    .val.s = e_refdobj_pool_acquire(&ge_pool),
+  };
+  E_VAR_AS_STRING(&cwd)->s = e_strdup(buffer);
+
+  return cwd;
 }

@@ -112,6 +112,7 @@ eb_var_dup(e_var* args, u32 nargs)
 }
 
 e_var eb_get_command_line_args(e_var* args, u32 nargs);
+e_var eb_get_cwd(e_var* args, u32 nargs);
 
 e_var eb_vec2(e_var* args, u32 nargs);
 e_var eb_vec3(e_var* args, u32 nargs);
@@ -121,6 +122,13 @@ e_var eb_vec3_zero(e_var* args, u32 nargs);
 e_var eb_vec4_zero(e_var* args, u32 nargs);
 e_var eb_mat3(e_var* args, u32 nargs);
 e_var eb_mat4(e_var* args, u32 nargs);
+
+e_var eb_rand_int(e_var* args, u32 nargs);
+e_var eb_rand_float(e_var* args, u32 nargs);
+e_var eb_rand_vec2(e_var* args, u32 nargs);
+e_var eb_rand_vec3(e_var* args, u32 nargs);
+e_var eb_rand_vec4(e_var* args, u32 nargs);
+e_var eb_rand_list(e_var* args, u32 nargs);
 
 static inline e_var
 eb_len(e_var* args, u32 nargs)
@@ -168,6 +176,13 @@ static const e_builtin_func eb_funcs[] = {
   { "char", "Cast a variable to a char", "fn char(v) -> char", E_VARTYPE_INT | E_VARTYPE_CHAR | E_VARTYPE_BOOL | E_VARTYPE_FLOAT | E_VARTYPE_STRING,    1,    1, eb_cast_char },
   { "bool", "Cast a variable to a bool", "fn bool(v) -> bool", E_VARTYPE_INT | E_VARTYPE_CHAR | E_VARTYPE_BOOL | E_VARTYPE_FLOAT | E_VARTYPE_STRING,    1,    1, eb_cast_bool },
   { "float", "Cast a variable to a float", "fn float(v) -> float", E_VARTYPE_INT | E_VARTYPE_CHAR | E_VARTYPE_BOOL | E_VARTYPE_FLOAT | E_VARTYPE_STRING,    1,    1, eb_cast_float },
+
+  { "rand::list", "Get a random list of num integers between min and max (inclusive of both)", "fn rand::list(min, max, num) -> []", 0, 3, 3, eb_rand_list },
+  { "rand::int", "Get a random integer between 0 and int::MAX (inclusive of both)", "fn rand::int() -> int", 0, 0, 0, eb_rand_int },
+  { "rand::float", "Get a random float between 0 and 1 (inclusive of both)", "fn rand::float() -> float", 0, 0, 0, eb_rand_float },
+  { "rand::vec2", "Get a vector2 of two random floats between 0 and 1", "fn rand::vec2() -> vec2", 0, 0, 0, eb_rand_vec2 },
+  { "rand::vec3", "Get a vector3 of three random floats between 0 and 1", "fn rand::vec3() -> vec3", 0, 0, 0, eb_rand_vec3 },
+  { "rand::vec4", "Get a vector4 of four random floats between 0 and 1", "fn rand::vec4() -> vec4", 0, 0, 0, eb_rand_vec4 },
 
   /* Anything can be added as an element to a list */
   { "list", "Make a list of provided elements", "fn list(...) -> list", 0xFFFFFF, 1, UINT32_MAX, eb_cast_list },
@@ -237,16 +252,21 @@ static const e_builtin_func eb_funcs[] = {
   { "list::remove", "Remove the element from the index in the list and return it", "fn list::remove(list, index:int) -> var", E_VARTYPE_LIST | E_VARTYPE_INT, 2, 2, eb_list_remove },
   { "list::insert", "Insert an element into the given index in the list", "fn list::insert(list, index : int) -> null", E_ALL_TYPES, 3, 3, eb_list_insert },
   { "list::find", "Find an element in the list. -1 if nonexistent.", "fn list::find(list, to_find : var) -> int", E_ALL_TYPES, 2, 2, eb_list_find },
+  { "list::rfind", "Find an element in the list, starting the search from the back of the list. -1 if nonexistent.", "fn list::rfind(list, to_find : var) -> int", E_ALL_TYPES, 2, 2, eb_list_rfind },
   { "list::reserve", "Reserve capacity for n elements.", "fn list::reserve(list, elems_to_reserve:int) -> null", E_VARTYPE_LIST | E_VARTYPE_INT, 2, 2, eb_list_reserve },
   { "list::len", "Get number of elements in list.", "fn list::len(list) -> int", E_VARTYPE_LIST, 1, 1, eb_list_len },
 
   { "sys::get_command_line_args", "Get the command line arguments passed, as a list", "fn sys::get_command_line_args() -> list|null", E_VARTYPE_VOID, 0, 0, eb_get_command_line_args },
+  { "sys::get_cwd", "Get the current working directory as a string. null if OS has no such concept (if there even is an OS)", "fn sys::get_cwd() -> string|null", E_VARTYPE_VOID, 0, 0, eb_get_cwd },
 
   { "vec::norm", "Get the normalized vector", "fn vec::norm(vec) -> vec2|null", E_VARTYPE_VEC2|E_VARTYPE_VEC3|E_VARTYPE_VEC4, 1, 1, eb_vec_norm },
   { "vec::len", "Get the length (magnitude) of a vector", "fn vec::len(vec) -> float|null", E_VARTYPE_VEC2|E_VARTYPE_VEC3|E_VARTYPE_VEC4, 1, 1, eb_vec_len },
   { "vec::len2", "Get the squared length (magnitude) of a vector", "fn vec::len2(vec) -> float|null", E_VARTYPE_VEC2|E_VARTYPE_VEC3|E_VARTYPE_VEC4, 1, 1, eb_vec_len2 },
   { "vec::dist", "Get (euclidean) distance between two vectors", "fn vec::dist(v1,v2) -> float|null", E_VARTYPE_VEC2|E_VARTYPE_VEC3|E_VARTYPE_VEC4, 1, 1, eb_vec_dist },
   { "vec::dist2", "Get squared (euclidean) distance between two vectors", "fn vec::dist2(v1,v2) -> float|null", E_VARTYPE_VEC2|E_VARTYPE_VEC3|E_VARTYPE_VEC4, 1, 1, eb_vec_dist2 },
+
+  { "vec3::zx", "Zero extend given vector up to a vec3. If input is vec4, truncates 4th dimension", "fn vec3::zx(vec) -> float|null", E_VARTYPE_VEC2|E_VARTYPE_VEC3|E_VARTYPE_VEC4, 1, 1, eb_vec3_zx },
+  { "vec4::zx", "Zero extend given vector up to a vec4.", "fn vec4::zx(vec) -> float|null", E_VARTYPE_VEC2|E_VARTYPE_VEC3|E_VARTYPE_VEC4, 1, 1, eb_vec4_zx },
 };
 // clang-format on
 

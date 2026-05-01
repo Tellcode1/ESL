@@ -439,6 +439,9 @@ fn main() {
   let piss = [[16]];
   piss[0][0] = 42;
   io::println(io::STDOUT, "HELP: ", piss);
+
+  let random_nums = rand::list(0, int::MAX, 32);
+  println("Generating 32 random numbers for no reason at all: ", random_nums);
 }
 
 fn file_test()

@@ -124,4 +124,20 @@ eb_vec_dist2(e_var* args, u32 nargs)
   return (e_var){ .type = E_VARTYPE_NULL };
 }
 
+static inline e_var
+eb_vec3_zx(e_var* args, u32 nargs)
+{
+  e_vec4 x;
+  evector_zero_extend(&args[0], x);
+  return (e_var){ .type = E_VARTYPE_VEC3, .val.vec3 = E_VEC3_INIT(x) };
+}
+
+static inline e_var
+eb_vec4_zx(e_var* args, u32 nargs)
+{
+  e_vec4 x;
+  evector_zero_extend(&args[0], x);
+  return (e_var){ .type = E_VARTYPE_VEC3, .val.vec4 = E_VEC4_INIT(x) };
+}
+
 #endif // E_VECTOR_BUILTINS_H
