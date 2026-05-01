@@ -76,6 +76,8 @@ typedef struct e_stack {
   u32          nvariables;
   u32          variable_capacity;
   e_var_entry* variables;
+
+  u32 max_usage;
 } e_stack;
 
 static inline int
@@ -99,6 +101,8 @@ e_stack_init(u32 capacity, u32 frame_capacity, u32 variable_capacity, e_stack* s
   stack->variables         = (e_var_entry*)calloc(variable_capacity, sizeof(e_var_entry));
   if (stack->variables == nullptr) return E_EMALLOC;
 
+  stack->max_usage = 0;
+
   return 0;
 }
 
@@ -109,6 +113,7 @@ e_stack_free(e_stack* stack)
   e_xfree((void**)&stack->frames);
   e_xfree((void**)&stack->variables);
   e_aligned_free(stack->stack);
+  fprintf(stderr, "Maximum usage of stack was: %u\n", stack->max_usage);
   memset(stack, 0, sizeof *stack);
 }
 
@@ -168,6 +173,7 @@ e_stack_push(e_stack* stack, const e_var* v)
   e_var_acquire(slot);
 
   stack->size++;
+  if (stack->size > stack->max_usage) stack->max_usage = stack->size;
 
   return 0;
 }

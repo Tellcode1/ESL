@@ -117,8 +117,9 @@ eb_io_seek(e_var* args, u32 nargs)
   int c_rel = 0;
   switch (relative_to) {
     case EB_IO_REL_TO_START: c_rel = SEEK_SET; break;
-    case EB_IO_REL_TO_CURR: c_rel = SEEK_CUR; break;
     case EB_IO_REL_TO_END: c_rel = SEEK_END; break;
+    default:
+    case EB_IO_REL_TO_CURR: c_rel = SEEK_CUR; break;
   }
 
   fseek(f, offset, c_rel);
@@ -279,13 +280,9 @@ eb_io_type(e_var* args, u32 nargs)
   struct stat sb;
   if (stat(path, &sb) == -1) { return (e_var){ .type = E_VARTYPE_INT, .val.i = EB_IO_UNKNOWN }; }
 
-  if (S_ISLNK(sb.st_mode)) {
-    return (e_var){ .type = E_VARTYPE_INT, .val.i = EB_IO_LINK };
-  } else if (S_ISDIR(sb.st_mode)) {
-    return (e_var){ .type = E_VARTYPE_INT, .val.i = EB_IO_DIRECTORY };
-  } else if (S_ISREG(sb.st_mode)) {
-    return (e_var){ .type = E_VARTYPE_INT, .val.i = EB_IO_FILE };
-  }
+  if (S_ISLNK(sb.st_mode)) { return (e_var){ .type = E_VARTYPE_INT, .val.i = EB_IO_LINK }; }
+  if (S_ISDIR(sb.st_mode)) { return (e_var){ .type = E_VARTYPE_INT, .val.i = EB_IO_DIRECTORY }; }
+  if (S_ISREG(sb.st_mode)) { return (e_var){ .type = E_VARTYPE_INT, .val.i = EB_IO_FILE }; }
 #endif
 
   return (e_var){ .type = E_VARTYPE_INT, .val.i = EB_IO_UNKNOWN };

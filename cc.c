@@ -148,6 +148,60 @@ static RETURNS_ERRCODE int compile_builtin_structures(e_compiler* cc);
 static RETURNS_ERRCODE int compile_root(e_compiler* cc, int node);
 static RETURNS_ERRCODE int compile(e_compiler* cc, int node);
 
+static inline ATTR_NODISCARD bool
+does_node_push_to_stack(const e_compiler* cc, int node)
+{
+  switch (E_GET_NODE(cc->ast, node)->type) {
+    case E_AST_NODE_NOP:
+    case E_AST_NODE_ROOT:
+    case E_AST_NODE_STATEMENT_LIST:
+    case E_AST_NODE_FOR:
+    case E_AST_NODE_WHILE:
+    case E_AST_NODE_BREAK:
+    case E_AST_NODE_CONTINUE:
+    case E_AST_NODE_IF:
+    case E_AST_NODE_NAMESPACE_DECL:
+    case E_AST_NODE_RETURN: /* No need to optimize this! */
+    case E_AST_NODE_DEFER:  /* Doesn't push anything: its actual statement does, which is optimized */
+    case E_AST_NODE_FUNCTION_DEFINITION:
+    case E_AST_NODE_STRUCT_DECL: return false;
+
+    case E_AST_NODE_VARIABLE_DECL: {
+      return E_GET_NODE(cc->ast, node)->let.initializer >= 0; // If initializer is valid, then it pushes it to the stack.
+    }
+
+    case E_AST_NODE_CALL:
+    case E_AST_NODE_BINARYOP:
+    case E_AST_NODE_UNARYOP:
+    case E_AST_NODE_VARIABLE:
+    case E_AST_NODE_ASSIGN:
+    case E_AST_NODE_INDEX:
+    case E_AST_NODE_INDEX_ASSIGN:
+    case E_AST_NODE_INDEX_COMPOUND_OP:
+    case E_AST_NODE_MEMBER_ACCESS:
+    case E_AST_NODE_MEMBER_ASSIGN:
+    case E_AST_NODE_INT:
+    case E_AST_NODE_CHAR:
+    case E_AST_NODE_BOOL:
+    case E_AST_NODE_STRING:
+    case E_AST_NODE_FLOAT:
+    case E_AST_NODE_LIST:
+    case E_AST_NODE_MAP: return true;
+  }
+  return false;
+}
+
+/**
+ * If the node pushes a value to the stack,
+ * pop it. Only use this in places where you're sure their
+ * values will not be used (like inside body of if statements, etc.).
+ */
+static inline void
+pop_value_if_pushes(e_compiler* cc, int node)
+{
+  if (does_node_push_to_stack(cc, node)) { e_emit_instruction(cc, E_OPCODE_POP); }
+}
+
 static inline RETURNS_ERRCODE int
 defer_push_scope(e_compiler* cc)
 {
@@ -201,11 +255,15 @@ defer_emit_current_scope(e_compiler* cc)
 {
   ecc_defer_scope* scope = cc->defer_stack;
   if (!scope) return 0;
+
   for (i64 i = (i64)scope->count - 1; i >= 0; i--) {
-    for (u32 j = 0; j < scope->entries[i].nexprs; j++) {
-      int e = compile(cc, scope->entries[i].exprs[j]);
+    u32        nexprs = scope->entries[i].nexprs;
+    const int* exprs  = scope->entries[i].exprs;
+    for (u32 j = 0; j < nexprs; j++) {
+      int e = compile(cc, exprs[j]);
       if (e) return e;
-      e_emit_instruction(cc, E_OPCODE_POP);
+
+      if (cc->info->opt_level >= 1) pop_value_if_pushes(cc, exprs[i]);
     }
   }
   return 0;
@@ -220,10 +278,13 @@ defer_emit_all_scopes(e_compiler* cc)
   ecc_defer_scope* scope = cc->defer_stack;
   while (scope) {
     for (i64 i = (i64)scope->count - 1; i >= 0; i--) {
-      for (u32 j = 0; j < scope->entries[i].nexprs; j++) {
-        int e = compile(cc, scope->entries[i].exprs[j]);
+      u32        nexprs = scope->entries[i].nexprs;
+      const int* exprs  = scope->entries[i].exprs;
+      for (u32 j = 0; j < nexprs; j++) {
+        int e = compile(cc, exprs[j]);
         if (e) return e;
-        e_emit_instruction(cc, E_OPCODE_POP);
+
+        if (cc->info->opt_level >= 1) pop_value_if_pushes(cc, exprs[i]);
       }
     }
     scope = scope->parent;
@@ -254,6 +315,8 @@ defer_emit_to_depth(e_compiler* cc, u32 target_depth)
       for (u32 j = 0; j < scope->entries[i].nexprs; j++) {
         int e = compile(cc, scope->entries[i].exprs[j]);
         if (e) return e;
+
+        if (cc->info->opt_level >= 1) pop_value_if_pushes(cc, scope->entries[i].exprs[j]);
       }
     }
     scope = scope->parent;
@@ -1331,9 +1394,12 @@ compile_if_statement(e_compiler* cc, int node)
   if (e) goto ERR;
 
   // BODY OF ROOT IF STATEMENT
+  const int* if_body = E_GET_NODE(cc->ast, node)->if_stmt.body;
   for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->if_stmt.nstmts; i++) {
-    e = compile(cc, E_GET_NODE(cc->ast, node)->if_stmt.body[i]);
+    e = compile(cc, if_body[i]);
     if (e) goto ERR;
+
+    if (cc->info->opt_level >= 1) pop_value_if_pushes(cc, if_body[i]);
   }
 
   e = defer_emit_current_scope(cc);
@@ -1346,7 +1412,7 @@ compile_if_statement(e_compiler* cc, int node)
   emit_and_record_jmp(cc, E_OPCODE_JMP, end_label); // JUMP!
 
   // ELSE IFS
-  for (u32 else_if = 0; else_if < E_GET_NODE(cc->ast, node)->if_stmt.nelse_ifs; else_if++) {
+  for (u32 else_if_idx = 0; else_if_idx < E_GET_NODE(cc->ast, node)->if_stmt.nelse_ifs; else_if_idx++) {
     // Emit the next in chain label for instructions to jump to.
     define_and_emit_label(cc, next_in_chain_label);
     next_in_chain_label = make_label_id(cc);
@@ -1354,10 +1420,10 @@ compile_if_statement(e_compiler* cc, int node)
     cc->stack_top = stack_base;
 
     // dont worry about it dont worry about it dont worry about it dont worry about it
-    struct e_if_stmt* if_stmt = &E_GET_NODE(cc->ast, node)->if_stmt.else_ifs[else_if];
+    struct e_if_stmt* elif = &E_GET_NODE(cc->ast, node)->if_stmt.else_ifs[else_if_idx];
 
     // CONDITION
-    e = compile(cc, if_stmt->condition);
+    e = compile(cc, elif->condition);
     if (e) goto ERR;
 
     /* Failed. Jump to the next in chain. */
@@ -1369,9 +1435,11 @@ compile_if_statement(e_compiler* cc, int node)
     if (e) goto ERR;
 
     /* Condition true! Execute the body */
-    for (u32 i = 0; i < if_stmt->nstmts; i++) {
-      e = compile(cc, if_stmt->body[i]);
+    for (u32 i = 0; i < elif->nstmts; i++) {
+      e = compile(cc, elif->body[i]);
       if (e) goto ERR;
+
+      if (cc->info->opt_level >= 1) pop_value_if_pushes(cc, elif->body[i]);
     }
 
     e = defer_emit_current_scope(cc);
@@ -1392,10 +1460,12 @@ compile_if_statement(e_compiler* cc, int node)
   if (e) goto ERR;
 
   /* ELSE BODY */
+  int* else_body = E_GET_NODE(cc->ast, node)->if_stmt.else_body;
   for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->if_stmt.nelse_stmts; i++) {
-    e = compile(cc, E_GET_NODE(cc->ast, node)->if_stmt.else_body[i]);
+    e = compile(cc, else_body[i]);
     if (e) goto ERR;
 
+    if (cc->info->opt_level >= 1) pop_value_if_pushes(cc, else_body[i]);
     /* No need to jump! we're already at the end :> */
   }
 
@@ -1470,9 +1540,12 @@ compile_while_statement(e_compiler* cc, int node)
   emit_and_record_jmp(cc, E_OPCODE_JZ, end_label);
 
   // WHILE BODY
+  const int* while_body = E_GET_NODE(cc->ast, node)->while_stmt.stmts;
   for (u32 i = 0; i < E_GET_NODE(cc->ast, node)->while_stmt.nstmts; i++) {
-    e = compile(cc, E_GET_NODE(cc->ast, node)->while_stmt.stmts[i]);
+    e = compile(cc, while_body[i]);
     if (e) goto ERR;
+
+    if (cc->info->opt_level >= 1) pop_value_if_pushes(cc, while_body[i]);
   }
 
   // Pop the scope
@@ -1596,6 +1669,8 @@ compile_for_statement(e_compiler* cc, int node)
       cerror(E_GET_NODE(cc->ast, stmts[i])->common.span, "Failed to compile statement in body [for statement]");
       goto ERR;
     }
+
+    if (cc->info->opt_level >= 1) pop_value_if_pushes(cc, stmts[i]);
   }
 
   /**
@@ -2006,6 +2081,9 @@ compile_root(e_compiler* cc, int node)
   for (u32 i = 0; i < root->root.nstmts; i++) {
     int e = compile(cc, root->root.stmts[i]);
     if (e) { return e; }
+
+    /* Global variable initializers can sometimes push useless values on to the stack. */
+    // if (cc->info->opt_level >= 1) pop_value_if_pushes(cc, root->root.stmts[i]);
   }
 
   /**
@@ -2086,6 +2164,12 @@ compile(e_compiler* cc, int node)
 {
   if (node < 0) return -1;
 
+  /**
+   * pop_if_not_used can't be used in most places here, (this function is recursive).
+   * We can't make any assumptions about whether values are used or not
+   * and have to rely on statement handlers to pop most unused variables.
+   */
+
   switch (E_GET_NODE(cc->ast, node)->type) {
     case E_AST_NODE_NOP: return 0;
 
@@ -2100,6 +2184,9 @@ compile(e_compiler* cc, int node)
       const int* stmts  = E_GET_NODE(cc->ast, node)->stmts.stmts;
       for (u32 i = 0; i < nstmts; i++) {
         if (compile(cc, stmts[i]) < 0) return -1;
+
+        /* Statement list, never push a value */
+        if (cc->info->opt_level >= 1) pop_value_if_pushes(cc, stmts[i]);
       }
       return 0;
     }
@@ -2254,6 +2341,13 @@ e_compile_function(e_compiler* cc, int node)
   int* stmts  = E_GET_NODE(cc->ast, node)->func.stmts;
   for (u32 i = 0; i < nstmts; i++) {
     if (compile(cc, stmts[i]) < 0) return -1;
+
+    /**
+     * OPTIMIZATION: If we're in the function stream,
+     * and a node pushes a value to the stack that we do not want,
+     * pop it.
+     */
+    if (cc->info->opt_level >= 1) pop_value_if_pushes(cc, stmts[i]);
   }
   return 0;
 }

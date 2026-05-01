@@ -342,6 +342,9 @@ static inline void
 e_compilation_result_free(e_compilation_result* r)
 {
   for (u32 i = 0; i < r->nfunctions; i++) { free(r->functions[i].code); }
+  for (u32 i = 0; i < r->names_count; i++) { free(r->names[i]); }
+  free((void*)r->names);
+  free((void*)r->names_hashes);
   free(r->literals);
   free(r->literals_hashes);
   free(r->functions);

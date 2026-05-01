@@ -133,7 +133,7 @@ main(int argc, char* argv[])
     .ast                = &ast,
     .root               = root,
     .custom_entry_point = nullptr,
-    .opt_level          = 0,
+    .opt_level          = 3,
   };
 
   e = e_compile(&info, &compiled);

@@ -128,7 +128,8 @@ e_file_load(e_compilation_result* r, void** root_allocation, FILE* f)
   for (u32 i = 0; i < r->names_count; i++) {
     u32 len = 0;
     if (fread(&len, sizeof(len), 1, f) != 1) goto ERR;
-    char* name = malloc(len + 1);
+    char* name = (char*)alloc;
+    alloc += len + 1;
     if (fread(name, sizeof(char), len, f) != len) goto ERR;
     name[len] = 0;
 
