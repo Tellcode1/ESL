@@ -148,11 +148,7 @@ parse_braces(e_ast* p, int** outstmts, u32* outnstmts)
   }
 
   if (e_ast_expect(p, E_TOKEN_TYPE_CLOSEBRACE)) {
-    // clang-format off
-    asterror(
-      prev(p)->span,
-      "Expected closing brace '}' [braced statement list]\n");
-    // clang-format on
+    asterror(prev(p)->span, "Expected closing brace '}' [braced statement list]\n");
     goto err;
   }
 

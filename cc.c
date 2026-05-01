@@ -408,9 +408,11 @@ compiler_make_fork(const e_compiler* old_c, e_compiler* new_c)
     .emit_capacity     = init_code_capacity,
     .stack_top         = 0,
     .stack_base        = old_c->stack_top,
-    .frame_sp_stack    = calloc(init_sp_frame_capacity, sizeof(u32)),
-    .frame_sp_capacity = init_sp_frame_capacity,
-    .frame_sp_top      = 0,
+    .frame_table = {
+      .stack    = calloc(init_sp_frame_capacity, sizeof(u32)),
+      .capacity = init_sp_frame_capacity,
+      .top      = 0,
+    },
   };
   return new_c->emit ? 0 : -1;
 }
@@ -435,7 +437,7 @@ compiler_join_fork(const e_compiler* copy, e_compiler* cc)
    */
   cc->stack_top = copy->stack_base;
 
-  e_xfree((void**)&copy->frame_sp_stack);
+  e_xfree((void**)&copy->frame_table.stack);
 
   /* Can't modify builtin variable count */
 }
@@ -447,7 +449,7 @@ static inline void
 compiler_free_fork_entirely(e_compiler* cc)
 {
   free(cc->emit);
-  free(cc->frame_sp_stack);
+  free(cc->frame_table.stack);
   while (cc->defer_stack) defer_pop_scope(cc);
   memset(cc, 0, sizeof *cc);
 }
@@ -1101,18 +1103,17 @@ compile_unary_op(e_compiler* cc, int node)
 {
   e_opcode opcode = -1;
 
-  // clang-format off
-      switch (E_GET_NODE(cc->ast, node)->unaryop.op)
-      {
-        case E_OPERATOR_NOT: opcode = E_OPCODE_NOT; break;
-        case E_OPERATOR_BNOT: opcode = E_OPCODE_BNOT; break;
-        case E_OPERATOR_INC: opcode = E_OPCODE_INC; break;
-        case E_OPERATOR_DEC: opcode = E_OPCODE_DEC; break;
-        case E_OPERATOR_SUB: opcode = E_OPCODE_NEG; break;
-        case E_OPERATOR_ADD: opcode = E_OPCODE_NOOP; break;
-        default: cerror(E_GET_NODE(cc->ast, node)->common.span, "Operator %u can not be used as a unary operator\n", E_GET_NODE(cc->ast, node)->unaryop.op); return -1;
-      }
-  // clang-format on
+  switch (E_GET_NODE(cc->ast, node)->unaryop.op) {
+    case E_OPERATOR_NOT: opcode = E_OPCODE_NOT; break;
+    case E_OPERATOR_BNOT: opcode = E_OPCODE_BNOT; break;
+    case E_OPERATOR_INC: opcode = E_OPCODE_INC; break;
+    case E_OPERATOR_DEC: opcode = E_OPCODE_DEC; break;
+    case E_OPERATOR_SUB: opcode = E_OPCODE_NEG; break;
+    case E_OPERATOR_ADD: opcode = E_OPCODE_NOOP; break;
+    default:
+      cerror(E_GET_NODE(cc->ast, node)->common.span, "Operator %u can not be used as a unary operator\n", E_GET_NODE(cc->ast, node)->unaryop.op);
+      return -1;
+  }
 
   bool is_compound = E_GET_NODE(cc->ast, node)->unaryop.is_compound;
 
@@ -2422,16 +2423,18 @@ e_compile(const ecc_info* info, e_compilation_result* result)
     .builtin_var_table = &builtin_var_table,
     .function_table    = &func_table,
     .label_table       = &label_table,
-    .emit              = (u8*)calloc(1, init_code_capacity),
+    .frame_table = {
+      .stack    = calloc(init_sp_frame_capacity, sizeof(u32)),
+      .capacity = init_sp_frame_capacity,
+      .top      = 0,
+    },
+    .emit          = (u8*)calloc(1, init_code_capacity),
     .num_bytes_emitted = 0,
     .emit_capacity     = init_code_capacity,
     .stack_top         = 0,
     .stack_base        = 0,
-    .frame_sp_stack    = calloc(init_sp_frame_capacity, sizeof(u32)),
-    .frame_sp_capacity = init_sp_frame_capacity,
-    .frame_sp_top      = 0,
   };
-  if (!cc.emit || !cc.frame_sp_stack) return -1;
+  if (!cc.emit || !cc.frame_table.stack) return -1;
 
   int e = defer_push_scope(&cc);
   if (e) goto ERR;
@@ -2459,6 +2462,14 @@ e_compile(const ecc_info* info, e_compilation_result* result)
     result->nfunctions      = func_table.functions_count;
     result->ninstructions   = cc.num_bytes_emitted;
     result->instructions    = cc.emit;
+
+    u32          strings_count = cc.ast->interner->strings_count;
+    const char** strings       = (const char**)cc.ast->interner->strings;
+
+    result->names_count  = strings_count;
+    result->names_hashes = (u32*)calloc(strings_count, sizeof(u32));
+    result->names        = (char**)calloc(strings_count, sizeof(char*));
+    for (u32 i = 0; i < strings_count; i++) { result->names[i] = e_strdup(strings[i]); }
   }
 
   e_stack_free(&stack);
@@ -2467,8 +2478,8 @@ e_compile(const ecc_info* info, e_compilation_result* result)
 
   for (u32 i = 0; i < label_table.labels_count; i++) { free(label_table.labels[i].jumps_target_offsets); }
   e_xfree((void**)&label_table.labels);
+  e_xfree((void**)&cc.frame_table.stack);
   e_xfree((void**)&ns.namespaces);
-  e_xfree((void**)&cc.frame_sp_stack);
 
   return e;
 

@@ -27,9 +27,7 @@
 
 #include "bc.h"
 #include "cc.h"
-#include "fn.h"
 #include "stdafx.h"
-#include "var.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -79,23 +77,24 @@ typedef enum e_file_read_error {
 static inline void
 e_emit_instruction(e_compiler* cc, e_opcode opcode)
 {
+  ecc_frame_table* frames = &cc->frame_table;
   if (opcode == E_OPCODE_PUSH_FRAME) {
-    if (cc->frame_sp_top > cc->frame_sp_capacity) {
-      u32  new_capacity  = cc->frame_sp_capacity * 2;
-      u32* new_sp_frames = realloc(cc->frame_sp_stack, sizeof(u32) * new_capacity);
+    if (frames->top > frames->capacity) {
+      u32  new_capacity  = frames->capacity * 2;
+      u32* new_sp_frames = realloc(frames->stack, sizeof(u32) * new_capacity);
       if (!new_sp_frames) return;
 
-      cc->frame_sp_stack    = new_sp_frames;
-      cc->frame_sp_capacity = new_capacity;
+      frames->stack    = new_sp_frames;
+      frames->capacity = new_capacity;
     }
 
-    cc->frame_sp_stack[cc->frame_sp_top++] = cc->stack_top;
+    frames->stack[frames->top++] = cc->stack_top;
   } else if (opcode == E_OPCODE_POP_FRAME) {
-    if (cc->frame_sp_top == 0) {
+    if (frames->top == 0) {
       fprintf(stderr, "*** stack top underflow ***\n");
       return;
     }
-    cc->stack_top = cc->frame_sp_stack[--cc->frame_sp_top];
+    cc->stack_top = frames->stack[--frames->top];
   } else {
     cc->stack_top += e_get_instruction_stack_usage(opcode);
   }
@@ -106,16 +105,7 @@ e_emit_instruction(e_compiler* cc, e_opcode opcode)
 
 e_ins e_read_ins(const u8** ip);
 
-e_file_read_error e_file_load(
-    FILE*        f,
-    void**       root_allocation,
-    u32*         ninstructions,
-    u8**         instructions,
-    u32*         nlits,
-    e_var**      lits,
-    u32**        lits_hashes,
-    u32*         nfunctions,
-    e_function** functions);
+e_file_read_error e_file_load(e_compilation_result* r, void** root_allocation, FILE* f);
 
 u32  e_file_bytes_required(const e_compilation_result* r);
 void e_file_write(const e_compilation_result* r, FILE* f);

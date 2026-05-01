@@ -23,6 +23,7 @@
  */
 
 #include "bfunc.h"
+#include "cc.h"
 #include "exec.h"
 #include "fn.h"
 #include "pool.h"
@@ -74,14 +75,8 @@ main(int argc, char* argv[])
 
   FILE* f = nullptr;
 
-  void*       root_allocation = nullptr;
-  e_var*      lits            = nullptr;
-  u32*        lits_hashes     = nullptr;
-  u8*         ins             = nullptr;
-  e_function* funcs           = nullptr;
-  u32         nlits           = 0;
-  u32         nins            = 0;
-  u32         nfuncs          = 0;
+  void*                root_allocation = nullptr;
+  e_compilation_result r               = { 0 };
 
   int e = 0;
 
@@ -133,7 +128,7 @@ main(int argc, char* argv[])
     }
   }
 
-  e = e_file_load(f, &root_allocation, &nins, &ins, &nlits, &lits, &lits_hashes, &nfuncs, &funcs);
+  e = e_file_load(&r, &root_allocation, f);
   if (e) {
     fprintf(stderr, "eexec: Failed to parse input file: 0x%x\n", e);
     goto RET;
@@ -142,7 +137,7 @@ main(int argc, char* argv[])
   // printf("%u, %p, %u, %p, %p, %u, %p\n", nins, (void*)ins, nlits, (void*)lits, (void*)lits_hashes, nfuncs, (void*)funcs);
 
   e_function entry_point_func;
-  e = find_func(entry_point, nfuncs, funcs, &entry_point_func);
+  e = find_func(entry_point, r.nfunctions, r.functions, &entry_point_func);
   if (e) {
     fprintf(stderr, "eexec: File does not have the entry point specified: '%s'\n", entry_point);
     goto RET;
@@ -163,34 +158,25 @@ main(int argc, char* argv[])
     .args            = NULL,
     .arg_slots       = NULL,
     .nargs           = 0,
-    .literals        = lits,
-    .literals_hashes = lits_hashes,
-    .funcs           = funcs,
-    .code            = ins,
-    .code_size       = nins,
-    .nliterals       = nlits,
-    .nfuncs          = nfuncs,
+    .literals        = r.literals,
+    .literals_hashes = r.literals_hashes,
+    .funcs           = r.functions,
+    .code            = r.instructions,
+    .code_size       = r.ninstructions,
+    .nliterals       = r.nliterals,
+    .nfuncs          = r.nfunctions,
     .stack           = &stack,
     .nextern_funcs   = 0,
     .extern_funcs    = NULL,
+    .names           = (const char**)r.names,
+    .names_hashes    = r.names_hashes,
+    .nnames          = r.names_count,
   };
 
   if (!no_validate) {
-    for (u32 i = 0; i < nfuncs; i++) {
-      info.code      = funcs[i].code;
-      info.code_size = funcs[i].code_size;
-      info.nargs     = funcs[i].nargs;
-      info.arg_slots = funcs[i].arg_slots;
-
-      e = e_validate(&info, stderr);
-      if (e) return e;
-    }
+    e = e_validate(&info, stderr);
+    if (e) return e;
   }
-
-  info.code      = ins;
-  info.code_size = nins;
-  info.nargs     = 0;
-  info.arg_slots = NULL;
 
   /**
    * Global variable initialization

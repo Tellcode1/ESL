@@ -24,6 +24,7 @@
 
 #include "dc.h"
 
+#include "cc.h"
 #include "fn.h"
 #include "rwhelp.h"
 #include "stdafx.h"
@@ -53,31 +54,25 @@ main(int argc, char** argv)
     }
   }
 
-  void*       root_allocation = nullptr;
-  e_var*      lits            = nullptr;
-  u32*        lits_hashes     = nullptr;
-  u8*         ins             = nullptr;
-  e_function* funcs           = nullptr;
-  u32         nlits           = 0;
-  u32         nins            = 0;
-  u32         nfuncs          = 0;
+  void*                root_allocation = nullptr;
+  e_compilation_result r               = { 0 };
 
-  int e = e_file_load(f, &root_allocation, &nins, &ins, &nlits, &lits, &lits_hashes, &nfuncs, &funcs);
+  int e = e_file_load(&r, &root_allocation, f);
   if (e) {
     fprintf(stderr, "eexec: Failed to parse input file: %i\n", e);
     return -1;
   }
 
-  e_print_instruction_stream((const u8*)ins, nins, 0);
-  for (int i = 0; i < nfuncs; i++) {
-    printf("%u(%u):\n", funcs[i].name_hash, funcs[i].nargs);
-    e_print_instruction_stream((const u8*)funcs[i].code, funcs[i].code_size, 4);
+  e_print_instruction_stream((const u8*)r.instructions, r.ninstructions, 0);
+  for (u32 i = 0; i < r.nfunctions; i++) {
+    printf("%u(%u):\n", r.functions[i].name_hash, r.functions[i].nargs);
+    e_print_instruction_stream((const u8*)r.functions[i].code, r.functions[i].code_size, 4);
   }
 
   printf("literals:\n");
-  for (u32 i = 0; i < nlits; i++) {
-    printf("[%u | %u] = ", i, e_var_hash(&lits[i]));
-    e_var_print(&lits[i], stdout);
+  for (u32 i = 0; i < r.nliterals; i++) {
+    printf("[%u | %u] = ", i, e_var_hash(&r.literals[i]));
+    e_var_print(&r.literals[i], stdout);
     fputc('\n', stdout);
   }
 

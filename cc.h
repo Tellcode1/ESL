@@ -257,6 +257,12 @@ typedef struct ecc_label_table {
   ecc_label_jumps_table* labels;
 } ecc_label_table;
 
+typedef struct ecc_frame_table {
+  u32* stack;
+  u32  capacity;
+  u32  top;
+} ecc_frame_table;
+
 typedef struct e_compiler {
   const ecc_info* info;
 
@@ -268,6 +274,9 @@ typedef struct e_compiler {
   ecc_builtin_variables_table* builtin_var_table;
   ecc_function_table*          function_table;
   ecc_defer_scope*             defer_stack;
+
+  /* Embedded into the struct, not shared. */
+  ecc_frame_table frame_table;
 
   ecc_loop_location*   loop;
   ecc_namespace_stack* ns;
@@ -293,19 +302,22 @@ typedef struct e_compiler {
 
   u32 next_label;
 
-  u32* frame_sp_stack;
-  u32  frame_sp_capacity;
-  u32  frame_sp_top;
 } e_compiler;
 
 typedef struct e_compilation_result {
-  u32         nliterals;
-  u32         nfunctions;
-  u32         ninstructions;
+  u32 nliterals;
+  u32 nfunctions;
+  u32 ninstructions;
+  u32 names_count;
+
   e_var*      literals;        // Array allocated by struct, don't free inviduals.
   u32*        literals_hashes; // Array allocated by struct. Free after use.
   e_function* functions;       // Array allocated by struct. Free after use.
   u8*         instructions;    // Array allocated by struct. Free after use.
+
+  /* Debug symbols. Optional. */
+  char** names; // Array && individuals allocated.
+  u32*   names_hashes;
 } e_compilation_result;
 
 /**

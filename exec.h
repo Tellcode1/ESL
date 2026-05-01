@@ -44,6 +44,9 @@ typedef struct e_exec_info {
   const e_builtin_func* extern_funcs;
   const e_builtin_var*  extern_vars;
 
+  const char** names;
+  const u32*   names_hashes;
+
   /**
    * Must not be NULL.
    * A temporary scratchpad for the VM.
@@ -56,6 +59,7 @@ typedef struct e_exec_info {
   u32 nfuncs;
   u32 nextern_funcs;
   u32 nextern_vars;
+  u32 nnames;
 } e_exec_info;
 
 /**

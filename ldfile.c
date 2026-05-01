@@ -1,24 +1,13 @@
+#include "cc.h"
 #include "rwhelp.h"
+#include "stdafx.h"
 
 e_file_read_error
-e_file_load(
-    FILE*        f,
-    void**       root_allocation,
-    u32*         ninstructions,
-    u8**         instructions,
-    u32*         nlits,
-    e_var**      lits,
-    u32**        lits_hashes,
-    u32*         nfunctions,
-    e_function** functions)
+e_file_load(e_compilation_result* r, void** root_allocation, FILE* f)
 {
   *root_allocation = NULL;
-  *lits            = NULL;
-  *nlits           = 0;
-  *ninstructions   = 0;
-  *instructions    = NULL;
-  *nfunctions      = 0;
-  *functions       = NULL;
+
+  memset(r, 0, sizeof(e_compilation_result));
 
   u32 magic = 0;
   if (fread(&magic, sizeof(magic), 1, f) != 1) goto ERR;
@@ -37,20 +26,20 @@ e_file_load(
 
   uchar* alloc = (uchar*)*root_allocation;
 
-  if (fread(nlits, sizeof(*nlits), 1, f) != 1) goto ERR;
+  if (fread(&r->nliterals, sizeof(r->nliterals), 1, f) != 1) goto ERR;
 
-  alloc = e_align_ptr(alloc, 8);
-  *lits = (e_var*)alloc;
-  alloc += sizeof(e_var) * (*nlits);
+  alloc       = e_align_ptr(alloc, 8);
+  r->literals = (e_var*)alloc;
+  alloc += sizeof(e_var) * r->nliterals;
 
-  alloc        = e_align_ptr(alloc, 8);
-  *lits_hashes = (u32*)alloc;
-  alloc += sizeof(u32) * (*nlits);
+  alloc              = e_align_ptr(alloc, 8);
+  r->literals_hashes = (u32*)alloc;
+  alloc += sizeof(u32) * r->nliterals;
 
-  for (u32 i = 0; i < *nlits; i++) {
-    if (fread(&(*lits)[i].type, sizeof(e_vartype), 1, f) != 1) goto ERR;
+  for (u32 i = 0; i < r->nliterals; i++) {
+    if (fread(&r->literals[i].type, sizeof(e_vartype), 1, f) != 1) goto ERR;
 
-    e_var* lit = &(*lits)[i];
+    e_var* lit = &r->literals[i];
     switch (lit->type) {
       case E_VARTYPE_STRING: {
         u32 len = 0;
@@ -86,16 +75,16 @@ e_file_load(
       default: break;
         // clang-format on
     }
-    (*lits_hashes)[i] = e_var_hash(lit);
+    r->literals_hashes[i] = e_var_hash(lit);
   }
 
-  if (fread(nfunctions, sizeof(*nfunctions), 1, f) != 1) goto ERR;
+  if (fread(&r->nfunctions, sizeof(r->nfunctions), 1, f) != 1) goto ERR;
 
-  alloc      = e_align_ptr(alloc, 8);
-  *functions = (e_function*)(alloc);
-  alloc += sizeof(e_function) * (*nfunctions);
+  alloc        = e_align_ptr(alloc, 8);
+  r->functions = (e_function*)(alloc);
+  alloc += sizeof(e_function) * (r->nfunctions);
 
-  for (u32 i = 0; i < *nfunctions; i++) {
+  for (u32 i = 0; i < r->nfunctions; i++) {
     e_function func = { 0 };
     if (fread(&func.code_size, sizeof(func.code_size), 1, f) != 1) goto ERR;
     if (fread(&func.nargs, sizeof(func.nargs), 1, f) != 1) goto ERR;
@@ -114,19 +103,44 @@ e_file_load(
     if (func.code == nullptr) return -1;
 
     if (fread(func.code, 1, func.code_size, f) != func.code_size) goto ERR;
-    (*functions)[i] = func;
+    r->functions[i] = func;
   }
 
-  if (fread(ninstructions, sizeof(*ninstructions), 1, f) != 1) goto ERR;
+  if (fread(&r->ninstructions, sizeof(r->ninstructions), 1, f) != 1) goto ERR;
 
-  alloc         = e_align_ptr(alloc, 8);
-  *instructions = (u8*)alloc;
-  if (fread(*instructions, sizeof(u8), *ninstructions, f) != *ninstructions) goto ERR;
+  alloc           = e_align_ptr(alloc, 8);
+  r->instructions = (u8*)alloc;
+  if (fread(r->instructions, sizeof(u8), r->ninstructions, f) != r->ninstructions) goto ERR;
+
+  alloc += r->ninstructions;
+  alloc = e_align_ptr(alloc, 4);
+
+  if (fread(&r->names_count, sizeof(r->names_count), 1, f) != 1) goto ERR;
+
+  alloc    = e_align_ptr(alloc, 8);
+  r->names = (char**)alloc;
+  alloc += sizeof(char*) * r->names_count;
+
+  alloc           = e_align_ptr(alloc, 8);
+  r->names_hashes = (u32*)alloc;
+  alloc += sizeof(u32) * r->names_count;
+
+  for (u32 i = 0; i < r->names_count; i++) {
+    u32 len = 0;
+    if (fread(&len, sizeof(len), 1, f) != 1) goto ERR;
+    char* name = malloc(len + 1);
+    if (fread(name, sizeof(char), len, f) != len) goto ERR;
+    name[len] = 0;
+
+    r->names[i]        = name;
+    r->names_hashes[i] = e_hash_fnv(name, len);
+  }
 
   return E_FILE_READ_SUCCESS;
 
 ERR:
   free(*root_allocation);
+  *root_allocation = NULL;
   return E_FILE_READ_ERR_INVALID_FILE;
 }
 
@@ -173,6 +187,20 @@ e_file_bytes_required(const e_compilation_result* r)
 
   size = e_align_size(size, 8);
   size += r->ninstructions;
+
+  size = e_align_size(size, 4);
+  size += sizeof(r->names_count);
+
+  size = e_align_size(size, 8);
+  size += sizeof(char*) * r->names_count;
+
+  size = e_align_size(size, 8);
+  size += sizeof(u32) * r->names_count;
+
+  for (u32 i = 0; i < r->names_count; i++) {
+    size = e_align_size(size, 8);
+    size += strlen(r->names[i]) + 1;
+  }
 
   return size;
 }
@@ -221,6 +249,13 @@ e_file_write(const e_compilation_result* r, FILE* f)
 
   fwrite(&r->ninstructions, sizeof(r->ninstructions), 1, f);
   fwrite(r->instructions, sizeof(u8), r->ninstructions, f);
+
+  fwrite(&r->names_count, sizeof(r->names_count), 1, f);
+  for (u32 i = 0; i < r->names_count; i++) {
+    u32 len = strlen(r->names[i]);
+    fwrite(&len, sizeof(len), 1, f);
+    fwrite(r->names[i], 1, len, f);
+  }
 }
 
 e_ins

@@ -221,8 +221,9 @@ e_exec(const e_exec_info* info)
   const u8* ip  = info->code;
   const u8* end = info->code + info->code_size;
 
+  e_ins ins = { 0 };
   while (ip < end) {
-    e_ins ins = e_read_ins(&ip);
+    ins = e_read_ins(&ip);
 
     // fputs("STACK[ ", stdout);
     // for (u32 i = 0; i < info->stack->size; i++) {
@@ -792,10 +793,10 @@ e_exec(const e_exec_info* info)
 
       // Non fatal return
       case E_OPCODE_HALT: goto _RETURN;
+
+      default: fprintf(stderr, "[%zu] Illegal instruction\n", (size_t)(ip - end)); break;
     }
   }
-
-  fprintf(stderr, "Illegal instruction\n");
 
 _RETURN: {
   /**

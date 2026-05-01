@@ -354,8 +354,8 @@ e_tokenize(const char* input, const char* advertised_file, e_str_interner* inter
 
       if (s[1] == '=') // non compound
       {
+        // clang-format off
         switch (*s) {
-            // clang-format off
           case '+': type = E_TOKEN_TYPE_PLUS; is_compound = true; break;
           case '-': type = E_TOKEN_TYPE_MINUS; is_compound = true; break;
           case '*': type = E_TOKEN_TYPE_MULTIPLY; is_compound = true; break;
@@ -365,14 +365,14 @@ e_tokenize(const char* input, const char* advertised_file, e_str_interner* inter
           case '|': type = E_TOKEN_TYPE_BOR; is_compound = true; break;
           case '^': type = E_TOKEN_TYPE_XOR; is_compound = true; break;
           case '&': type = E_TOKEN_TYPE_BAND; is_compound = true; break;
-            // clang-format on
-
+          
           case '=': type = E_TOKEN_TYPE_DOUBLEEQUAL; break;
           case '!': type = E_TOKEN_TYPE_NOTEQUAL; break;
           case '<': type = E_TOKEN_TYPE_LTE; break;
           case '>': type = E_TOKEN_TYPE_GTE; break;
           default: lexerror(line, col, "Unrecognized sequence or character\n"); goto err;
         }
+        // clang-format on
         advance(s, line, col);
         advance(s, line, col);
       } else if (s[0] == '+' && s[1] == '+') {

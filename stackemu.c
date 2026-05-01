@@ -70,10 +70,7 @@ e_stackemu_push_frame(e_stackemu* emu)
 void
 e_stackemu_pop_frame(e_stackemu* emu)
 {
-  for (i64 i = emu->vars_count - 1; i >= 0; i--) {
-    if (emu->vars[i].stack_depth >= emu->frame_top) emu->vars_count--;
-    else break;
-  }
+  while (emu->vars_count > 0 && emu->vars[emu->vars_count - 1].stack_depth >= emu->frame_top) { emu->vars_count--; }
   emu->frame_top--;
 }
 
@@ -83,7 +80,7 @@ e_stackemu_top(const e_stackemu* emu)
 
 u32
 e_stackemu_fp(const e_stackemu* emu)
-{ return emu->frame_top - 1; }
+{ return emu->frame_top; }
 
 int
 e_stackemu_push_var(e_stackemu* emu, const ecc_variable_information* info)

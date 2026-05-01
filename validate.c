@@ -3,24 +3,38 @@
 #include "bc.h"
 #include "bvar.h"
 #include "exec.h"
+#include "fn.h"
 #include "rwhelp.h"
 #include "stackemu.h"
 
-int
-e_validate(const struct e_exec_info* info, FILE* f)
+static inline const char*
+find_name(u32 id, const e_exec_info* info)
 {
-  e_stackemu emu = { 0 };
-  int        e   = 0;
+  for (u32 i = 0; i < info->nnames; i++) {
+    if (info->names_hashes[i] == id) { return info->names[i]; }
+  }
+  return "(Unknown)";
+}
 
-  e = e_stackemu_init(&emu);
-  if (e) return e;
+static int
+validate_stream(
+    const u8*          code,
+    u32                code_size,
+    const u32*         arg_slots,
+    u32                nargs,
+    const e_stackemu*  global_namespace,
+    e_stackemu*        emu,
+    const e_exec_info* info,
+    FILE*              f)
+{
+  int e = 0;
 
-  const u8* ip  = info->code;
-  const u8* end = info->code + info->code_size;
+  const u8* ip  = code;
+  const u8* end = code + code_size;
 
-  for (u32 i = 0; i < info->nargs; i++) {
-    ecc_variable_information var = { .name_hash = info->arg_slots[i], .stack_depth = e_stackemu_fp(&emu) };
-    e_stackemu_push_var(&emu, &var);
+  for (u32 i = 0; i < nargs; i++) {
+    ecc_variable_information var = { .name_hash = arg_slots[i], .stack_depth = e_stackemu_fp(emu) };
+    e_stackemu_push_var(emu, &var);
   }
 
   // u32 stack_top = 0;
@@ -29,8 +43,8 @@ e_validate(const struct e_exec_info* info, FILE* f)
     e_ins ins = e_read_ins(&ip);
 
     if (ins.opcode == E_OPCODE_INIT) {
-      ecc_variable_information var = { .name_hash = ins.v.init, .stack_depth = e_stackemu_fp(&emu) };
-      e_stackemu_push_var(&emu, &var);
+      ecc_variable_information var = { .name_hash = ins.v.init, .stack_depth = e_stackemu_fp(emu) };
+      e_stackemu_push_var(emu, &var);
     }
 
     else if (ins.opcode == E_OPCODE_LOAD) {
@@ -53,10 +67,11 @@ e_validate(const struct e_exec_info* info, FILE* f)
         }
       }
 
-      if (e_stackemu_find_var(&emu, id) != NULL) { found = true; }
+      if (e_stackemu_find_var(emu, id) != NULL) { found = true; }
+      if (!found && e_stackemu_find_var(global_namespace, id) != NULL) { found = true; }
 
       if (!found) {
-        fprintf(f, "Variable %u LOAD'd but undeclared\n", id);
+        fprintf(f, "Variable %s LOAD'd but undeclared\n", find_name(id, info));
         e = -1;
       }
 
@@ -84,10 +99,11 @@ e_validate(const struct e_exec_info* info, FILE* f)
       const u32 id = ins.v.assign;
 
       bool found = false;
-      if (e_stackemu_find_var(&emu, id) != NULL) { found = true; }
+      if (e_stackemu_find_var(emu, id) != NULL) { found = true; }
+      if (!found && e_stackemu_find_var(global_namespace, id) != NULL) { found = true; }
 
       if (!found) {
-        fprintf(f, "ASSIGN target %u undeclared\n", id);
+        fprintf(f, "ASSIGN target %s undeclared\n", find_name(id, info));
         e = -1;
       }
 
@@ -95,13 +111,41 @@ e_validate(const struct e_exec_info* info, FILE* f)
     }
 
     else if (ins.opcode == E_OPCODE_PUSH_FRAME) {
-      e_stackemu_push_frame(&emu);
+      e_stackemu_push_frame(emu);
     } else if (ins.opcode == E_OPCODE_POP_FRAME) {
-      e_stackemu_pop_frame(&emu);
+      e_stackemu_pop_frame(emu);
     }
   }
 
-  e_stackemu_free(&emu);
+  return e;
+}
 
+int
+e_validate(const struct e_exec_info* info, FILE* f)
+{
+  e_stackemu global_namespace = { 0 };
+
+  int e = e_stackemu_init(&global_namespace);
+  if (e) return e;
+
+  e = validate_stream(info->code, info->code_size, NULL, 0, &global_namespace, &global_namespace, info, f);
+  if (e) goto RET;
+
+  for (u32 i = 0; i < info->nfuncs; i++) {
+    e_stackemu emu = { 0 };
+
+    e = e_stackemu_init(&emu);
+    if (e) return e;
+
+    const e_function* fn = &info->funcs[i];
+
+    e = validate_stream(fn->code, fn->code_size, fn->arg_slots, fn->nargs, &global_namespace, &emu, info, f);
+    e_stackemu_free(&emu);
+
+    if (e) { goto RET; }
+  }
+
+RET:
+  e_stackemu_free(&global_namespace);
   return e;
 }
