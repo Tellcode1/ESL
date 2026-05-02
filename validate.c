@@ -71,7 +71,7 @@ validate_stream(
       if (!found && e_stackemu_find_var(global_namespace, id) != NULL) { found = true; }
 
       if (!found) {
-        fprintf(f, "Variable %s LOAD'd but undeclared\n", find_name(id, info));
+        fprintf(f, "LOAD: %s undeclared\n", find_name(id, info));
         e = -1;
       }
 
@@ -90,7 +90,7 @@ validate_stream(
       }
 
       if (!found) {
-        fprintf(f, "Out of bound literal access (%u)\n", id);
+        fprintf(f, "LITERAL: index out of bound (%u)\n", id);
         e = -1;
       }
     }
@@ -103,7 +103,7 @@ validate_stream(
       if (!found && e_stackemu_find_var(global_namespace, id) != NULL) { found = true; }
 
       if (!found) {
-        fprintf(f, "ASSIGN target %s undeclared\n", find_name(id, info));
+        fprintf(f, "ASSIGN: target %s undeclared/external\n", find_name(id, info));
         e = -1;
       }
 
@@ -140,8 +140,8 @@ validate_stream(
         }
       }
 
-      if (!found) { fprintf(f, "CALL %s: Undefined function\n", find_name(id, info)); }
-      if (invalid_arg_count) { fprintf(f, "CALL %s:%u: Invalid argument count\n", find_name(id, info), nargs); }
+      if (!found) { fprintf(f, "CALL %s,%u: undefined function\n", find_name(id, info), nargs); }
+      if (invalid_arg_count) { fprintf(f, "CALL %s,%u: invalid argument count\n", find_name(id, info), nargs); }
 
       if (!found || invalid_arg_count) return -1;
     }

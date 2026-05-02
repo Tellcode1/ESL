@@ -25,6 +25,8 @@
 #ifndef E_STDAFX_H
 #define E_STDAFX_H
 
+#include "wyhash32.h"
+
 #include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -100,6 +102,10 @@ typedef int64_t  i64;
 static inline u32
 e_hash_fnv(const void* data, size_t size)
 {
+#ifndef E_DONT_USE_WYHASH
+  return wyhash32(data, size, 0xDEADBEEFU);
+#endif
+
   const uchar* current    = (const uchar*)data;
   const u32    init_prime = 2166136261U;
   const u32    fnv_prime  = 16777619U;
@@ -166,6 +172,7 @@ e_strlpcat(char* d, const char* s, const char* dabs, size_t dsize)
   return &d[dl + i];
 }
 
+/* strdup not in C99. */
 static inline char*
 e_strdup(const char* s)
 {
