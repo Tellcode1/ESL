@@ -63,5 +63,6 @@ void e_stackemu_pop_frame(e_stackemu* emu);
 
 int                              e_stackemu_push_var(e_stackemu* emu, const struct ecc_variable_information* info);
 struct ecc_variable_information* e_stackemu_find_var(const e_stackemu* emu, u32 id);
+struct ecc_variable_information* e_stackemu_find_var_in_curr_scope(const e_stackemu* emu, u32 id);
 
 #endif // E_STACK_EMULATOR_H

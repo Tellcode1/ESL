@@ -87,3 +87,12 @@ eb_get_cwd(e_var* args, u32 nargs)
 
   return cwd;
 }
+
+
+e_var eb_shell(e_var* args, u32 nargs) {
+    const char *cmd = E_VAR_AS_STRING(&args[0])->s;
+    return (e_var){
+        .type = E_VARTYPE_INT,
+        .val.i = system(cmd),
+    };
+}

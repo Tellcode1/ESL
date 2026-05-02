@@ -380,105 +380,10 @@ e_ast_prev(const struct e_ast* prsr)
   return &prsr->toks[prsr->head - 1];
 }
 
-// NOLINTBEGIN(readability-magic-numbers)
-static inline bool
-e_getbp(e_token_type type, int* left, int* right)
-{
-  switch (type) {
-    case E_TOKEN_TYPE_EQUAL:
-      *left  = 10;
-      *right = 9;
-      break;
-
-    case E_TOKEN_TYPE_AND:
-      *left  = 30;
-      *right = 29;
-      break;
-
-    case E_TOKEN_TYPE_OR:
-      *left  = 20;
-      *right = 19;
-      break;
-    case E_TOKEN_TYPE_NOT:
-      *left  = 0;
-      *right = 9;
-      break;
-
-    // bitwise
-    case E_TOKEN_TYPE_BOR: // |
-      *left  = 32;
-      *right = 33;
-      break;
-    case E_TOKEN_TYPE_XOR: // ^
-      *left  = 34;
-      *right = 35;
-      break;
-    case E_TOKEN_TYPE_BAND: // &
-      *left  = 36;
-      *right = 37;
-      break;
-
-    // compares
-    case E_TOKEN_TYPE_GT:
-    case E_TOKEN_TYPE_LT:
-    case E_TOKEN_TYPE_GTE:
-    case E_TOKEN_TYPE_LTE:
-    case E_TOKEN_TYPE_DOUBLEEQUAL:
-    case E_TOKEN_TYPE_NOTEQUAL:
-      *left  = 40;
-      *right = 41;
-      break;
-
-    case E_TOKEN_TYPE_PLUS:
-    case E_TOKEN_TYPE_MINUS:
-      *left  = 50;
-      *right = 51;
-      break;
-    case E_TOKEN_TYPE_MULTIPLY:
-    case E_TOKEN_TYPE_DIVIDE:
-    case E_TOKEN_TYPE_MOD:
-      *left  = 60;
-      *right = 61;
-      break;
-
-    case E_TOKEN_TYPE_BNOT: // ~
-      *left  = 0;
-      *right = 65;
-      break;
-
-    // member access
-    case E_TOKEN_TYPE_DOT:
-      *left  = 70;
-      *right = 69;
-      break;
-
-    case E_TOKEN_TYPE_DOUBLE_COLON:
-      *left  = 75;
-      *right = 74;
-      break;
-
-    case E_TOKEN_TYPE_OPENPAREN:
-      *left  = 90;
-      *right = 100;
-      break;
-
-    case E_TOKEN_TYPE_OPENBRACE:
-    case E_TOKEN_TYPE_OPENBRACKET:
-      *left  = 100;
-      *right = 99;
-      break;
-
-    case E_TOKEN_TYPE_PLUSPLUS:
-    case E_TOKEN_TYPE_MINUSMINUS:
-      *left  = 80; // postfix only!!
-      *right = 0;
-      break;
-
-    default: *left = *right = 0; return false;
-  }
-  return true;
-}
-// NOLINTEND(readability-magic-numbers)
+/**
+ * Get binding power of a token.
+ */
+bool e_getbp(e_token_type type, int* left, int* right);
 
 #define E_GET_NODE e_ast_get_node
 
@@ -524,6 +429,6 @@ int e_ast_led(e_ast* p, e_token* tk, int leftidx, int rbp) ATTR_NODISCARD;
  * Expect that peek() is pointing to a token
  * with type. Returns 0 on match.
  */
-int e_ast_expect(e_ast* p, e_token_type type);
+int e_ast_expect(e_ast* p, e_token_type type) ATTR_NODISCARD;
 
 #endif // E_AST_H

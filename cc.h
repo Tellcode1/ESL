@@ -30,7 +30,6 @@
 #include "bvar.h"
 #include "cerr.h"
 #include "fn.h"
-#include "stack.h"
 #include "stdafx.h"
 #include "var.h"
 
@@ -269,20 +268,20 @@ typedef struct e_compiler {
   e_arena*      arena;
   struct e_ast* ast;
 
+  /* Embedded into the struct, not shared. */
+  ecc_frame_table frame_table;
+
   ecc_label_table*             label_table;
   ecc_literal_table*           lit_table;
   ecc_builtin_variables_table* builtin_var_table;
   ecc_function_table*          function_table;
   ecc_defer_scope*             defer_stack;
 
-  /* Embedded into the struct, not shared. */
-  ecc_frame_table frame_table;
-
   ecc_loop_location*   loop;
   ecc_namespace_stack* ns;
 
   /* Stack for storing information about variables during compilation. */
-  e_stack* stack;
+  struct e_stackemu* stack;
 
   /**
    * Tracks the top of the stack
@@ -293,6 +292,7 @@ typedef struct e_compiler {
   /**
    * The stack top (to which the parent compiler will have) to return to after
    * a function or scope exits.
+   * Stored here so parent doesn't need to remember.
    */
   u32 stack_base;
 

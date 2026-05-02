@@ -113,6 +113,7 @@ eb_var_dup(e_var* args, u32 nargs)
 
 e_var eb_get_command_line_args(e_var* args, u32 nargs);
 e_var eb_get_cwd(e_var* args, u32 nargs);
+e_var eb_shell(e_var* args, u32 nargs);
 
 e_var eb_vec2(e_var* args, u32 nargs);
 e_var eb_vec3(e_var* args, u32 nargs);
@@ -258,6 +259,7 @@ static const e_builtin_func eb_funcs[] = {
 
   { "sys::get_command_line_args", "Get the command line arguments passed, as a list", "fn sys::get_command_line_args() -> list|null", E_VARTYPE_VOID, 0, 0, eb_get_command_line_args },
   { "sys::get_cwd", "Get the current working directory as a string. null if OS has no such concept (if there even is an OS)", "fn sys::get_cwd() -> string|null", E_VARTYPE_VOID, 0, 0, eb_get_cwd },
+  { "sys::shell", "Execute the command through the system shell. Returns its return code, null if error outside of the command occurs.", "fn sys::shell(str) -> int|null", E_VARTYPE_VOID, 1, 1, eb_shell},
 
   { "vec::norm", "Get the normalized vector", "fn vec::norm(vec) -> vec2|null", E_VARTYPE_VEC2|E_VARTYPE_VEC3|E_VARTYPE_VEC4, 1, 1, eb_vec_norm },
   { "vec::len", "Get the length (magnitude) of a vector", "fn vec::len(vec) -> float|null", E_VARTYPE_VEC2|E_VARTYPE_VEC3|E_VARTYPE_VEC4, 1, 1, eb_vec_len },
@@ -265,8 +267,8 @@ static const e_builtin_func eb_funcs[] = {
   { "vec::dist", "Get (euclidean) distance between two vectors", "fn vec::dist(v1,v2) -> float|null", E_VARTYPE_VEC2|E_VARTYPE_VEC3|E_VARTYPE_VEC4, 1, 1, eb_vec_dist },
   { "vec::dist2", "Get squared (euclidean) distance between two vectors", "fn vec::dist2(v1,v2) -> float|null", E_VARTYPE_VEC2|E_VARTYPE_VEC3|E_VARTYPE_VEC4, 1, 1, eb_vec_dist2 },
 
-  { "vec3::zx", "Zero extend given vector up to a vec3. If input is vec4, truncates 4th dimension", "fn vec3::zx(vec) -> float|null", E_VARTYPE_VEC2|E_VARTYPE_VEC3|E_VARTYPE_VEC4, 1, 1, eb_vec3_zx },
-  { "vec4::zx", "Zero extend given vector up to a vec4.", "fn vec4::zx(vec) -> float|null", E_VARTYPE_VEC2|E_VARTYPE_VEC3|E_VARTYPE_VEC4, 1, 1, eb_vec4_zx },
+  { "vec3::zx", "Zero extend given vector up to a vec3. If input is vec4, truncates 4th dimension", "fn vec3::zx(vec) -> vec3", E_VARTYPE_VEC2|E_VARTYPE_VEC3|E_VARTYPE_VEC4, 1, 1, eb_vec3_zx },
+  { "vec4::zx", "Zero extend given vector up to a vec4.", "fn vec4::zx(vec) -> vec4", E_VARTYPE_VEC2|E_VARTYPE_VEC3|E_VARTYPE_VEC4, 1, 1, eb_vec4_zx },
 };
 // clang-format on
 
