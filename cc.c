@@ -35,7 +35,7 @@
 #include "lval.h"
 #include "pool.h"
 #include "rwhelp.h"
-#include "stack.h"
+#include "stackemu.h"
 #include "stdafx.h"
 #include "var.h"
 
@@ -46,18 +46,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-static const u32 init_code_capacity           = 256;
-static const u32 init_literal_capacity        = 64;
-static const u32 init_function_capacity       = 64;
-static const u32 init_namespaces_capacity     = 16;
-static const u32 init_label_jump_capacity     = 64;
-static const u32 init_stack_variable_capacity = 32;
-static const u32 init_stack_frame_capacity    = 32;
-static const u32 init_stack_capacity          = 32;
-static const u32 init_sp_frame_capacity       = 64;
-static const u32 init_fields_capacity         = 16;
-static const u32 init_defer_entry_capacity    = 8;
-static const u32 init_jumps_capacity          = 64;
+static const u32 init_code_capacity        = 256;
+static const u32 init_literal_capacity     = 64;
+static const u32 init_function_capacity    = 64;
+static const u32 init_namespaces_capacity  = 16;
+static const u32 init_label_jump_capacity  = 64;
+static const u32 init_sp_frame_capacity    = 64;
+static const u32 init_fields_capacity      = 16;
+static const u32 init_defer_entry_capacity = 8;
+static const u32 init_jumps_capacity       = 64;
 
 /**
  * Operators like SUB (-) can be used
@@ -1002,7 +999,7 @@ compile_function_definition(e_compiler* cc, int node)
    * Push frame for (our/compiler only) stack
    * We'll load the arguments to this same stack.
    */
-  if (e_stack_push_frame(cc->stack)) return -1;
+  if (e_stackemu_push_frame(cc->stack)) return -1;
 
   /* Ensure it doesn't already exist */
   const ecc_function_table* func_table = cc->function_table;
@@ -1018,9 +1015,9 @@ compile_function_definition(e_compiler* cc, int node)
   u32  nargs     = E_GET_NODE(cc->ast, node)->func.nargs;
   u32* arg_slots = nullptr;
 
-  e_stack stack = { 0 };
+  e_stackemu stack = { 0 };
 
-  e = e_stack_init(init_stack_capacity, init_stack_frame_capacity, init_stack_variable_capacity, &stack);
+  e = e_stackemu_init(&stack);
   if (e) goto ERR;
 
   e = compiler_make_fork(cc, &fork);
@@ -1043,20 +1040,18 @@ compile_function_definition(e_compiler* cc, int node)
       arg_slots[i] = arg_hash;
 
       /* Add variable entry to stack */
-      e_var* r = e_stack_push_variable(arg_hash, &stack);
-      if (!r) goto ERR;
+      ecc_variable_information info = {
+        .initializer   = -1, // Arguments aren't initialized.
+        .current_value = -1, // Or initialized to void if you think about it.
+        .name_hash     = arg_hash,
+        .span          = E_GET_NODE(cc->ast, node)->common.span,
+        .is_const      = false, // User can override the argument any time.
+        .stack_depth   = e_stackemu_fp(cc->stack),
+        // We won't have anything on the stack except arguments.
+        .stack_offset = fork.stack_top,
 
-      /* Acquire a refdobj */
-      r->val.var_info                 = e_refdobj_pool_acquire(&ge_pool);
-      E_VAR_AS_INFO(r)->initializer   = -1; // Arguments aren't initialized.
-      E_VAR_AS_INFO(r)->current_value = -1; // Or initialized to void if you think about it.
-      E_VAR_AS_INFO(r)->name_hash     = arg_hash;
-      E_VAR_AS_INFO(r)->span          = E_GET_NODE(cc->ast, node)->common.span;
-      E_VAR_AS_INFO(r)->is_const      = false; // User can override the argument any time.
-
-      // We won't have anything on the stack except arguments.
-      E_VAR_AS_INFO(r)->stack_offset = fork.stack_top;
-      fork.stack_top++;
+      };
+      e_stackemu_push_var(&stack, &info);
     }
   }
 
@@ -1089,8 +1084,8 @@ compile_function_definition(e_compiler* cc, int node)
   e = append_function_entry(cc->arena, cc->function_table, &f);
   if (e) goto ERR;
 
-  e_stack_pop_frame(cc->stack);
-  e_stack_free(&stack);
+  e_stackemu_pop_frame(cc->stack);
+  e_stackemu_free(&stack);
 
   return e;
 
@@ -1512,7 +1507,7 @@ compile_while_statement(e_compiler* cc, int node)
   e = defer_push_scope(cc);
   if (e) goto ERR;
 
-  e = e_stack_push_frame(cc->stack);
+  e = e_stackemu_push_frame(cc->stack);
   if (e) goto ERR;
 
   /* Append a loop entry to our compiler. */
@@ -1565,7 +1560,7 @@ compile_while_statement(e_compiler* cc, int node)
   /**
    * Pop frame for the stack
    */
-  e_stack_pop_frame(cc->stack);
+  e_stackemu_pop_frame(cc->stack);
 
   cc->stack_top = stack_base;
 
@@ -1616,7 +1611,7 @@ compile_for_statement(e_compiler* cc, int node)
   // See comment over while loop compilation
 
   /* For the compiler too */
-  int e = e_stack_push_frame(cc->stack);
+  int e = e_stackemu_push_frame(cc->stack);
   if (e) goto ERR;
 
   e_emit_instruction(cc, E_OPCODE_PUSH_FRAME);
@@ -1710,7 +1705,7 @@ compile_for_statement(e_compiler* cc, int node)
   define_and_emit_label(cc, end_label);
 
   // For the compiler too
-  e_stack_pop_frame(cc->stack);
+  e_stackemu_pop_frame(cc->stack);
   e_emit_instruction(cc, E_OPCODE_POP_FRAME); // Pop entire for scope
   cc->stack_top = stack_top_old;
 
@@ -1751,7 +1746,7 @@ compile_assign(e_compiler* cc, int node)
 
   ecc_builtin_variables_table* builtin_vars_table = cc->builtin_var_table;
 
-  e_var* exists = e_stack_find(cc->stack, lv.val.var.id);
+  ecc_variable_information* exists = e_stackemu_find_var(cc->stack, lv.val.var.id);
   if (!exists
       && E_GET_NODE(cc->ast, node)->type == E_AST_NODE_VARIABLE) { // Doesn't exist and node is supposed to be a variable (Not member access or index)
     /* Check if the user is trying to modify a builtin variable. */
@@ -1768,7 +1763,7 @@ compile_assign(e_compiler* cc, int node)
     return -1;
   }
 
-  if (exists && E_VAR_AS_INFO(exists)->is_const) {
+  if (exists && exists->is_const) {
     cerror(E_GET_NODE(cc->ast, left)->common.span, "Can not assign to const qualified variable '%s'\n", lv.val.var.name);
     e_free_value(&lv);
     return -1;
@@ -1893,18 +1888,17 @@ compile_struct_constructor(e_compiler* fork, e_filespan span, const ecc_struct_i
     arg_slots[i] = arg_hash;
 
     /* Add member entry to stack */
-    e_var* arg = e_stack_push_variable(arg_hash, fork->stack);
-    if (!arg) return -1;
 
-    /* Acquire a refdobj */
-    arg->val.var_info = e_refdobj_pool_acquire(&ge_pool);
-    if (!arg->val.var_info) return -1;
-
-    E_VAR_AS_INFO(arg)->initializer   = -1; // Arguments aren't initialized.
-    E_VAR_AS_INFO(arg)->current_value = -1; // Or initialized to null if you think about it.
-    E_VAR_AS_INFO(arg)->name_hash     = arg_hash;
-    E_VAR_AS_INFO(arg)->span          = span;
-    E_VAR_AS_INFO(arg)->is_const      = false; // User can override the argument any time.
+    ecc_variable_information info = {
+      .initializer   = -1, // Arguments aren't initialized.
+      .current_value = -1, // Or initialized to null if you think about it.
+      .name_hash     = arg_hash,
+      .stack_depth   = e_stackemu_fp(fork->stack),
+      .span          = span,
+      .is_const      = false, // User can override the argument any time.
+    };
+    int e = e_stackemu_push_var(fork->stack, &info);
+    if (e) return e;
   }
 
   e_emit_instruction(fork, E_OPCODE_MK_STRUCT);
@@ -1976,7 +1970,7 @@ compile_struct_decleration(e_compiler* cc, int node)
   e = compiler_make_fork(cc, &fork);
   if (e) goto ERR;
 
-  e = e_stack_push_frame(cc->stack);
+  e = e_stackemu_push_frame(cc->stack);
   if (e) goto ERR;
 
   e = defer_push_scope(&fork);
@@ -1994,7 +1988,7 @@ compile_struct_decleration(e_compiler* cc, int node)
   defer_pop_scope(&fork);
   compiler_join_fork(&fork, cc);
 
-  e_stack_pop_frame(cc->stack);
+  e_stackemu_pop_frame(cc->stack);
 
   return 0;
 
@@ -2015,33 +2009,34 @@ compile_variable_decleration(e_compiler* cc, int node)
   u32 hash        = e_hash_fnv(full, strlen(full));
   int initializer = E_GET_NODE(cc->ast, node)->let.initializer;
 
-  e_var* exists = e_stack_find_in_current_scope(cc->stack, hash);
+  ecc_variable_information* exists = e_stackemu_find_var_in_curr_scope(cc->stack, hash);
   if (exists != nullptr) {
     cerror(
         E_GET_NODE(cc->ast, node)->common.span,
         "Variable %s redeclared in same scope. Earlier occurence at [%s:%i:%i]\n",
         full,
-        E_VAR_AS_INFO(exists)->span.file,
-        E_VAR_AS_INFO(exists)->span.line,
-        E_VAR_AS_INFO(exists)->span.col);
+        exists->span.file,
+        exists->span.line,
+        exists->span.col);
     return -1;
   }
 
   // free(full);
 
   /* Add variable entry to stack */
-  e_var* r = e_stack_push_variable(hash, cc->stack);
-  if (!r) return -1;
 
   /* Acquire a refdobj */
-  r->type                         = E_VARTYPE_CC_VARIABLE;
-  r->val.var_info                 = e_refdobj_pool_acquire(&ge_pool);
-  E_VAR_AS_INFO(r)->initializer   = initializer;
-  E_VAR_AS_INFO(r)->current_value = initializer; // current value is initializer, -1 if none
-  E_VAR_AS_INFO(r)->name_hash     = hash;
-  E_VAR_AS_INFO(r)->stack_offset  = cc->stack_top; // Push our variable to stack top
-  E_VAR_AS_INFO(r)->span          = E_GET_NODE(cc->ast, node)->common.span;
-  E_VAR_AS_INFO(r)->is_const      = E_GET_NODE(cc->ast, node)->let.is_const;
+  const ecc_variable_information info = {
+    .initializer   = initializer,
+    .current_value = initializer, // current value is initializer, -1 if none
+    .name_hash     = hash,
+    .stack_depth   = e_stackemu_fp(cc->stack), // Push our variable to stack top
+    .span          = E_GET_NODE(cc->ast, node)->common.span,
+    .is_const      = E_GET_NODE(cc->ast, node)->let.is_const,
+  };
+
+  int e = e_stackemu_push_var(cc->stack, &info);
+  if (e) return -1;
 
   const bool initializer_provided = initializer >= 0;
 
@@ -2479,7 +2474,7 @@ e_compile(const ecc_info* info, e_compilation_result* result)
    * Temporary stack to track variables.
    * No values are assigned.
    */
-  e_stack stack = { 0 };
+  e_stackemu stack = { 0 };
 
   ecc_literal_table lit_table = {
     .literals          = (e_var*)calloc(init_literal_capacity, sizeof(e_var)),
@@ -2533,7 +2528,7 @@ e_compile(const ecc_info* info, e_compilation_result* result)
   int e = defer_push_scope(&cc);
   if (e) goto ERR;
 
-  e = e_stack_init(init_stack_capacity, init_stack_frame_capacity, init_stack_variable_capacity, &stack);
+  e = e_stackemu_init(&stack);
   if (e) goto ERR;
 
   /**
@@ -2566,7 +2561,7 @@ e_compile(const ecc_info* info, e_compilation_result* result)
     for (u32 i = 0; i < strings_count; i++) { result->names[i] = e_strdup(strings[i]); }
   }
 
-  e_stack_free(&stack);
+  e_stackemu_free(&stack);
 
   if (using_fallback_arena) { e_arena_free(&fallback); }
 
@@ -2579,6 +2574,6 @@ e_compile(const ecc_info* info, e_compilation_result* result)
 
 ERR:
   compiler_free_fork_entirely(&cc);
-  e_stack_free(&stack);
+  e_stackemu_free(&stack);
   return e ? e : -1;
 }

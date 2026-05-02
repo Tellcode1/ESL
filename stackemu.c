@@ -76,6 +76,7 @@ e_stackemu_push_frame(e_stackemu* emu)
     emu->frame_capacity = new_capacity;
   }
 
+  emu->frames[emu->frame_top] = 0;
   emu->frame_top++;
   return 0;
 }
@@ -116,6 +117,18 @@ e_stackemu_find_var(const e_stackemu* emu, u32 id)
 {
   for (u32 i = 0; i < emu->vars_count; i++) {
     if (emu->vars[i].name_hash == id) { return &emu->vars[i]; }
+  }
+  return NULL;
+}
+
+struct ecc_variable_information*
+e_stackemu_find_var_in_curr_scope(const e_stackemu* emu, u32 id)
+{
+  u32 i = emu->vars_count;
+  while (i > 0) {
+    if (emu->vars[i - 1].stack_depth < e_stackemu_fp(emu)) break;
+    if (emu->vars[i - 1].name_hash == id) return &emu->vars[i - 1];
+    i--;
   }
   return NULL;
 }
