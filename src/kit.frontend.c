@@ -599,4 +599,7 @@ main(int argc, char* argv[])
     if (strcmp(opt, "c") == 0 || strcmp(opt, "compile") == 0) return compiler_invoke(argc, argv);
     if (strcmp(opt, "e") == 0 || strcmp(opt, "exec") == 0) return executor_invoke(argc, argv);
   }
+
+  fprintf(stderr, "KScript: Nothing to compile (-c/--compile) nor execute (-e/--exec)\n");
+  return -1;
 }
