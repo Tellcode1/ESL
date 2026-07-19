@@ -1,4 +1,4 @@
-CC = x86_64-w64-mingw32-gcc
+CC=gcc
 CFLAGS ?= -std=c99 -Wall -Wpedantic -g3
 LDFLAGS ?= -lm -Wall -Wpedantic -g3
 PREFIX?=/usr/bin/
