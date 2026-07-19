@@ -12,7 +12,11 @@
 #define write(ptr, f) fwrite(ptr, sizeof(*(ptr)), 1, f)
 #define write_reg(ptr, f) fwrite(ptr, KIT_REG_DISK_SIZE, 1, f)
 #define read(ptr, f) fread(ptr, sizeof(*(ptr)), 1, f)
-#define read_reg(ptr, f) fread(ptr, KIT_REG_DISK_SIZE, 1, f)
+#define read_reg(ptr, f)                                                                                                                             \
+  do {                                                                                                                                               \
+    *(ptr) = 0; /* clear bits greater than KIT_REG_DISK_SIZE */                                                                                      \
+    fread(ptr, KIT_REG_DISK_SIZE, 1, f);                                                                                                             \
+  } while (0)
 
 kit_ins
 read_ins(FILE* f)
@@ -664,12 +668,14 @@ kit_emit_ins(kit_compiler* cc, kit_ins ins)
 
 #define read_reg_ip(ptr, ip)                                                                                                                         \
   do {                                                                                                                                               \
+    *(ptr) = 0;                                                                                                                                      \
     memcpy((void*)(ptr), (void*)(ip), KIT_REG_DISK_SIZE);                                                                                            \
-    *(ip) += sizeof(*(ptr));                                                                                                                         \
+    *(ip) += KIT_REG_DISK_SIZE;                                                                                                                      \
   } while (0)
 
 #define read_ip(ptr, ip)                                                                                                                             \
   do {                                                                                                                                               \
+    *(ptr) = 0;                                                                                                                                      \
     memcpy((void*)(ptr), (void*)(ip), sizeof(*(ptr)));                                                                                               \
     *(ip) += sizeof(*(ptr));                                                                                                                         \
   } while (0)

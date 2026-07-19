@@ -65,19 +65,6 @@ kit_builtins_rt_compile_and_exec(kit_vm* vm, kit_var* args, u32 nargs, kit_var* 
   kit_list* arguments     = KIT_VAR_AS_LIST(kit_struct_get_member(strhash("arguments"), st));
   kit_list* cmd_arguments = KIT_VAR_AS_LIST(kit_struct_get_member(strhash("command_line_arguments"), st));
 
-  vm->argv = (const char**)kit_arnalloc(&arena, (cmd_arguments->size + 3) * sizeof(char*));
-
-  // +2 because we have to expose the ./build/eexec FILE
-  // too
-  vm->argc    = 2 + (int)cmd_arguments->size;
-  vm->argv[0] = "<RT compiler>";
-  vm->argv[1] = "<RT compiled code>";
-  for (int i = 0; i < cmd_arguments->size; i++) {
-    const char* cmd_arg = KIT_VAR_AS_STRING(&cmd_arguments->vars[i])->s;
-    vm->argv[2 + i]     = kit_arnstrdup(&arena, cmd_arg);
-  }
-  vm->argv[vm->argc] = NULL;
-
   e = kit_tokenize(code, "<RT compiled>", &interner, &tokens, &ntoks);
   if (e) {
     kit_xerror("kit::exec: Failed to tokenize source code\n");
@@ -131,6 +118,19 @@ kit_builtins_rt_compile_and_exec(kit_vm* vm, kit_var* args, u32 nargs, kit_var* 
     goto RET;
   }
 
+  vm->argv = (const char**)kit_arnalloc(&arena, (cmd_arguments->size + 3) * sizeof(char*));
+
+  // +2 because we have to expose the ./build/eexec FILE
+  // too
+  fork_vm.argc    = 2 + (int)cmd_arguments->size;
+  fork_vm.argv[0] = "<RT compiler>";
+  fork_vm.argv[1] = "<RT compiled code>";
+  for (int i = 0; i < cmd_arguments->size; i++) {
+    const char* cmd_arg = KIT_VAR_AS_STRING(&cmd_arguments->vars[i])->s;
+    fork_vm.argv[2 + i] = kit_arnstrdup(&arena, cmd_arg);
+  }
+  fork_vm.argv[fork_vm.argc] = NULL;
+
   kit_exec_info exec_info = {
     .args            = NULL,
     .nargs           = 0,
@@ -150,7 +150,8 @@ kit_builtins_rt_compile_and_exec(kit_vm* vm, kit_var* args, u32 nargs, kit_var* 
     .structs         = compiled.structs,
     .gvars           = gvars,
   };
-  kit_ecode err = kit_exec(vm, &exec_info, &ret); // Global variable initialization.
+
+  kit_ecode err = kit_exec(&fork_vm, &exec_info, &ret); // Global variable initialization.
 
   exec_info.code       = entry_func.code;
   exec_info.code_count = entry_func.code_count;
@@ -159,11 +160,8 @@ kit_builtins_rt_compile_and_exec(kit_vm* vm, kit_var* args, u32 nargs, kit_var* 
   exec_info.args  = arguments->vars;
 
   /* Execute main function. */
-  err = kit_exec(vm, &exec_info, &ret);
+  err = kit_exec(&fork_vm, &exec_info, &ret);
   if (err) { kit_xerror("kit::compile_and_exec(): Function returned error: %s\n", kit_ecode_str(err)); }
-
-  vm->argc = save_argc;
-  vm->argv = save_argv;
 
 RET:
   if (ntoks > 0 && tokens) kit_freetoks(tokens, ntoks);
@@ -172,6 +170,11 @@ RET:
   kit_str_interner_free(&interner);
   kit_arena_free(&arena);
   kit_vm_free(&fork_vm);
+  for (u32 i = 0; i < KIT_ARRLEN(gvars); i++) { kit_var_free(vm->pool, &gvars[i]); }
+
+  vm->argc = save_argc;
+  vm->argv = save_argv;
+
   // kit_stack_free(&stack);
   *result = ret;
   return KIT_OK;

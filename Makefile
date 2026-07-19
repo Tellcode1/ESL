@@ -1,7 +1,6 @@
-CC = clang
-AR ?= ar
-CFLAGS ?= -std=c99 -Wall -Wpedantic -g -fsanitize=memory,undefined -fsanitize-memory-track-origins
-LDFLAGS ?= -lm -Wall -Wpedantic -g -fsanitize=memory,undefined -fsanitize-memory-track-origins
+CC = x86_64-w64-mingw32-gcc
+CFLAGS ?= -std=c99 -Wall -Wpedantic -g3
+LDFLAGS ?= -lm -Wall -Wpedantic -g3
 PREFIX?=/usr/bin/
 
 SRC_DIR=src
@@ -13,12 +12,9 @@ OBJ = $(patsubst %.c,$(BUILD_DIR)/%.o,$(SOURCES))
 
 .PHONY: all clean
 
-all: $(BUILD_DIR) $(BUILD_DIR)/libkit.a $(BUILD_DIR)/kscript
+all: $(BUILD_DIR) $(BUILD_DIR)/kscript
 
-$(BUILD_DIR)/libkit.a: $(OBJ)
-	$(AR) rcs $@ $^	
-
-$(BUILD_DIR)/kscript: $(BUILD_DIR)/libkit.a
+$(BUILD_DIR)/kscript: $(OBJ)
 	$(CC) $(LDFLAGS) $^ -o $@
 
 $(BUILD_DIR)/rt/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)

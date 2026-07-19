@@ -37,19 +37,13 @@ kit_var_shallow_cpy(const kit_var* var, kit_var* dst)
 {
   if (!dst || !var) return -1;
 
+  assert(var);
+  assert(dst);
+
+  assert(var->type != 0);
+  assert((var->type & (var->type - 1)) == 0);
+
   memmove(dst, var, sizeof(kit_var));
-  return 0;
-
-  dst->type = var->type;
-
-  /**
-   * Variables are stored elsewhere, not in containers.
-   * This allows the container to just maintain a pointer to those variables,
-   * Which can be shallow copied easily.
-   * The reference counter pointer is also copied.
-   */
-  dst->val = var->val;
-
   return 0;
 }
 

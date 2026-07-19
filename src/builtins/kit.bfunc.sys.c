@@ -54,10 +54,12 @@ kit_builtins_sys_get_cmd_args(kit_vm* vm, kit_var* args, u32 nargs, kit_var* res
     kit_var arg = kit_make_var_from_string(vm->pool, kit_strdup(vm->argv[i]));
     kit_list_append(vm->pool, &arg, KIT_VAR_AS_LIST(&l));
 
+    /* hand over ownership to the list */
     kit_var_release(vm->pool, &arg);
   }
 
   *result = l;
+
   return KIT_OK;
 }
 

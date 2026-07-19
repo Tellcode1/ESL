@@ -517,9 +517,6 @@ kit_exec(kit_vm* vm, const kit_exec_info* const info, kit_var* ret)
           goto RET;
         }
 
-        /* overwriting it */
-        remove(&regs[dst]);
-
         if (regs[func_reg].type != KIT_VARTYPE_FUNCTION) {
           print_err("[%i] Attempt to call non function object: ", ip->val.i);
           kit_var_print(&regs[func_reg], stderr);
@@ -529,6 +526,8 @@ kit_exec(kit_vm* vm, const kit_exec_info* const info, kit_var* ret)
           goto RET;
         }
 
+        /* overwriting it */
+        remove(&regs[dst]);
         e = call(vm, info, regs[func_reg].val.func.hash, args, nargs, &regs[dst]);
         /* No need to acquire regs[dst], it's deep copied / preacquired. */
 
