@@ -25,6 +25,8 @@ find_func(const char* name, const kit_compilation_result* r, kitc_function* out)
   return -1;
 }
 
+#define strhash(s) (kit_hash(s, strlen(s)))
+
 kit_ecode
 kit_builtins_rt_compile_and_exec(kit_vm* vm, kit_var* args, u32 nargs, kit_var* result)
 {
@@ -50,11 +52,6 @@ kit_builtins_rt_compile_and_exec(kit_vm* vm, kit_var* args, u32 nargs, kit_var* 
     kit_xerror("kit::exec: Failed to initialize arena\n");
     goto RET;
   }
-
-  const int          save_argc = vm->argc;
-  const char** const save_argv = vm->argv;
-
-#define strhash(s) (kit_hash(s, strlen(s)))
 
   const kit_struct* st = KIT_VAR_AS_STRUCT(&args[0]);
 
@@ -118,7 +115,7 @@ kit_builtins_rt_compile_and_exec(kit_vm* vm, kit_var* args, u32 nargs, kit_var* 
     goto RET;
   }
 
-  vm->argv = (const char**)kit_arnalloc(&arena, (cmd_arguments->size + 3) * sizeof(char*));
+  fork_vm.argv = (const char**)kit_arnalloc(&arena, (cmd_arguments->size + 3) * sizeof(char*));
 
   // +2 because we have to expose the ./build/eexec FILE
   // too
@@ -171,9 +168,6 @@ RET:
   kit_arena_free(&arena);
   kit_vm_free(&fork_vm);
   for (u32 i = 0; i < KIT_ARRLEN(gvars); i++) { kit_var_free(vm->pool, &gvars[i]); }
-
-  vm->argc = save_argc;
-  vm->argv = save_argv;
 
   // kit_stack_free(&stack);
   *result = ret;

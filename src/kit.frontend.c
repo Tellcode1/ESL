@@ -103,7 +103,7 @@ const char* help_str = "KitC: The compiler for the Kit scripting language\n"
                        "";
 
 static int
-compiler_invoke(int argc, char* argv[])
+compile_to_obj(bool dont_write_file, int argc, char* argv[], kit_arena* arena, kit_compilation_result* result)
 {
   bool                   verbose             = false;
   bool                   tokenizer_only      = false;
@@ -114,21 +114,13 @@ compiler_invoke(int argc, char* argv[])
   kit_compilation_result compiled            = { 0 };
   FILE*                  f                   = NULL;
   kit_str_interner       interner            = { 0 };
-  kit_arena              arena               = { 0 };
   int                    e                   = 0;
   int                    opt_level           = 0;
   kitc_feature_set       compiler_option_set = { 0 };
 
-  e = kit_arena_init(1, &arena);
-  if (e) {
-    /* TODO Add flag to reducce memory allocations? */
-    print_err("Failed to initialize arena\n");
-    goto ret;
-  }
-
   if (kit_str_interner_init(256, &interner)) goto ret;
 
-  char** files  = (char**)kit_arnalloc(&arena, argc * sizeof(char*));
+  char** files  = (char**)kit_arnalloc(arena, argc * sizeof(char*));
   u32    nfiles = 0;
 
   /* set every option disable to false */
@@ -205,7 +197,7 @@ compiler_invoke(int argc, char* argv[])
     }
 
     else if (isnt_option) {
-      files[nfiles++] = kit_arnstrdup(&arena, argv[i]);
+      files[nfiles++] = kit_arnstrdup(arena, argv[i]);
     }
   }
 
@@ -313,7 +305,7 @@ compiler_invoke(int argc, char* argv[])
   }
 
   kitc_info info = {
-    .arena              = &arena,
+    .arena              = arena,
     .ast                = &ast,
     .root_node          = ast.root,
     .custom_entry_point = NULL,
@@ -332,7 +324,7 @@ compiler_invoke(int argc, char* argv[])
 
   if (verbose) fprintf(stderr, "success\n");
 
-  if (!dump_asm) {
+  if (!dump_asm && !dont_write_file) {
     /* only print result if we didn't dump the assembly */
 
     if (out && strcmp(out, "-") != 0) { // out is valid and out is not stdout
@@ -353,7 +345,7 @@ compiler_invoke(int argc, char* argv[])
 
   if (print_memory_usage) {
     size_t          accumulator = 0;
-    kit_arena_page* next        = arena.current;
+    kit_arena_page* next        = arena->current;
     while (next) {
       accumulator++;
       next = next->next;
@@ -362,10 +354,9 @@ compiler_invoke(int argc, char* argv[])
   }
 
 ret:
+  *result = compiled;
   kit_ast_free(&ast);
-  kit_compilation_result_free(&compiled);
   kit_str_interner_free(&interner);
-  kit_arena_free(&arena);
   return e;
 }
 
@@ -389,6 +380,62 @@ find_func(const char* name, u32 nfuncs, const kitc_function* funcs, kitc_functio
   return -1;
 }
 
+static inline int
+find_and_load_file(int argc, char* argv[], kit_compilation_result* r, void** root_allocation)
+{
+  FILE* f              = NULL;
+  int   e              = 0;
+  bool  run_from_stdin = false;
+
+  const char* file = NULL;
+  for (int i = 1; i < argc; i++) {
+    const char* opt = argv[i];
+    if (strcmp(opt, "-") == 0) {
+      run_from_stdin = true;
+      continue;
+    }
+
+    bool isnt_file = true;
+    if (*opt == '-') {
+      isnt_file = false;
+      opt++;
+    }
+    if (*opt == '-') {
+      isnt_file = false;
+      opt++;
+    }
+
+    if (!file && isnt_file) { // interpret first non option string as file
+      file = argv[i];
+    }
+  }
+
+  if (run_from_stdin) {
+    f = stdin;
+  } else if (file != NULL) {
+    f = fopen(file, "rb");
+    if (!f) {
+      print_err("Failed to open file: %s\n", strerror(errno));
+      e = -1;
+      goto RET;
+    }
+  }
+  if (!f) {
+    print_err("Nothing given to execute\n");
+    e = -1;
+    goto RET;
+  }
+
+  e = kit_file_load(r, root_allocation, f);
+  if (e) {
+    print_err("Failed to parse input file: 0x%x\n", e);
+    goto RET;
+  }
+
+RET:
+  return e;
+}
+
 static const char* const help = "kitexec: [-e/r] [--entry ENTRYPOINT] <FILE/->\n"
                                 "The following options can be used:\n"
                                 "-e/error Interpret integral return values from the script as error, and exit with the error code\n"
@@ -398,7 +445,7 @@ static const char* const help = "kitexec: [-e/r] [--entry ENTRYPOINT] <FILE/->\n
                                 "- If the - switch is used, program will be read from stdin";
 
 static int
-executor_invoke(int argc, char* argv[])
+execute_obj(kit_compilation_result* obj, int argc, char* argv[])
 {
   // assert(argc == 2);
   kit_var v = { .type = KIT_VARTYPE_NULL };
@@ -411,11 +458,6 @@ executor_invoke(int argc, char* argv[])
   bool wants_to_print_return_value     = false;
   bool interpret_return_value_as_error = false;
   bool run_from_stdin                  = false;
-
-  FILE* f = NULL;
-
-  void*                  root_allocation = NULL;
-  kit_compilation_result r               = { 0 };
 
   kit_var time_now    = KIT_NULLVAR;
   kit_var time_as_str = KIT_NULLVAR;
@@ -452,35 +494,11 @@ executor_invoke(int argc, char* argv[])
       wants_to_print_return_value = true;
     } else if (strcmp(opt, "e") == 0 || strcmp(opt, "error") == 0) {
       interpret_return_value_as_error = true;
-    } else if (!file && isnt_file) { // interpret first non option string as file
-      file = argv[i];
     }
-  }
-
-  if (run_from_stdin) {
-    f = stdin;
-  } else if (file != NULL) {
-    f = fopen(file, "rb");
-    if (!f) {
-      print_err("Failed to open file: %s\n", strerror(errno));
-      e = -1;
-      goto RET;
-    }
-  }
-  if (!f) {
-    print_err("Nothing given to execute\n");
-    e = -1;
-    goto RET;
-  }
-
-  e = kit_file_load(&r, &root_allocation, f);
-  if (e) {
-    print_err("Failed to parse input file: 0x%x\n", e);
-    goto RET;
   }
 
   kitc_function entry_point_func;
-  e = find_func(entry_point, r.functions_count, r.functions, &entry_point_func);
+  e = find_func(entry_point, obj->functions_count, obj->functions, &entry_point_func);
   if (e) {
     print_err("File does not have the entry point '%s'\n", entry_point);
     goto RET;
@@ -502,20 +520,20 @@ executor_invoke(int argc, char* argv[])
     .gvars           = gvars,
     .args            = NULL,
     .nargs           = 0,
-    .literals        = r.literals,
-    .literals_hashes = r.literals_hashes,
-    .funcs           = r.functions,
-    .code            = r.instructions,
-    .code_count      = r.instructions_count,
-    .nliterals       = r.literals_count,
-    .nfuncs          = r.functions_count,
+    .literals        = obj->literals,
+    .literals_hashes = obj->literals_hashes,
+    .funcs           = obj->functions,
+    .code            = obj->instructions,
+    .code_count      = obj->instructions_count,
+    .nliterals       = obj->literals_count,
+    .nfuncs          = obj->functions_count,
     .nextern_funcs   = 0,
     .extern_funcs    = NULL,
-    .names           = (const char**)r.names,
-    .names_hashes    = r.names_hashes,
-    .nnames          = r.names_count,
-    .structs         = r.structs,
-    .nstructs        = r.structs_count,
+    .names           = (const char**)obj->names,
+    .names_hashes    = obj->names_hashes,
+    .nnames          = obj->names_count,
+    .structs         = obj->structs,
+    .nstructs        = obj->structs_count,
   };
 
   kit_vm vm = { 0 };
@@ -572,8 +590,6 @@ RET:
   kit_var_free(&object_pool, &time_as_str);
   kit_var_free(&object_pool, &time_now);
 
-  if (!run_from_stdin && f) fclose(f);
-
   for (u32 i = 0; i < KIT_ARRLEN(gvars); i++) { kit_var_free(&object_pool, &gvars[i]); }
 
   kit_var_release(&object_pool, &v);
@@ -581,25 +597,67 @@ RET:
 
   kit_vm_free(&vm);
 
-  /* No need to free anything else */
-  free(root_allocation);
-
   return e;
 }
 
 int
 main(int argc, char* argv[])
 {
+  kit_arena arena = { 0 };
+  int       e     = kit_arena_init(1, &arena);
+  if (e) {
+    print_err("Failed to initialize arena\n");
+    goto RET;
+  }
+
   for (int i = 1; i < argc; i++) {
     const char* opt = argv[i];
 
     if (*opt == '-') opt++;
     if (*opt == '-') opt++;
 
-    if (strcmp(opt, "c") == 0 || strcmp(opt, "compile") == 0) return compiler_invoke(argc, argv);
-    if (strcmp(opt, "e") == 0 || strcmp(opt, "exec") == 0) return executor_invoke(argc, argv);
+    if (strcmp(opt, "c") == 0 || strcmp(opt, "compile") == 0) {
+      kit_compilation_result result = { 0 };
+
+      /* Disable don't write to file since we need to output the program in this path */
+      e = compile_to_obj(false, argc, argv, &arena, &result);
+      if (e) { goto RET; }
+
+      kit_compilation_result_free(&result);
+      goto RET;
+    }
+    if (strcmp(opt, "e") == 0 || strcmp(opt, "exec") == 0) {
+      kit_compilation_result obj             = { 0 };
+      void*                  root_allocation = NULL;
+      if (find_and_load_file(argc, argv, &obj, &root_allocation)) { goto RET; }
+
+      int e = execute_obj(&obj, argc, argv);
+
+      kit_compilation_result_free(&obj);
+      free(root_allocation);
+
+      goto RET;
+    }
+    if (strcmp(opt, "cx") == 0 || strcmp(opt, "compile-and-exec") == 0) {
+      kit_compilation_result obj             = { 0 };
+      void*                  root_allocation = NULL;
+
+      /* Don't write to file since we're executing the program directly */
+      int e = compile_to_obj(true, argc, argv, &arena, &obj);
+      if (e) { goto RET; }
+
+      e = execute_obj(&obj, argc, argv);
+
+      kit_compilation_result_free(&obj);
+      free(root_allocation);
+
+      goto RET;
+    }
   }
 
   fprintf(stderr, "KScript: Nothing to compile (-c/--compile) nor execute (-e/--exec)\n");
-  return -1;
+
+RET:
+  kit_arena_free(&arena);
+  return e;
 }

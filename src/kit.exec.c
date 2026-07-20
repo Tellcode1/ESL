@@ -252,6 +252,7 @@ kit_exec(kit_vm* vm, const kit_exec_info* const info, kit_var* ret)
         u32 id  = ins.loadfn.id;
         u32 dst = ins.loadfn.dst;
 
+        remove(&regs[dst]);
         regs[dst] = (kit_var){ .type = KIT_VARTYPE_FUNCTION, .val.func.hash = id };
 
         break;

@@ -12,12 +12,10 @@
       // "args": [
       //   "build/test",
       // ],
-      "program": "${workspaceRoot}/build/ec",
+      "program": "${workspaceRoot}/build/kscript",
       "args": [
-        "-O3",
-        "examples/optimizer_test.e",
-        "-o",
-        "build/test"
+        "-cx",
+        "examples/testbed.k",
       ],
       "stopOnEntry": false,
       "cwd": "${workspaceFolder}",
